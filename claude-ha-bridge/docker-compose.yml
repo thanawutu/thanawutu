@@ -1,0 +1,22 @@
+services:
+  claude-ha-bridge:
+    build: .
+    container_name: claude-ha-bridge
+    restart: unless-stopped
+    ports:
+      # Open http://<docker-host-ip>:7681 from your tablet's browser
+      - "7681:7681"
+    environment:
+      # Base URL of your Home Assistant instance (no trailing slash)
+      - HA_URL=${HA_URL:-http://homeassistant.local:8123}
+      # Long-lived access token from your HA user profile
+      - HA_TOKEN=${HA_TOKEN}
+      # Login for the web terminal (protects the bridge on your LAN)
+      - TTYD_USER=${TTYD_USER:-claude}
+      - TTYD_PASS=${TTYD_PASS:?set TTYD_PASS in .env}
+    volumes:
+      # Persist Claude's login so you only authenticate once
+      - claude-home:/root
+
+volumes:
+  claude-home:
