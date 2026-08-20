@@ -1,0 +1,22 @@
+services:
+  # Injects your HA token so the Claude app never needs to send headers
+  caddy:
+    image: caddy:2
+    container_name: ha-mcp-gateway
+    restart: unless-stopped
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    environment:
+      - HA_URL=${HA_URL:-http://homeassistant.local:8123}
+      - HA_TOKEN=${HA_TOKEN:?set HA_TOKEN in .env}
+
+  # Publishes caddy over HTTPS without opening any router ports.
+  # Create the tunnel at https://one.dash.cloudflare.com (Zero Trust ->
+  # Networks -> Tunnels) and map a public hostname to http://caddy:80
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: ha-mcp-tunnel
+    restart: unless-stopped
+    command: tunnel run --token ${CF_TUNNEL_TOKEN:?set CF_TUNNEL_TOKEN in .env}
+    depends_on:
+      - caddy

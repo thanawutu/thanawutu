@@ -1,5 +1,10 @@
 # Claude ↔ Home Assistant bridge (Debian Docker)
 
+> **Using the Claude app on your tablet (not a browser)?** Use the
+> connector gateway in [`connector/`](connector/README.md) instead — it
+> hooks Home Assistant into the Claude application itself as a custom
+> connector. The setup below is the browser-terminal variant.
+
 Control Home Assistant from a tablet, through Claude running in a Docker
 container on your Debian box.
 

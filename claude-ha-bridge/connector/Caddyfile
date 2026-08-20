@@ -1,0 +1,17 @@
+:80 {
+	# Only Home Assistant's MCP endpoints are exposed — the SSE stream and
+	# the message endpoint it hands back both live under /mcp_server/
+	@mcp path /mcp_server/*
+	handle @mcp {
+		reverse_proxy {$HA_URL} {
+			header_up Authorization "Bearer {$HA_TOKEN}"
+			# SSE: don't buffer the stream
+			flush_interval -1
+		}
+	}
+
+	# Everything else (including the HA login page) stays private
+	handle {
+		respond "Not found" 404
+	}
+}
