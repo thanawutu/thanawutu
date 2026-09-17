@@ -33,6 +33,17 @@ Requirements:
 
 ## 2. Start the gateway
 
+Run the setup wizard — it prompts for `HA_URL`/`HA_TOKEN`/`CF_TUNNEL_TOKEN`,
+writes `.env`, starts the containers, and checks that Home Assistant's MCP
+endpoint answers:
+
+```bash
+cd claude-ha-bridge/connector
+./setup.sh
+```
+
+Or do it manually:
+
 ```bash
 cd claude-ha-bridge/connector
 cp .env.example .env    # fill in HA_URL, HA_TOKEN, CF_TUNNEL_TOKEN
