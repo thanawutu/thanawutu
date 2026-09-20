@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "home-assistant": {
+      "type": "sse",
+      "url": "http://ha-mcp:8000/mcp/${MCP_PATH_SECRET}/sse"
+    }
+  }
+}

@@ -1,0 +1,34 @@
+services:
+  # Full-control Home Assistant API, reachable only on this compose
+  # network - never exposed to the internet.
+  ha-mcp:
+    build: ./full-control-mcp
+    container_name: ha-full-mcp
+    restart: unless-stopped
+    environment:
+      - HA_URL=${HA_URL:?set HA_URL in .env}
+      - HA_TOKEN=${HA_TOKEN:?set HA_TOKEN in .env}
+      - MCP_PATH_SECRET=${MCP_PATH_SECRET:?set MCP_PATH_SECRET in .env}
+
+  # Claude Code in Remote Control server mode. Makes outbound HTTPS only;
+  # no inbound port is opened. Pair with it from the Claude app.
+  claude:
+    build: .
+    container_name: claude-remote
+    restart: unless-stopped
+    depends_on:
+      - ha-mcp
+    environment:
+      - MCP_PATH_SECRET=${MCP_PATH_SECRET:?set MCP_PATH_SECRET in .env}
+    volumes:
+      # Persists `claude /login` across restarts - do this once, see README
+      - claude-home:/root
+    # Some Docker hosts (Synology's included) hand containers a resolver
+    # that doesn't forward external lookups reliably, breaking OAuth login
+    # with "getaddrinfo EAI_AGAIN ...". Pin public DNS to avoid that.
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+
+volumes:
+  claude-home:
