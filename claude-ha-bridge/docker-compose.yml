@@ -1,21 +1,27 @@
 services:
-  claude-ha-bridge:
-    build: .
-    container_name: claude-ha-bridge
+  # Full-control Home Assistant API, reachable only on this compose
+  # network - never exposed to the internet.
+  ha-mcp:
+    build: ./full-control-mcp
+    container_name: ha-full-mcp
     restart: unless-stopped
-    ports:
-      # Open http://<docker-host-ip>:7681 from your tablet's browser
-      - "7681:7681"
     environment:
-      # Base URL of your Home Assistant instance (no trailing slash)
-      - HA_URL=${HA_URL:-http://homeassistant.local:8123}
-      # Long-lived access token from your HA user profile
-      - HA_TOKEN=${HA_TOKEN}
-      # Login for the web terminal (protects the bridge on your LAN)
-      - TTYD_USER=${TTYD_USER:-claude}
-      - TTYD_PASS=${TTYD_PASS:?set TTYD_PASS in .env}
+      - HA_URL=${HA_URL:?set HA_URL in .env}
+      - HA_TOKEN=${HA_TOKEN:?set HA_TOKEN in .env}
+      - MCP_PATH_SECRET=${MCP_PATH_SECRET:?set MCP_PATH_SECRET in .env}
+
+  # Claude Code in Remote Control server mode. Makes outbound HTTPS only;
+  # no inbound port is opened. Pair with it from the Claude app.
+  claude:
+    build: .
+    container_name: claude-remote
+    restart: unless-stopped
+    depends_on:
+      - ha-mcp
+    environment:
+      - MCP_PATH_SECRET=${MCP_PATH_SECRET:?set MCP_PATH_SECRET in .env}
     volumes:
-      # Persist Claude's login so you only authenticate once
+      # Persists `claude /login` across restarts - do this once, see README
       - claude-home:/root
 
 volumes:

@@ -2,10 +2,7 @@
   "mcpServers": {
     "home-assistant": {
       "type": "sse",
-      "url": "${HA_URL}/mcp_server/sse",
-      "headers": {
-        "Authorization": "Bearer ${HA_TOKEN}"
-      }
+      "url": "http://ha-mcp:8000/mcp/${MCP_PATH_SECRET}/sse"
     }
   }
 }

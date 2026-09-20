@@ -1,7 +1,7 @@
 FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        curl git ca-certificates ttyd tini \
+        curl git ca-certificates tini \
     && rm -rf /var/lib/apt/lists/*
 
 # Claude Code native installer (installs to /root/.local/bin)
@@ -12,9 +12,8 @@ WORKDIR /workspace
 # Claude Code reads project-scoped MCP servers from .mcp.json in the cwd
 COPY mcp.json /workspace/.mcp.json
 
-EXPOSE 7681
-
 ENTRYPOINT ["tini", "--"]
-# ttyd serves a terminal in the browser; -W allows keyboard input,
-# credentials come from TTYD_USER/TTYD_PASS at runtime (see compose file)
-CMD ["sh", "-c", "ttyd -W -p 7681 -c ${TTYD_USER}:${TTYD_PASS} claude"]
+# Server mode: registers with Remote Control so the Claude app on your
+# tablet can attach to sessions here. Requires signing in once first
+# (see README) - the login persists in the mounted claude-home volume.
+CMD ["claude", "remote-control"]

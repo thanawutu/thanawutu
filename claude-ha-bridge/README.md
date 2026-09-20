@@ -1,105 +1,121 @@
-# Claude ↔ Home Assistant bridge (Debian Docker)
+# Claude Remote Control ↔ Home Assistant bridge (Debian Docker)
 
-> **Using the Claude app on your tablet (not a browser)?** Use the
-> connector gateway in [`connector/`](connector/README.md) instead — it
-> hooks Home Assistant into the Claude application itself as a custom
-> connector. The setup below is the browser-terminal variant.
-
-Control Home Assistant from a tablet, through Claude running in a Docker
-container on your Debian box.
+Manage Home Assistant by remote-connecting to a Claude Code session
+running in Docker on your Debian/Synology box — from the Claude app on
+your tablet, not by adding a connector directly in the app.
 
 ```
-Tablet browser ──> ttyd web terminal (this container, port 7681)
-                        │
-                  Claude Code CLI
-                        │  MCP over SSE + Bearer token
-                        ▼
-        Home Assistant  http://<ha-ip>:8123/mcp_server/sse
+Tablet (Claude app) --Remote Control (outbound only)--> Claude Code in Docker
+                                                                 │
+                                                                 │ .mcp.json → local network
+                                                                 ▼
+                                                    ha-mcp container (full REST API)
+                                                                 │
+                                                                 ▼
+                                                Home Assistant (LAN only, never exposed)
 ```
 
-The container runs **Claude Code** (Anthropic's official CLI agent) connected
-to Home Assistant's official **MCP Server** integration. `ttyd` serves the
-Claude session as a web page, so any browser on your LAN — including a
-tablet — becomes the remote control.
+Two containers:
+- **`claude`** — Claude Code CLI in [Remote Control server
+  mode](https://code.claude.com/docs/en/remote-control). It only makes
+  outbound HTTPS requests to Anthropic; no port is opened on your network.
+  Your tablet pairs with it through your claude.ai account.
+- **`ha-mcp`** — a small custom MCP server (`full-control-mcp/`) that talks
+  to Home Assistant's REST API directly (`/api/states`, `/api/services`).
+  Unlike HA's own "Model Context Protocol Server" integration, it isn't
+  limited to entities exposed to Assist/voice — any entity, any service.
 
-## 1. Prepare Home Assistant (requires HA 2025.2 or newer)
+Home Assistant itself is **never reachable from the internet** in this
+setup — only the `claude` container talks out, and it only talks to
+Anthropic and to `ha-mcp` over the private Docker network.
 
-1. **Settings → Devices & Services → Add Integration → "Model Context
-   Protocol Server"** and add it. This exposes the endpoint
-   `http://<ha-ip>:8123/mcp_server/sse`.
-2. **Settings → Voice assistants → Expose** — expose the entities (lights,
-   switches, climate, …) you want Claude to see and control. Claude can only
-   touch what you expose here.
-3. Create a token: click your user profile (bottom left) → **Security →
-   Long-lived access tokens → Create token**. Copy it.
+> Prefer to skip the desktop session and add Home Assistant as a connector
+> straight in the Claude app instead? See [`connector/`](connector/README.md) —
+> that approach needs a public HTTPS endpoint (Cloudflare Tunnel) and, with
+> HA's built-in MCP integration, is limited to Assist-exposed entities.
 
-## 2. Start the bridge container
+## 1. Prepare Home Assistant
+
+1. Create a **dedicated Home Assistant user** for this (Settings → People
+   → Users → Add User) — since this setup has full API access (not just
+   exposed entities), give it only the account you're willing to hand
+   Claude full control of.
+2. Log in as that user, open its profile → **Security → Long-lived access
+   tokens → Create token**. Copy it.
+
+## 2. Start the bridge
 
 ```bash
 cd claude-ha-bridge
-cp .env.example .env     # then edit .env: HA_URL, HA_TOKEN, TTYD_PASS
-docker compose up -d --build
+./setup.sh
 ```
 
-## 3. First login (one time)
+The script builds both images, asks for `HA_URL` and the token, generates
+a random `MCP_PATH_SECRET`, then walks you through signing in to Claude
+once (`/login` inside an interactive session) before starting the
+persistent Remote Control server.
 
-Open `http://<docker-host-ip>:7681` in any browser, log in with the
-`TTYD_USER`/`TTYD_PASS` you set, and Claude Code starts. On first run it
-prints a claude.ai login URL — open that URL on your tablet, sign in, and
-paste the code back into the terminal. The login is stored in the
-`claude-home` volume, so this only happens once.
+Or do it by hand:
 
-## 4. Use it from the tablet
+```bash
+cp .env.example .env      # fill in HA_URL, HA_TOKEN, MCP_PATH_SECRET
+docker compose build
+docker compose run --rm claude claude    # run /login once, then /exit
+docker compose up -d
+```
 
-Browse to `http://<docker-host-ip>:7681` and just talk to Claude:
+## 3. Connect from the tablet
+
+Open the **Claude app** — the session shows up in your session list under
+your own account (Remote Control auto-registers there). If you need the
+pairing URL or QR code again:
+
+```bash
+docker compose logs -f claude
+```
+
+Then just talk to it:
 
 > "Turn off all the lights downstairs"
-> "What's the temperature in the bedroom?"
+> "What's the state of climate.bedroom?"
 > "Set the thermostat to 24 degrees at 21:00 tonight"
 
-Inside Claude, `/mcp` shows the `home-assistant` server and its tools; if it
-shows as failed, check `HA_URL`/`HA_TOKEN` in `.env` and that the MCP Server
-integration is installed in HA.
+Inside a session, `/mcp` lists the `home-assistant` server and its tools
+(`list_states`, `get_state`, `call_service`, `list_services`).
+
+## Health check
+
+```bash
+./healthcheck.sh
+```
+
+Checks that Home Assistant answers directly, that `ha-mcp` is responding
+locally, and prints the containers' status and the `claude` container's
+recent log (useful for spotting a dropped Remote Control connection —
+see the "reconnecting" notes below).
+
+## If the session goes offline
+
+Remote Control reconnects automatically after a network blip. If the
+`claude` container itself restarted or its process died, bring it back:
+
+```bash
+docker compose up -d claude       # container down/exited
+docker compose exec claude claude remote-control   # process alive but disconnected
+```
+
+Because the container's `CMD` is `claude remote-control`, a restarted
+container re-registers on its own in most cases — check
+`docker compose logs claude` first.
 
 ## Security notes
 
-- Keep port 7681 **LAN-only** (don't port-forward it on your router). The
-  ttyd login protects it, but it is plain HTTP unless you put a
-  reverse proxy with TLS in front.
-- The HA token grants your full HA account's access — treat `.env` like a
-  password file and never commit it.
-- Prefer a dedicated HA user with limited rights for the token.
-
-## Alternative: the same bridge for Claude Desktop
-
-If you run the (unofficial) Claude Desktop build for Linux in a
-VNC/webtop-style container instead, point it at HA with `mcp-proxy`
-(Claude Desktop only speaks stdio) in `claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "Home Assistant": {
-      "command": "mcp-proxy",
-      "args": ["http://<ha-ip>:8123/mcp_server/sse"],
-      "env": { "API_ACCESS_TOKEN": "<your-long-lived-token>" }
-    }
-  }
-}
-```
-
-(`pip install mcp-proxy` or `uv tool install mcp-proxy` inside that
-container.) You then reach the desktop from the tablet through the
-container's web-VNC page. This works, but the web-terminal setup above is
-lighter and more reliable on a tablet.
-
-## Alternative: no Docker at all
-
-- **Anthropic integration inside HA**: install the "Anthropic" integration
-  in Home Assistant and pick Claude as the conversation agent for Assist —
-  then the HA companion app on your tablet already gives you a Claude chat
-  that controls your home.
-- **claude.ai custom connector**: if you expose the HA MCP endpoint
-  publicly over HTTPS (Nabu Casa or a Cloudflare Tunnel), you can add it as
-  a custom connector at claude.ai and use it straight from the Claude app
-  on the tablet.
+- The HA token grants full REST API access for whatever HA user it
+  belongs to — always use a dedicated, scoped-down user, never your main
+  admin account.
+- `MCP_PATH_SECRET` and `ha-mcp` are only reachable on the compose's
+  internal Docker network; nothing needs a public port for this setup.
+- Remote Control session transcripts (your messages, Claude's tool calls)
+  are stored on Anthropic's servers to keep devices in sync — see
+  [Data usage](https://code.claude.com/docs/en/data-usage).
+- Treat `.env` like a password file; it's already git-ignored.

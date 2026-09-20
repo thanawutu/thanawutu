@@ -1,5 +1,10 @@
 # Home Assistant connector for the Claude app (tablet/phone)
 
+> Want to manage Home Assistant by remote-connecting to a live Claude Code
+> session instead of adding a connector in the app? See
+> [`../README.md`](../README.md) — no public HTTPS endpoint needed, and it
+> gets full REST API access instead of just Assist-exposed entities.
+
 Lets the **Claude application** on your tablet control Home Assistant
 directly — no browser, no terminal. The Docker container on your Debian box
 acts as a gateway: it publishes Home Assistant's MCP endpoint over HTTPS
