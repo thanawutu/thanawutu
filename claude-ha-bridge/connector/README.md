@@ -55,6 +55,14 @@ Sanity check from any device:
 (an `event: endpoint` line), while `https://ha-x7k2q9.yourdomain.com/`
 returns 404 — only the MCP path is exposed.
 
+Or run the health check script on the Docker host any time — it verifies
+Home Assistant directly, the local gateway, and (if you set
+`TUNNEL_HOSTNAME` in `.env`) the public tunnel URL:
+
+```bash
+./healthcheck.sh
+```
+
 ## 3. Add the connector in the Claude app
 
 On the tablet: **Settings → Connectors → Add custom connector**, and enter:
