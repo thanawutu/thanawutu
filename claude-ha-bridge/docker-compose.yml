@@ -23,6 +23,12 @@ services:
     volumes:
       # Persists `claude /login` across restarts - do this once, see README
       - claude-home:/root
+    # Some Docker hosts (Synology's included) hand containers a resolver
+    # that doesn't forward external lookups reliably, breaking OAuth login
+    # with "getaddrinfo EAI_AGAIN ...". Pin public DNS to avoid that.
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
 
 volumes:
   claude-home:
