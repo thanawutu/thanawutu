@@ -1,0 +1,95 @@
+% Main file -- Thematic Paper plan, Traditional Format (PR07284).
+% Migrated from muthesis2021 to muthesis2026 on 2026-08-06.
+\documentclass{muthesis2026}
+\setcounter{tocdepth}{2}   % sections + subsections in the TOC (2026 class defaults to chapters only)
+\thematicplan   % 2026: replaces the hand-edited "Thematic Paper" strings in the old .cls
+\usepackage[numbers]{natbib}
+\setcounter{secnumdepth}{4} % make subsubsection have numberings
+\usepackage{graphicx}
+\graphicspath{{figures/}}
+\usepackage{latexsym}
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{url}
+\usepackage{xurl}
+\usepackage{textcomp}
+\usepackage{longtable}
+\usepackage{caption,setspace}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+%\usepackage{geometry}
+\usepackage{pdflscape}   % For landscape pages
+\usepackage{array}       % For paragraph columns
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{makecell}
+\usepackage{multirow}
+\usepackage[table,xcdraw]{xcolor}
+\usepackage{listings}
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,      % Enables automatic line breaking
+  columns=fullflexible,
+  breakatwhitespace=false
+}
+\usepackage{float}       % was declared inside preamble.tex in the Aug 2026 source
+\captionsetup{font={stretch=1.5}} % make the table,figure captions also have 1.5 linespacing
+\usepackage[flushleft]{threeparttable}
+\usepackage[hidelinks]{hyperref}
+\makeatletter
+\renewcommand{\@dotsep}{10000} % set distance between dots to make it disappear in the table of contents
+\setlength{\@fptop}{0pt}
+\setlength{\@fpbot}{0pt plus 1fil}
+\makeatother
+% title -- nouns and stressed words should begin with a capital
+\title{A COMPARATIVE STUDY OF OPEN-SOURCE BREACH AND ATTACK SIMULATION TOOLS}
+\author{THANAWUT UDOMSILP}
+\input{preamble}
+\begin{document}
+\maketitle
+\linespacing{1.5}
+\input{acknowledgements}
+% --- Abstract Section ---
+\input{abstract} % point to english abstract.tex
+% 2026: \thaiabstract was removed from the class. The Thai abstract is produced
+% separately in MS Word, as before.
+
+\tableofcontents
+\listoftables
+\listoffigures
+
+% 2026: replaces the old abbrlist/symlist commands. Uncomment if needed.
+%\listofabbreviations{
+%\begin{tabbing}
+%\hspace{3cm}\=\kill
+%BAS \> Breach and Attack Simulation \\
+%TTP \> Tactics, Techniques, and Procedures \\
+%\end{tabbing}
+%}
+% PR07284 allows a flexible chapter structure for the thematic paper,
+% at the discretion of the advisory committee. The five chapters below
+% are carried over unchanged from the muthesis2021 version.
+\input{Chapter1} % Introduction
+\input{Chapter2} % Literature Review
+\input{Chapter3} % Research Methodology > Proposed Method
+\input{Chapter4} % Results > EXPERIMENT AND PRELIMINARY RESULTS
+\input{Chapter5} % Discussion > FUTURE WORK
+\input{Chapter6} % Conclusion and Recommendations
+
+\appendices  % use this if you have more than one appendix
+% \appendices resets the `chapter` counter to 0 (muthesis2026.cls), which makes
+% hyperref's internal anchor name (\theHchapter, normally == \thechapter) collide
+% with Chapter 1's anchor and triggers a "duplicate destination" warning. Give
+% appendix chapters their own hyperref-only counter name; the class file is
+% left unmodified.
+\makeatletter
+\renewcommand{\theHchapter}{appendix.\arabic{chapter}}
+\makeatother
+\chapter{Supplementary Configuration Files}\label{app:configs}
+%\section*{hidden appendix section}   %  do not show in table of contents
+
+\chapter{Additional Experimental Results}\label{app:results}
+\bibliographystyle{unsrtnat}
+\bibliography{references}
+\biography % use this to get the biography at the end of the document
+\end{document}

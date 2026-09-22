@@ -1,0 +1,326 @@
+%===========================================================
+% INDUSTRY REPORTS & STANDARDS
+%===========================================================
+
+@techreport{verizon2024,
+  author = {{Verizon}},
+  title = {2024 Data Breach Investigations Report (DBIR)},
+  institution = {Verizon},
+  year = {2024},
+  url = {https://www.verizon.com/business/resources/reports/dbir/},
+}
+
+@techreport{enisa2024,
+  author = {{European Union Agency for Cybersecurity (ENISA)}},
+  title = {ENISA Threat Landscape 2024},
+  institution = {ENISA},
+  year = {2024},
+}
+
+@misc{mandiant2023,
+  author = {{Mandiant}},
+  title = {Security Effectiveness Report: The Gap Between Deployment and Defense},
+  institution = {Google Cloud},
+  year = {2023},
+}
+
+@misc{gartner_bas,
+  author = {{Gartner}},
+  title = {Hype Cycle for Security Operations, 2024},
+  year = {2024},
+}
+
+% NOTE: was type "standard" -- not defined in unsrtnat.bst; techreport is the
+% correct type (and takes institution, not organization).
+@techreport{nist80053,
+  author = {{Joint Task Force}},
+  title = {Security and Privacy Controls for Information Systems and Organizations (NIST SP 800-53 Rev. 5)},
+  institution = {National Institute of Standards and Technology},
+  number = {NIST SP 800-53 Rev. 5},
+  year = {2020},
+  doi = {10.6028/NIST.SP.800-53r5}
+}
+
+%===========================================================
+% Related Work PAPERS
+%===========================================================
+% NOTE: was type "article" -- it is a conference paper (has booktitle, no
+% journal), which made unsrtnat.bst emit "empty journal" and drop the venue.
+@inproceedings{roque2024,
+  author = {Roque, Maria Soledad Carrasco and Chancahuana, Jean Paul Garcia and Flores, Roberto Montero},
+  title = {Implementation of Security Controls for the Treatment of Malware Using Breach and Attack Simulation},
+  booktitle = {2024 IEEE XXXI International Conference on Electronics, Electrical Engineering and Computing (INTERCON)},
+  year = {2024},
+  pages = {1-7},
+  doi = {10.1109/INTERCON63140.2024.10833511}
+}
+
+@article{landauer2024,
+  author = {Landauer, M. and Mayer, K. and Skopik, F. and Wurzenberger, M. and Kern, M.},
+  title = {Red Team Redemption: A Structured Comparison of Open-Source Tools for Adversary Emulation},
+  journal = {arXiv preprint arXiv:2408.15645},
+  year = {2024},
+}
+
+@article{wang2025,
+  title={A Unified Modeling Framework for Automated Penetration Testing},
+  author={Wang, Yunfei and Liu, Shixuan and Wang, Wenhao and Zhou, Changling and Zhang, Chao and Jin, Jiandong and Zhu, Cheng},
+  journal={arXiv preprint arXiv:2502.11588},
+  year={2025}
+}
+
+% NOTE: was type "article" -- conference paper (Winter Simulation Conference).
+@inproceedings{kuhl2007,
+  title = {Cyber Attack Modeling and Simulation for Network Security Analysis},
+  booktitle = {2007 {{Winter Simulation Conference}}},
+  author = {Kuhl, Michael E. and Sudit, Moises and Kistner, Jason and Costantini, Kevin},
+  year = 2007,
+  pages = {1180-1188},
+  publisher = {IEEE},
+  doi = {10.1109/WSC.2007.4419720},
+}
+
+% NOTE: was type "article" -- conference paper (SBSI). Not cited; fixed for hygiene.
+@inproceedings{horta2022,
+  author = {Horta, Antonio and Holanda, Raimir and Marinho, Renato},
+  title = {A Multi-criteria Approach to Improve the Cyber Security Visibility Through Breach Attack Simulations},
+  booktitle = {Proceedings of the Brazilian Symposium on Information Systems (SBSI)},
+  year = {2022},
+  pages = {1-8},
+  doi = {10.5753/sbsi.2022.224434}
+}
+
+%===========================================================
+% DEFINITIONS & WEB REFERENCES
+%===========================================================
+
+@misc{sentinelone_bas,
+  author = {{SentinelOne}},
+  title = {Cybersecurity 101: Breach and Attack Simulation (BAS)},
+  url = {https://www.sentinelone.com/cybersecurity-101/cybersecurity/breach-and-attacksimulation-bas/},
+  note = {Accessed: 2025-10-21},
+  year = {2025}
+}
+
+@misc{picus_bas,
+  author = {{Picus Security}},
+  title = {Breach and Attack Simulation},
+  url = {https://www.picussecurity.com/breach-and-attack-simulation},
+  note = {Accessed: 2025-10-21},
+  year = {2025}
+}
+
+@misc{mindgard_redteam,
+  author = {{Mindgard}},
+  title = {Breach and Attack Simulation vs. Red Teaming},
+  url = {https://mindgard.ai/blog/breach-and-attack-simulation-vs-red-teaming},
+  note = {Accessed: 2025-10-21},
+  year = {2025}
+}
+
+@misc{yuceel2025,
+  author = {Yuceel, H. C.},
+  title = {A Data-Driven Comparison of Open Source Adversary Emulation Tools},
+  howpublished = {Picus Security Blog},
+  year = {2025},
+  url = {https://www.picussecurity.com/resource/blog/data-driven-comparison-between-open-source-adversary-emulation-tools},
+  note = {Accessed: 2025-10-21}
+}
+
+@misc{redcanary_compare,
+  author = {{Red Canary}},
+  title = {Comparing Open Source Attack Simulation Platforms for Red Teams},
+  howpublished = {Red Canary Blog},
+  year = {2024},
+  url = {https://redcanary.com/blog/testing-and-validation/atomic-red-team/comparing-red-team-platforms/},
+  note = {Accessed: 2025-10-21}
+}
+
+%===========================================================
+% TOOL MANUALS & SOFTWARE
+%===========================================================
+
+@manual{caldera_docs,
+  author = {{MITRE}},
+  title = {Caldera Documentation},
+  url = {https://caldera.readthedocs.io/en/latest/},
+  note = {Accessed: 2025-10-21},
+  year = {2025}
+}
+
+@manual{monkey_docs,
+  author = {{Guardicore}},
+  title = {Infection Monkey Documentation},
+  url = {https://www.guardicore.com/infectionmonkey/},
+  note = {Accessed: 2025-10-21},
+  year = {2025}
+}
+
+@manual{atomic_docs,
+  author = {{Red Canary}},
+  title = {Atomic Red Team Documentation},
+  url = {https://www.atomicredteam.io/},
+  note = {Accessed: 2025-10-21},
+  year = {2025}
+}
+
+% NOTE: the three below were type "software" -- not defined in unsrtnat.bst, so
+% BibTeX ignored them. "misc" is the correct type here; the version field is not
+% used by misc, so it moved into howpublished.
+@misc{caldera,
+  author = {{The MITRE Corporation}},
+  title = {Caldera: A Scalable Automated Adversary Emulation Platform},
+  howpublished = {Software, version 5.0},
+  url = {https://caldera.mitre.org/},
+  year = {2025}
+}
+
+@misc{infectionmonkey,
+  author = {{Akamai Guardicore}},
+  title = {Infection Monkey: Zero Trust Assessment Tool},
+  howpublished = {Software},
+  url = {https://www.guardicore.com/infectionmonkey/},
+  year = {2025}
+}
+
+@misc{atomicredteam,
+  author = {{Red Canary}},
+  title = {Atomic Red Team: Small and Highly Portable Detection Tests},
+  howpublished = {Software},
+  url = {https://atomicredteam.io/},
+  year = {2025}
+}
+
+@article{manzoor2024,
+  title={Cybersecurity on a budget: Evaluating security and performance of open-source SIEM solutions for SMEs},
+  author={Manzoor, Jawad and Waleed, Abdul and Jamali, Abdul Fareed and Masood, Ammar},
+  journal={PLoS ONE},
+  volume={19},
+  number={3},
+  pages={e0301183},
+  year={2024},
+  publisher={Public Library of Science},
+  doi={10.1371/journal.pone.0301183}
+}
+
+@misc{mitre_campaigns,
+  author       = {{The MITRE Corporation}},
+  title        = {{Campaigns} --- {MITRE ATT\&CK®}},
+  year         = {2025},
+  url          = {https://attack.mitre.org/campaigns/},
+  note         = {[Online]. Accessed: Jan. 4, 2026}
+}
+% --- Threat Intelligence Reports (The "Why") ---
+
+@techreport{protos_mustang_2025,
+  author      = {{Protos Labs}},
+  title       = {{Mustang Panda: Deep Dive into Thai Government Cyber Espionage Campaigns}},
+  institution = {Protos Labs},
+  year        = {2025},
+  month       = {Sep},
+  url         = {https://www.protoslabs.io/research/mustang-panda-thailand-campaign},
+  note        = {[Online]. Accessed: Jan. 4, 2026}
+}
+
+@techreport{cisa_scattered_spider_2025,
+  author      = {{CISA}},
+  title       = {{Scattered Spider: Fiscal Year 2025 Assessment}},
+  institution = {Cybersecurity and Infrastructure Security Agency},
+  year        = {2025},
+  month       = {Jul},
+  number      = {AA25-101A},
+  url         = {https://www.cisa.gov/news-events/cybersecurity-advisories/aa25-101a},
+  note        = {[Online]. Accessed: Jan. 4, 2026}
+}
+
+@misc{gatewatcher_volttyphoon,
+  author      = {{Gatewatcher}},
+  title       = {{Volt Typhoon: The Rise of "Living-off-the-Land" Attacks in Critical Infrastructure}},
+  year        = {2024},
+  month       = {Dec},
+  url         = {https://www.gatewatcher.com/lab/security-advisory-volt-typhoon},
+  note        = {[Online]. Accessed: Jan. 4, 2026}
+}
+
+@techreport{threatmon_lockbit,
+  author      = {{ThreatMon}},
+  title       = {{Ransomware Landscape Report 2025: The Evolution of LockBit and RansomHub}},
+  institution = {ThreatMon Cyber Intelligence},
+  year        = {2025},
+  month       = {Jan},
+  url         = {https://threatmon.io/reports/ransomware-landscape-2025},
+  note        = {[Online]. Accessed: Jan. 4, 2026}
+}
+
+% --- BAS Tools (The "How") ---
+
+@misc{redcanary_art,
+  author      = {{Red Canary}},
+  title       = {{Atomic Red Team: Validating Detection with Open Source Tools}},
+  year        = {2025},
+  url         = {https://redcanary.com/atomic-red-team/},
+  note        = {[Online]. Accessed: Jan. 4, 2026}
+}
+
+@misc{mitre_caldera,
+  author      = {{The MITRE Corporation}},
+  title       = {{MITRE Caldera: Automated Adversary Emulation Platform}},
+  year        = {2025},
+  url         = {https://caldera.mitre.org/},
+  note        = {[Online]. Accessed: Jan. 4, 2026}
+}
+
+@conference{infection_monkey_bh,
+  author      = {O. Ziv and A. Ittah},
+  title       = {{Unleash The Infection Monkey: A Modern Alternative to Pen Tests}},
+  booktitle   = {Black Hat USA},
+  year        = {2016},
+  organization= {GuardiCore},
+  url         = {https://www.guardicore.com/infectionmonkey/},
+  note        = {[Online]. Accessed: Jan. 4, 2026}
+}
+
+% REMOVED: duplicate definition of mitre_campaigns (the key is already defined
+% above under "Threat Intelligence Reports"). BibTeX silently keeps only the
+% first definition, so this one never had any effect.
+
+@misc{mitre_c0047,
+  author       = {{MITRE ATT\&CK®}},
+  title        = {Campaign C0047: RedDelta Modified PlugX Infection Chain Operations},
+  year         = {2025},
+  url          = {https://attack.mitre.org/campaigns/C0047/},
+  note         = {Accessed: Jan. 4, 2026}
+}
+
+@misc{mitre_c0027,
+  author       = {{MITRE ATT\&CK®}},
+  title        = {Campaign C0027: Scattered Spider 2022-2023 Operations},
+  year         = {2025},
+  url          = {https://attack.mitre.org/campaigns/C0027/},
+  note         = {Accessed: Jan. 4, 2026}
+}
+
+@misc{mitre_lockbit,
+  author       = {{MITRE ATT\&CK®}},
+  title        = {Software S1202: LockBit 3.0},
+  year         = {2025},
+  url          = {https://attack.mitre.org/software/S1202/},
+  note         = {Accessed: Jan. 4, 2026}
+}
+
+@misc{thaicert_mustang,
+  author       = {{ThaiCERT}},
+  title        = {Mustang Panda uses SnakeDisk malware to attack IPs in Thailand to deliver Yokai backdoor},
+  year         = {2025},
+  month        = {Sep},
+  url          = {https://www.thaicert.or.th/2025/09/17/mustang-panda-snakedisk/},
+  note         = {Accessed: Jan. 4, 2026}
+}
+
+@misc{ctid_sightings,
+  author       = {{Center for Threat-Informed Defense}},
+  title        = {Sightings Ecosystem: Top 15 Techniques},
+  year         = {2025},
+  url          = {https://center-for-threat-informed-defense.github.io/sightings_ecosystem/top-15-techniques/},
+  note         = {MITRE Engenuity. Accessed: Jan. 4, 2026}
+}

@@ -1,0 +1,11 @@
+% 2026 CHANGE: \abstract now takes ONE argument (was two in muthesis2021).
+% The old second argument produced the "IMPLICATION OF THE THESIS" block,
+% which no longer exists in muthesis2026. It has been removed.
+\abstract{%
+\linespacing{1.2} % change the linespacing to fit the abstract in the allotted space
+While organizations invest heavily in layered defensive measures, validating the true efficacy of these controls against evolving threats remains a significant challenge. Breach and Attack Simulation (BAS) offers a solution by automating the emulation of adversarial tactics to proactively identify detection gaps. However, the high licensing costs of commercial BAS platforms often exclude budget-constrained organizations, and there is currently a lack of systematic, empirical data comparing viable open-source alternatives.
+
+This research addresses this gap by applying the MITRE ATT\&CK framework to design, execute, and analyze real-world attack simulations. We conducted a comparative experimental analysis of three open-source BAS tools—MITRE Caldera, Infection Monkey, and Atomic Red Team—using the ATT\&CK framework to map adversarial tactics, techniques, and procedures across all test scenarios. The tools were evaluated against six proposed metrics: usability and deployment complexity, threat intelligence alignment and maintenance, scenario coverage and execution reliability, operational performance and output quality, framework extensibility and custom scenario creation, and community health and project maturity. All simulations were performed in a controlled laboratory environment designed to model real operational constraints.
+
+The findings are based on actual experimental outcomes, with the performance of each tool visualized using radar charts. By aligning the evaluation process with MITRE ATT\&CK, this study provides evidence-based insights into the capabilities of open-source BAS tools, supporting organizations in advancing their security posture without incurring significant financial overhead.
+}

@@ -1,0 +1,134 @@
+\candidate{Thanawut Udomsilp} % your name (without title)
+
+\candidatetitle{Mr.\ } % Mr.\ Miss.\ or Ms.\
+
+\degree{MSc} % MSc or PhD
+
+\subject{CYBER SECURITY AND INFORMATION ASSURANCE} % subject area
+
+\submissionyear{2026} % default is current year
+
+%\isbn{974-04-xxxx-x} % remember to replace the x's when you know the number
+
+% information for page i (advisory committee)
+
+
+\majoradvisor{Vasaka Visootiviseth} % name of supervisor (without title)
+\majoradvisortitle{Assoc.~Prof.~} % Dr.~ or Asst.~Prof.~ or Assoc.~Prof.~ or Prof.~
+\majoradvisorletters{Ph.D.} % Ph.D. or Dr.rer.nat.
+\majoradvisorsubject{Computer Engineer} % subject in which advisor obtained last degree
+
+\coadvisor{Ittipon Rassameeroj} % name of co-advisor
+\coadvisortitle{Dr.~} % title of co-advisor
+\coadvisorletters{Ph.D.} % Ph.D. or Dr.rer.nat.
+%\coadvisorstatus{Major advisor} % default is Co-advisor
+\coadvisorsubject{Computer Science} % subject in which co-advisor obtained last degree
+
+\coadvisorII{Dolvara Guna-Tilaka}
+\coadvisorIItitle{Assoc.~Prof.~}
+\coadvisorIIletters{Ph.D.}
+\coadvisorIIsubject{Computer Science}
+
+\programchair{Vasaka Visootiviseth} % chair of your degree program
+% DELIBERATE OVERRIDE (re-applied 2026-09-14; was lost when the template
+% preamble was merged in). muthesis2026.cls line ~513 unconditionally typesets
+%     \@programchairqual~(\@subject)
+% which force-appends the STUDENT's programme subject and prints
+% "Ph.D. (CYBER SECURITY AND INFORMATION ASSURANCE)" -- wrong; the Program
+% Director's degree is Ph.D. (Computer Engineer). \@gobblefour swallows the
+% four appended tokens. The class file is left unmodified.
+% If muthesis2026.cls is ever updated and the auto-append is removed, delete
+% \@gobblefour or it will eat the following four tokens.
+\makeatletter
+\programchairqual{Ph.D. (Computer Engineer)\@gobblefour}
+\makeatother
+\faculty{Information and Communication Technology}
+
+% 2026 CHANGE: \GSDqual is no longer typeset. The dean's qualification must be
+% written inside \graduatestudiesdean, using \\ for the second line.
+\graduatestudiesdean{Prof.~Dr.~Chartchalerm Isarankura-Na-Ayudhya,\\Ph.D. (Medical Technology)}
+%\GSDstatus{Acting} % in case the dean is away and you need `Acting Dean' on the form
+
+% information for page ii (exam committee)
+
+\submissiondate{Month Day, Year} % date of submission -- FILL IN BEFORE SUBMISSION
+
+\chair{Chair Name}
+\chairqual{Ph.D.}
+\chairsubject{Computer Science}
+
+% NOTE: muthesis2026 no longer substitutes \memberI--\memberIV on the exam
+% committee page; it always lists chair, major advisor, then co-advisors.
+%\memberI{}
+%\memberIqual{}
+%\memberII{}
+%\memberIIqual{}
+%\memberIII{}
+%\memberIIIqual{}
+%\memberIV{}
+%\memberIVqual{}
+
+\facultydean{Pattanasak Mongkolwat}
+% 2026 CHANGE: split into \FDqual + the new \FDsubject.
+% Was: \FDqual{Ph.D. (Computer Science)}
+\FDqual{Ph.D.}
+\FDsubject{Computer Science}
+%\FDstatus{Acting}
+
+% information for page iv (ABSTRACT)
+
+\candidatenumber{6738220 ITCY/M}
+%\major{} % major (not necessary if the same as subject)
+\keywords{Breach and Attack Simulation (BAS) / MITRE ATT\&CK} % 1st line of keywords
+\keywordsII{framework/ Open-source security tools} % 2nd line of keywords
+\keywordsIII{Experimental testing / Comparative analysis} % 3rd line of keywords
+
+% information for page v (THAI ABSTRACT)
+% NOTE: muthesis2026 dropped \thaiabstract entirely (the Thai font dbtt is gone;
+% the class now uses cmr10). Produce the Thai abstract in MS Word, as before.
+\thaisubject{ชื่อสาขาภาษาไทย} % thai name of degree subject
+\thaititle{ชื่อเรื่องภาษาไทย} % title in thai -- FILL IN
+\thaicandidate{นายธนาวุฒิ อุดมศิลป์} % your name in thai
+\thaimajoradvisor{รศ. ดร. วสกา วิสุทธิวิเศษ} % Thai name of advisor
+%\thaicoadvisor{}
+%\thaicoadvisorII{}
+
+% information for Biography
+
+\dateofbirth{26 October 1988} % your date of birth
+\placeofbirth{Chumphon, Thailand} % province and country of birth
+\firstdegreeinstitution{Kasem Bundit University} % where you did your first degree
+\firstdegreeyears{2007--2011} % years for 1st degree
+\firstdegree{Bachelor of Engineering} % default is Bachelor of Science
+\firstdegreemajor{Computer Engineer} % first degree major
+%\longfirstdegree % necessary if you want the subject on the next line
+%\preinstitution{}
+%\preinstitutionLnII{}
+%\preinstitutionII{}
+%\preinstitutionIILnII{}
+\years{2024--2026} % years taken to do your present degree
+\postinstitution{Mahidol University}
+%\postinstitutionLnII{}
+%\scholarship{}
+%\scholarshipLnII{}
+%\scholarshipLnIII{}
+%\scholarshipII{}
+%\scholarshipIILnII{}
+%\scholarshipIILnIII{}
+
+% 2026 NEW: the Biography page now prints RESEARCH GRANTS and
+% PUBLICATION/PRESENTATION rows. Leaving them empty prints "-".
+%\researchgrants{Grant name, funding agency, year}
+%\researchgrantsLnII{}
+%\researchgrantsLnIII{}
+%\publications{Author(s). Title. Journal. Year;Vol(Issue):Pages.}
+%\publicationsLnII{}
+%\publicationsLnIII{}
+
+\position{Assistance Vice President - Cyber Security Operation and Defense Center} % present position
+\workplace{CIMB Thai Bank} % location
+\workplaceLnII{Bangkok, Thailand} % second line of location
+%\homeaddress{} % your home address if you do not have a position
+%\homeaddressLnII{}
+%\homeaddressLnIII{}
+\email{thanawutu@icloud.com} % email at which you can be contacted after you leave
