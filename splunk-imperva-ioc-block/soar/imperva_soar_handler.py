@@ -130,10 +130,6 @@ def request_from_artifact(a):
         "ips": ",".join(ips) if isinstance(ips, list) else str(ips),
         "policy_ids": cef.get("policy_ids", ""),            # empty -> all allowed policies
         "dry_run": cef.get("dry_run", "false"),
-        "threat_actor": cef.get("threat_actor", ""),
-        "incident_no": cef.get("incident_no", ""),
-        "comment": cef.get("comment", ""),
-        "reason": cef.get("reason", ""),
         "requested_by": cef.get("requested_by") or "splunk-sendalert",
         "requested_from": "sendalert",
     }

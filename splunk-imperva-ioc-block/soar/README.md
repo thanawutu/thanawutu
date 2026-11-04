@@ -9,6 +9,9 @@ Splunk dashboard / SPL ──HTTPS──▶ Splunk SOAR ──HTTPS──▶ Imp
       /artifacts for the result        (rows as JSON), closes container
 ```
 The dashboard, buttons, verification, KV store registry and audit log all work as in direct mode.
+**Block descriptions stay in Splunk.** Threat actor, incident no., comment and reason go only to the KV store
+registry, the audit log and the dashboard, because the WAF has no field for them. SOAR receives just
+the action, the IPs, the policy IDs, dry-run and the requesting user.
 **VirusTotal lookups also go through SOAR** (`vt_via = auto`), so the Search Head needs no internet
 access at all. SOAR checks VirusTotal for the `vtcheck` command and returns the verdicts.
 Splunk caches them for 24h, so the next dashboard load costs no VirusTotal quota.
@@ -91,16 +94,15 @@ containers created by the live list are deleted after they are read (`soar_delet
 
 The playbook **also accepts containers created by `sendalert sendtophantom`**, or by a detection rule's
 *Send to SOAR* adaptive response. Use label `imperva_ioc_block` and give the event these fields:
-`imperva_action` (`block`/`unblock`), and `src` (or `ip`/`ips`/`src_ip`). Optional fields: `threat_actor`,
-`incident_no`, `comment`. Example, in the same style as your AD dashboard:
+`imperva_action` (`block`/`unblock`), and `src` (or `ip`/`ips`/`src_ip`). Example, in the same style as your AD dashboard:
 ```
 | makeresults
-| eval imperva_action="block", src="185.220.101.47", threat_actor="Unknown", incident_no="INC-2026-0400", comment="from detection rule"
+| eval imperva_action="block", src="185.220.101.47"
 | sendalert sendtophantom param.phantom_server="Splunk - SOAR" param.label="imperva_ioc_block" param.severity="low" param.sensitivity="amber" param.name="Imperva IOC block from Splunk"
 ```
 SOAR applies the same allow-list and IP checks, then writes the result into the container.
 These blocks appear in the dashboard's live list as *"On WAF (blocked outside Splunk)"*, because
-`sendalert` does not write the Splunk KV store registry. The details are in the SOAR container.
+`sendalert` does not write the Splunk KV store registry (no description).
 
 ## Troubleshooting
 | Message | Fix |

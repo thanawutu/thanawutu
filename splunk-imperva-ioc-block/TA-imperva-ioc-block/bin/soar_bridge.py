@@ -90,8 +90,7 @@ class SoarBridge(object):
             "severity": "low",
             "status": "new",
             "source_data_identifier": rid,
-            "description": "Requested from Splunk by %s (%s)" % (
-                request.get("requested_by", "-"), request.get("incident_no") or "-"),
+            "description": "Requested from Splunk by %s" % request.get("requested_by", "-"),
             "artifacts": [{
                 "name": REQUEST_NAME,
                 "label": self.label,
@@ -151,17 +150,15 @@ class SoarBridge(object):
     # ------------------------------------------------------------------ API
     def call(self, action, ips=(), policy_ids=(), dry_run=False, meta=None, requested_by="-",
              wait_seconds=None):
-        meta = meta or {}
+        # `meta` (threat actor / incident no. / comment / reason) is deliberately NOT sent:
+        # the WAF has no field for it. It is kept only in Splunk (KV store registry,
+        # audit log, dashboard). SOAR receives just what it needs to act.
         req = {
             "request_id": uuid.uuid4().hex,
             "action": action,
             "ips": ",".join(ips),
             "policy_ids": ",".join(policy_ids),
             "dry_run": "true" if dry_run else "false",
-            "threat_actor": meta.get("threat_actor", ""),
-            "incident_no": meta.get("incident_no", ""),
-            "comment": meta.get("comment", ""),
-            "reason": meta.get("reason", ""),
             "requested_by": requested_by,
             "requested_from": "splunk",
         }

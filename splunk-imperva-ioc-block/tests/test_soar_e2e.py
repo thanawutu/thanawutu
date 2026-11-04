@@ -201,7 +201,11 @@ class TestSoarE2E(unittest.TestCase):
         c = FakeSoar.store["containers"][cid]
         self.assertEqual(c["status"], "closed")                       # audit trail kept on SOAR
         req = [a for a in c["artifacts"] if a["name"] == "imperva_request"][0]["cef"]
-        self.assertEqual((req["requested_by"], req["incident_no"]), ("alice", "INC-1"))
+        self.assertEqual(req["requested_by"], "alice")
+        # the block description stays in Splunk only - never sent to SOAR
+        for k in ("threat_actor", "incident_no", "comment", "reason"):
+            self.assertNotIn(k, req)
+        self.assertNotIn("INC-1", json.dumps(c))
 
     def test_unblock_via_soar(self):
         rows = self.bridge.execute("unblock", ["1.1.1.1"], ["1777"], False, {}, "alice")

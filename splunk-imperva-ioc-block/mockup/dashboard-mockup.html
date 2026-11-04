@@ -357,10 +357,10 @@ textarea{resize:vertical;min-height:38px;font-family:var(--font-data)}
   <section class="panel" id="soarPanel">
     <div class="panel-head">
       <h2>SOAR containers (label imperva_ioc_block)</h2>
-      <p>Block/unblock containers stay closed on SOAR as an audit trail · <span id="listCt">0</span> short-lived list containers created and deleted</p>
+      <p>SOAR gets only action, IPs, policy and user. Threat actor, incident no. and comment stay in Splunk. Block/unblock containers stay closed on SOAR as an audit trail · <span id="listCt">0</span> short-lived list containers created and deleted</p>
     </div>
     <div class="tbl-wrap" style="max-height:260px;overflow:auto">
-      <table><thead><tr><th>Container</th><th>Name</th><th>Status</th><th>Playbook run</th><th>Requested by</th><th>Incident no.</th><th>Created</th><th>Result</th></tr></thead>
+      <table><thead><tr><th>Container</th><th>Name</th><th>Status</th><th>Playbook run</th><th>Requested by</th><th>IPs sent</th><th>Created</th><th>Result</th></tr></thead>
       <tbody id="soarRows"></tbody></table>
     </div>
   </section>
@@ -435,8 +435,8 @@ for(let i=29;i>=0;i--){
 [["soc.lead","block","193.42.33.7","2169031","blocked","yes","SampleBear","INC-2026-0311","Credential stuffing on /login",now0-3*DAY-5*HOUR],
  ["soc.analyst","block","141.98.10.60","2169031","blocked","yes","Unknown","INC-2026-0287","Scanner, VT 9/94",now0-9*DAY]]
  .forEach((r,i)=>audit.push({user:r[0],action:r[1],ip:r[2],site:r[3],status:r[4],verified:r[5],actor:r[6],incident:r[7],comment:r[8],dry:false,t:r[9],backend:"soar",cont:4790+i*7}));
-[[4797,"Splunk Imperva block 141.98.10.60","soc.analyst","INC-2026-0287",now0-9*DAY],[4790,"Splunk Imperva block 193.42.33.7","soc.lead","INC-2026-0311",now0-3*DAY-5*HOUR]]
- .forEach(c=>soarContainers.push({id:c[0],name:c[1],status:"closed",run:"success",by:c[2],incident:c[3],t:c[4],result:"1 blocked, verified"}));
+[[4797,"Splunk Imperva block 141.98.10.60","soc.analyst","141.98.10.60",now0-9*DAY],[4790,"Splunk Imperva block 193.42.33.7","soc.lead","193.42.33.7",now0-3*DAY-5*HOUR]]
+ .forEach(c=>soarContainers.push({id:c[0],name:c[1],status:"closed",run:"success",by:c[2],ips:c[3],t:c[4],result:"1 blocked, verified"}));
 
 /* ---------- logic mirrored from the Splunk app ---------- */
 function v4(ip){ const m=/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?:\/(\d{1,2}))?$/.exec(ip); if(!m) return null;
@@ -611,7 +611,7 @@ function renderSoar(){
     <td class="mono">${c.id}</td><td>${esc(c.name)}</td>
     <td><span class="pill ${c.status==="closed"?"p-done":"p-review"}">${c.status}</span></td>
     <td><span class="pill ${runPill[c.run]||"p-done"}">${c.run}</span></td>
-    <td>${esc(c.by)}</td><td class="mono">${esc(c.incident||"-")}</td><td class="mono" style="white-space:nowrap">${fmt(c.t)}</td><td class="small">${esc(c.result||"")}</td></tr>`).join("");
+    <td>${esc(c.by)}</td><td class="mono">${esc(c.ips||"-")}</td><td class="mono" style="white-space:nowrap">${fmt(c.t)}</td><td class="small">${esc(c.result||"")}</td></tr>`).join("");
 }
 
 /* ---------- simulated impervablock ---------- */
@@ -639,7 +639,7 @@ async function runImpervablock({ips, action, dry, meta, failWrite, siteIds}){
 
   if(accepted.length && soar){
     flow("soar"); cont=soarSeq++;
-    c={id:cont,name:`Splunk Imperva ${action} ${accepted.join(",")}`.slice(0,60),status:"new",run:"running",by:USER,incident:meta.incident,t:Date.now(),result:"waiting…"};
+    c={id:cont,name:`Splunk Imperva ${action} ${accepted.join(",")}`.slice(0,60),status:"new",run:"running",by:USER,ips:accepted.join(","),t:Date.now(),result:"waiting…"};
     soarContainers.push(c); renderSoar();
     await step("cont",450);
     if(soarDown){
