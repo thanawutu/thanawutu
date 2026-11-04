@@ -142,6 +142,24 @@ textarea{resize:vertical;min-height:38px;font-family:var(--font-data)}
 
 .toast{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:10px 14px;border-radius:6px;font-size:13px;max-width:min(420px,calc(100vw - 32px));box-shadow:0 6px 24px rgba(0,0,0,.25);z-index:20}
 .note{font-size:12px;color:var(--muted)}
+/* backend flow */
+.flow{display:flex;flex-wrap:wrap;align-items:stretch;gap:0;row-gap:8px}
+.node{flex:1 1 180px;min-width:0;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);padding:10px 12px;display:flex;flex-direction:column;gap:2px;transition:border-color .2s,background .2s,opacity .2s}
+.node .t{font-weight:600;font-size:13px}
+.node .d{font-size:11.5px;color:var(--muted);font-family:var(--font-data);overflow-wrap:anywhere}
+.node.active{border-color:var(--warn);background:var(--warn-bg)}
+.node.ok{border-color:var(--ok)}
+.node.off{opacity:.35;border-style:dashed}
+.arrow{flex:0 0 56px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:10.5px;color:var(--muted);text-align:center;font-family:var(--font-data)}
+.arrow i{display:block;width:100%;height:2px;background:var(--line);position:relative;margin:4px 0}
+.arrow i::after{content:"";position:absolute;right:-1px;top:-4px;border:5px solid transparent;border-left-color:var(--line)}
+.arrow.active i{background:var(--warn)} .arrow.active i::after{border-left-color:var(--warn)}
+.arrow.off{opacity:.3}
+@media (max-width:640px){.arrow{flex-basis:100%;flex-direction:row;gap:8px}.arrow i{width:2px;height:16px;margin:0}.arrow i::after{right:-4px;top:auto;bottom:-6px;border-left-color:transparent;border-top-color:var(--line)}}
+.mode-seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;font-size:12px}
+.mode-seg button{border:0;border-radius:0;background:var(--panel-2);padding:4px 12px;font-size:12px}
+.mode-seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);font-weight:600}
+@media (prefers-reduced-motion: reduce){.node{transition:none}}
 .b-unblock{background:var(--ok-bg);border-color:var(--ok);color:var(--ok);font-weight:600}
 .searchbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
 .searchbar input{max-width:340px;flex:1 1 220px}
@@ -157,8 +175,12 @@ textarea{resize:vertical;min-height:38px;font-family:var(--font-data)}
     </div>
     <div class="statusline">
       <span class="chip sim">Mockup · simulated data, no real API calls</span>
+      <span class="mode-seg" role="group" aria-label="Backend (api_mode)">
+        <button type="button" id="modeDirect" aria-pressed="false">Direct API</button>
+        <button type="button" id="modeSoar" aria-pressed="true">Via SOAR</button>
+      </span>
       <span class="chip"><span class="dot" id="wafDot"></span><span id="wafStatus">WAF list read just now</span></span>
-      <span class="chip mono" id="refreshIn">Auto refresh in 2:00</span>
+      <span class="chip mono" id="refreshIn">Auto refresh in 5:00</span>
       <button class="b-sm" id="refreshNow" type="button">Refresh WAF now</button>
     </div>
   </div>
@@ -166,9 +188,23 @@ textarea{resize:vertical;min-height:38px;font-family:var(--font-data)}
 
 <main class="wrap" style="padding-top:16px">
 
+  <section class="panel" aria-label="How a block request travels">
+    <div class="panel-head">
+      <h2 id="flowTitle">Backend: via Splunk SOAR (api_mode = soar)</h2>
+      <p id="flowNote">Search Head has no route to Imperva. SOAR calls the Imperva API.</p>
+    </div>
+    <div class="flow">
+      <div class="node" id="nSplunk"><span class="label">1 · Splunk Search Head</span><span class="t">Dashboard · impervablock</span><span class="d">validates IPs, writes registry + audit</span></div>
+      <div class="arrow" id="a1"><span>POST /rest/container</span><i></i><span>ph-auth-token</span></div>
+      <div class="node" id="nSoar"><span class="label">2 · Splunk SOAR</span><span class="t">Playbook imperva_ioc_block</span><span class="d">re-validates: policy allow-list, protected nets</span></div>
+      <div class="arrow" id="a2"><span>GET / PUT</span><i></i><span>x-API-Id / x-API-Key</span></div>
+      <div class="node" id="nImperva"><span class="label">3 · Imperva Cloud WAF</span><span class="t">Policy 2169031</span><span class="d">BlockIOCsFromSplunk · ACL · IP/BLOCK</span></div>
+    </div>
+  </section>
+
   <!-- KPIs -->
   <section class="kpis" aria-label="Blocked IP summary">
-    <div class="kpi k-crit"><span class="label">Total blocked IPs on WAF (live)</span><span class="v" id="kTotal">0</span><span class="s" id="kTotalSub">across 2 sites</span></div>
+    <div class="kpi k-crit"><span class="label">Total blocked IPs on WAF (live)</span><span class="v" id="kTotal">0</span><span class="s" id="kTotalSub">policy 2169031</span></div>
     <div class="kpi k-ok"><span class="label">Blocked from Splunk & verified</span><span class="v" id="kVerified">0</span><span class="s">re-read from WAF after write</span></div>
     <div class="kpi" id="kMissingBox"><span class="label">Registered but NOT on WAF</span><span class="v" id="kMissing">0</span><span class="s">removed manually or write failed</span></div>
     <div class="kpi k-warn"><span class="label">New blocks (last 1h)</span><span class="v" id="kNew">0</span><span class="s">marked NEW in the list</span></div>
@@ -215,7 +251,7 @@ textarea{resize:vertical;min-height:38px;font-family:var(--font-data)}
   <section class="confirm" id="confirm" hidden aria-live="polite">
     <div class="panel-head" style="margin:0">
       <h2 id="cTitle">Confirm block</h2>
-      <p>Fill in the block description, then confirm. This writes to the Imperva blacklist on every configured site.</p>
+      <p>Fill in the block description, then confirm. This adds the IP to ACL policy 2169031, which applies to every website the policy is assigned to.</p>
     </div>
     <div class="confirm-grid" id="cInfo"></div>
     <div class="fields">
@@ -226,7 +262,8 @@ textarea{resize:vertical;min-height:38px;font-family:var(--font-data)}
     <div class="row-actions">
       <button class="b-block" id="cConfirm" type="button">Confirm block on Imperva WAF</button>
       <button class="b-ghost" id="cCancel" type="button">Cancel</button>
-      <label class="checkline note"><input type="checkbox" id="simFail"> Simulate a WAF write that does not stick (shows the verification failing)</label>
+      <label class="checkline note"><input type="checkbox" id="simFail"> Simulate a WAF write that does not stick (verification fails)</label>
+      <label class="checkline note" id="simSoarWrap"><input type="checkbox" id="simSoar"> Simulate SOAR playbook not active (Splunk times out)</label>
       <span class="err" id="cErr"></span>
     </div>
   </section>
@@ -236,7 +273,7 @@ textarea{resize:vertical;min-height:38px;font-family:var(--font-data)}
     <div class="panel-head"><h2 id="jobTitle">Block result</h2><button class="b-sm b-ghost" type="button" id="jobClose">Dismiss</button></div>
     <ul class="steps" id="jobSteps"></ul>
     <div class="tbl-wrap" style="margin-top:10px">
-      <table><thead><tr><th>ip</th><th>site_id</th><th>status</th><th>verified_in_waf</th><th>threat_actor</th><th>incident_no</th><th>detail</th></tr></thead>
+      <table><thead><tr><th>ip</th><th>policy_id</th><th>status</th><th>verified_in_waf</th><th>backend</th><th>soar_container</th><th>threat_actor</th><th>incident_no</th><th>detail</th></tr></thead>
       <tbody id="jobRows"></tbody></table>
     </div>
   </section>
@@ -271,7 +308,7 @@ textarea{resize:vertical;min-height:38px;font-family:var(--font-data)}
   <section class="panel">
     <div class="panel-head">
       <h2>Blocked IPs on Imperva WAF (read live from the WAF policy)</h2>
-      <p><span class="mono">| impervalist</span> joined with the KV store registry · refreshes every 2 min and after every block</p>
+      <p><span class="mono">| impervalist</span> joined with the KV store registry · refreshes every 5 min and after every block/unblock</p>
     </div>
     <form class="searchbar" id="wafSearch" role="search">
       <label class="label" for="wafFilter">Search</label>
@@ -282,7 +319,7 @@ textarea{resize:vertical;min-height:38px;font-family:var(--font-data)}
     </form>
     <div class="tbl-wrap">
       <table>
-        <thead><tr><th>Actions</th><th></th><th>Blocked time</th><th>ip</th><th>Site</th><th>Verification</th><th>Threat actor</th><th>Incident no.</th><th>Comment</th><th>Blocked by</th><th>Last checked on WAF</th></tr></thead>
+        <thead><tr><th>Actions</th><th></th><th>Blocked time</th><th>ip</th><th>Policy</th><th>Verification</th><th>Threat actor</th><th>Incident no.</th><th>Comment</th><th>Blocked by</th><th>Last checked on WAF</th></tr></thead>
         <tbody id="waf"></tbody>
       </table>
     </div>
@@ -292,7 +329,7 @@ textarea{resize:vertical;min-height:38px;font-family:var(--font-data)}
   <section class="confirm unb" id="unb" hidden aria-live="polite">
     <div class="panel-head" style="margin:0">
       <h2 id="uTitle">Confirm unblock</h2>
-      <p>This removes the IP from the blacklist of this site only. Other sites are not touched.</p>
+      <p>This removes the IP from ACL policy 2169031.</p>
     </div>
     <div class="confirm-grid" id="uInfo"></div>
     <div class="fields">
@@ -316,11 +353,23 @@ textarea{resize:vertical;min-height:38px;font-family:var(--font-data)}
     </div>
   </section>
 
+  <!-- SOAR containers -->
+  <section class="panel" id="soarPanel">
+    <div class="panel-head">
+      <h2>SOAR containers (label imperva_ioc_block)</h2>
+      <p>Block/unblock containers stay closed on SOAR as an audit trail · <span id="listCt">0</span> short-lived list containers created and deleted</p>
+    </div>
+    <div class="tbl-wrap" style="max-height:260px;overflow:auto">
+      <table><thead><tr><th>Container</th><th>Name</th><th>Status</th><th>Playbook run</th><th>Requested by</th><th>Incident no.</th><th>Created</th><th>Result</th></tr></thead>
+      <tbody id="soarRows"></tbody></table>
+    </div>
+  </section>
+
   <!-- Audit -->
   <section class="panel">
     <div class="panel-head"><h2>Audit log – who blocked what</h2><p>index=_internal source=*imperva_ioc_block.log</p></div>
     <div class="tbl-wrap" style="max-height:320px;overflow:auto">
-      <table><thead><tr><th>_time</th><th>user</th><th>action</th><th>ip</th><th>site_id</th><th>status</th><th>verified</th><th>threat_actor</th><th>incident_no</th><th>comment</th><th>dry_run</th></tr></thead>
+      <table><thead><tr><th>_time</th><th>user</th><th>action</th><th>ip</th><th>policy_id</th><th>status</th><th>verified</th><th>backend</th><th>soar_container</th><th>threat_actor</th><th>incident_no</th><th>comment</th><th>dry_run</th></tr></thead>
       <tbody id="audit"></tbody></table>
     </div>
   </section>
@@ -332,7 +381,10 @@ textarea{resize:vertical;min-height:38px;font-family:var(--font-data)}
 (function(){
 "use strict";
 const USER = "soc.analyst";
-const SITES = [{id:"12345678",name:"shop.example.com"},{id:"23456789",name:"api.example.com"}];
+const SITES = [{id:"2169031",name:"BlockIOCsFromSplunk"}];   // policy_ids (v2 ACL policy)
+let MODE = "soar";                                           // api_mode: "v2_policy" (direct) | "soar"
+let soarSeq = 4812, listContainers = 0;
+const soarContainers = [];
 const PROTECTED = ["8.8.8.0/24"];               // imperva.conf protected_networks (sample)
 const MAX_IPS = 50, HOUR = 3600e3, DAY = 86400e3;
 const now0 = Date.now();
@@ -350,14 +402,13 @@ const attackers = [
 ];
 
 // WAF state (live blacklist) per site
-const waf = {"12345678": new Set(["193.42.33.7","62.233.50.11","141.98.10.60"]), "23456789": new Set(["193.42.33.7","62.233.50.11"])};
+const waf = {"2169031": new Set(["193.42.33.7","62.233.50.11","141.98.10.60"])};
 // KV store registry  key = site_ip
 const registry = new Map();
 function reg(site, ip, d){ registry.set(site+"_"+ip, Object.assign({site, ip, status:"blocked"}, d)); }
-reg("12345678","193.42.33.7",{at:now0-3*DAY-5*HOUR, by:"soc.lead", actor:"SampleBear", incident:"INC-2026-0311", comment:"Credential stuffing on /login"});
-reg("23456789","193.42.33.7",{at:now0-3*DAY-5*HOUR, by:"soc.lead", actor:"SampleBear", incident:"INC-2026-0311", comment:"Credential stuffing on /login"});
-reg("12345678","141.98.10.60",{at:now0-9*DAY, by:"soc.analyst", actor:"Unknown", incident:"INC-2026-0287", comment:"Scanner, VT 9/94"});
-reg("12345678","77.91.124.20",{at:now0-12*DAY, by:"soc.analyst", actor:"SamplePanda", incident:"INC-2026-0260", comment:"Removed from WAF manually?"});
+reg("2169031","193.42.33.7",{at:now0-3*DAY-5*HOUR, by:"soc.lead", actor:"SampleBear", incident:"INC-2026-0311", comment:"Credential stuffing on /login"});
+reg("2169031","141.98.10.60",{at:now0-9*DAY, by:"soc.analyst", actor:"Unknown", incident:"INC-2026-0287", comment:"Scanner, VT 9/94"});
+reg("2169031","77.91.124.20",{at:now0-12*DAY, by:"soc.analyst", actor:"SamplePanda", incident:"INC-2026-0260", comment:"Removed from WAF manually?"});
 // 62.233.50.11 is on WAF but has no registry record => blocked outside Splunk
 
 // audit + 30-day history (seeded, deterministic)
@@ -381,10 +432,11 @@ for(let i=29;i>=0;i--){
   daily.push(rec);
 }
 // seed visible audit with recent history
-[["soc.lead","block","193.42.33.7","12345678","blocked","yes","SampleBear","INC-2026-0311","Credential stuffing on /login",now0-3*DAY-5*HOUR],
- ["soc.lead","block","193.42.33.7","23456789","blocked","yes","SampleBear","INC-2026-0311","Credential stuffing on /login",now0-3*DAY-5*HOUR],
- ["soc.analyst","block","141.98.10.60","12345678","blocked","yes","Unknown","INC-2026-0287","Scanner, VT 9/94",now0-9*DAY]]
- .forEach(r=>audit.push({user:r[0],action:r[1],ip:r[2],site:r[3],status:r[4],verified:r[5],actor:r[6],incident:r[7],comment:r[8],dry:false,t:r[9]}));
+[["soc.lead","block","193.42.33.7","2169031","blocked","yes","SampleBear","INC-2026-0311","Credential stuffing on /login",now0-3*DAY-5*HOUR],
+ ["soc.analyst","block","141.98.10.60","2169031","blocked","yes","Unknown","INC-2026-0287","Scanner, VT 9/94",now0-9*DAY]]
+ .forEach((r,i)=>audit.push({user:r[0],action:r[1],ip:r[2],site:r[3],status:r[4],verified:r[5],actor:r[6],incident:r[7],comment:r[8],dry:false,t:r[9],backend:"soar",cont:4790+i*7}));
+[[4797,"Splunk Imperva block 141.98.10.60","soc.analyst","INC-2026-0287",now0-9*DAY],[4790,"Splunk Imperva block 193.42.33.7","soc.lead","INC-2026-0311",now0-3*DAY-5*HOUR]]
+ .forEach(c=>soarContainers.push({id:c[0],name:c[1],status:"closed",run:"success",by:c[2],incident:c[3],t:c[4],result:"1 blocked, verified"}));
 
 /* ---------- logic mirrored from the Splunk app ---------- */
 function v4(ip){ const m=/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?:\/(\d{1,2}))?$/.exec(ip); if(!m) return null;
@@ -489,7 +541,7 @@ function renderWaf(){
   // KPIs
   const live=new Set(); SITES.forEach(s=>waf[s.id].forEach(ip=>live.add(ip)));
   $("kTotal").textContent=live.size;
-  $("kTotalSub").textContent=`${all.filter(x=>x.inWaf).length} IP × site entries on 2 sites`;
+  $("kTotalSub").textContent=`policy 2169031 · BlockIOCsFromSplunk`;
   $("kVerified").textContent=all.filter(x=>x.inWaf&&x.r).length;
   const miss=all.filter(x=>!x.inWaf).length; $("kMissing").textContent=miss;
   $("kMissingBox").className="kpi "+(miss?"k-crit k-bad":"k-ok");
@@ -532,86 +584,149 @@ function renderChart(){
 function renderAudit(){
   $("audit").innerHTML = audit.slice().sort((a,b)=>b.t-a.t).slice(0,60).map(e=>`<tr>
     <td class="mono" style="white-space:nowrap">${fmt(e.t)}</td><td>${esc(e.user)}</td><td>${e.action}</td><td class="ip">${esc(e.ip)}</td><td class="mono">${e.site}</td>
-    <td><span class="pill ${statusPill(e.status)}">${e.status}</span></td><td>${e.verified}</td><td>${esc(e.actor)}</td><td class="mono">${esc(e.incident)}</td><td class="small">${esc(e.comment)}</td><td>${e.dry?"True":"False"}</td></tr>`).join("");
+    <td><span class="pill ${statusPill(e.status)}">${e.status}</span></td><td>${e.verified}</td><td class="mono">${e.backend||"-"}</td><td class="mono">${e.cont||"-"}</td><td>${esc(e.actor)}</td><td class="mono">${esc(e.incident)}</td><td class="small">${esc(e.comment)}</td><td>${e.dry?"True":"False"}</td></tr>`).join("");
 }
 function statusPill(s){ return {blocked:"p-block",unblocked:"p-safe",no_change:"p-done",rejected:"p-review",error:"p-block"}[s] || "p-review"; }
 function renderAll(){ renderAttackers(); renderWaf(); renderStats(); renderAudit(); }
+
+/* ---------- backend flow highlight ---------- */
+function flow(stage){ // stage: "splunk" | "soar" | "imperva" | null
+  const soar = MODE==="soar";
+  $("nSoar").classList.toggle("off", !soar);
+  $("a1").classList.toggle("off", false);
+  $("a1").querySelector("span").textContent = soar ? "POST /rest/container" : "direct HTTPS";
+  $("a1").querySelector("span:last-child").textContent = soar ? "ph-auth-token" : "(bypasses SOAR)";
+  $("a2").classList.toggle("off", !soar);
+  ["nSplunk","nSoar","nImperva"].forEach(id=>$(id).classList.remove("active"));
+  ["a1","a2"].forEach(id=>$(id).classList.remove("active"));
+  if(stage==="splunk") $("nSplunk").classList.add("active");
+  if(stage==="soar"){ $("a1").classList.add("active"); $("nSoar").classList.add("active"); }
+  if(stage==="imperva"){ (soar?$("a2"):$("a1")).classList.add("active"); $("nImperva").classList.add("active"); }
+}
+function renderSoar(){
+  $("soarPanel").hidden = MODE!=="soar";
+  $("listCt").textContent = listContainers;
+  const runPill={running:"p-review",success:"p-safe",failed:"p-block","not started":"p-block"};
+  $("soarRows").innerHTML = soarContainers.slice().sort((x,y)=>y.t-x.t).map(c=>`<tr>
+    <td class="mono">${c.id}</td><td>${esc(c.name)}</td>
+    <td><span class="pill ${c.status==="closed"?"p-done":"p-review"}">${c.status}</span></td>
+    <td><span class="pill ${runPill[c.run]||"p-done"}">${c.run}</span></td>
+    <td>${esc(c.by)}</td><td class="mono">${esc(c.incident||"-")}</td><td class="mono" style="white-space:nowrap">${fmt(c.t)}</td><td class="small">${esc(c.result||"")}</td></tr>`).join("");
+}
 
 /* ---------- simulated impervablock ---------- */
 let busy=false;
 async function runImpervablock({ips, action, dry, meta, failWrite, siteIds}){
   const sites = siteIds ? SITES.filter(s=>siteIds.includes(s.id)) : SITES;
+  const soar = MODE==="soar", soarDown = soar && $("simSoar").checked;
   busy=true; setBusy(true);
-  $("job").hidden=false; $("jobTitle").textContent=`${action==="block"?"Block":"Unblock"} result${dry?" (dry-run)":""}: ${ips.join(", ")}${siteIds?" · site "+siteIds.join(","):""}`;
-  const steps=["Validate IPs","Read blacklist (sites/status)","Merge + write ACL (configure/acl)","Re-read from WAF to verify","Save description to KV store","Refresh WAF list"];
-  $("jobSteps").innerHTML=steps.map((s,i)=>`<li id="st${i}">${s}</li>`).join(""); $("jobRows").innerHTML="";
-  const mark=(i,c)=>{ const el=$("st"+i); if(el) el.className=c; };
+  $("job").hidden=false;
+  $("jobTitle").textContent=`${action==="block"?"Block":"Unblock"} result${dry?" (dry-run)":""}: ${ips.join(", ")} · ${soar?"via SOAR":"direct API"}`;
+  const keys = soar
+    ? [["val","Validate IPs (Splunk)"],["cont","Create SOAR container + imperva_request"],["pb","Playbook imperva_ioc_block starts"],["reval","SOAR re-validates (allow-list, protected)"],
+       ["read","GET policy 2169031"],["put","PUT policy (IP/BLOCK)"],["verify","Re-read policy to verify"],["res","imperva_result → Splunk polls it"],["kv","Save description to KV store"],["ref","Refresh WAF list"]]
+    : [["val","Validate IPs"],["read","GET policy 2169031"],["put","PUT policy (IP/BLOCK)"],["verify","Re-read policy to verify"],["kv","Save description to KV store"],["ref","Refresh WAF list"]];
+  $("jobSteps").innerHTML=keys.map(([k,l])=>`<li id="st_${k}">${l}</li>`).join(""); $("jobRows").innerHTML="";
+  const mark=(k,c)=>{ const el=$("st_"+k); if(el) el.className=c; };
+  const step=async(k,ms)=>{ mark(k,"run"); await sleep(ms); mark(k,"done"); };
   const out=[], t=Date.now();
-  mark(0,"run"); await sleep(350);
+  let cont=null, c=null;
+
+  flow("splunk"); mark("val","run"); await sleep(350);
   const accepted=[];
   for(const ip of ips){ const why = action==="block"?validate(ip):(v4(ip)?null:"invalid IP/CIDR"); if(why) out.push({ip,site:"-",status:"rejected",verified:"-",detail:why}); else accepted.push(ip); }
-  mark(0,"done");
-  if(accepted.length){
-    for(const s of sites){
-      mark(1,"run"); await sleep(380); mark(1,"done");
-      const cur=waf[s.id], changed=[], unchanged=[];
-      accepted.forEach(ip=> (action==="block" ? (cur.has(ip)?unchanged:changed) : (cur.has(ip)?changed:unchanged)).push(ip));
-      if(dry){ changed.forEach(ip=>out.push({ip,site:s.id,status:"would_be_"+(action==="block"?"blocked":"unblocked"),verified:"-",detail:`blacklist size ${cur.size} (no write in dry-run)`})); }
-      else if(changed.length){
-        mark(2,"run"); await sleep(450); const before=cur.size;
-        if(!failWrite) changed.forEach(ip=> action==="block"?cur.add(ip):cur.delete(ip));
-        mark(2,"done"); mark(3,"run"); await sleep(420);
-        changed.forEach(ip=>{
-          const ok = action==="block"?cur.has(ip):!cur.has(ip);
-          out.push(ok?{ip,site:s.id,status:action==="block"?"blocked":"unblocked",verified:action==="block"?"yes":"removed",detail:`blacklist size ${before} → ${cur.size} (re-read from WAF)`}
-                     :{ip,site:s.id,status:"error",verified:"no",detail:"write accepted but NOT confirmed on re-read from WAF"});
-        });
-        mark(3, out.some(r=>r.status==="error")?"fail":"done");
-      }
-      unchanged.forEach(ip=>out.push({ip,site:s.id,status:"no_change",verified:action==="block"?"yes":"-",detail:action==="block"?"already blocked":"not in blacklist"}));
+  mark("val","done");
+
+  if(accepted.length && soar){
+    flow("soar"); cont=soarSeq++;
+    c={id:cont,name:`Splunk Imperva ${action} ${accepted.join(",")}`.slice(0,60),status:"new",run:"running",by:USER,incident:meta.incident,t:Date.now(),result:"waiting…"};
+    soarContainers.push(c); renderSoar();
+    await step("cont",450);
+    if(soarDown){
+      c.run="not started"; renderSoar();
+      mark("pb","run"); await sleep(1400); mark("pb","fail");
+      accepted.forEach(ip=>out.push({ip,site:"-",status:"error",verified:"unknown",detail:`No result from SOAR within 90s (container ${cont}). Is the playbook active for label 'imperva_ioc_block'?`}));
+      c.result="no playbook run (label not active)"; renderSoar();
+      accepted.length=0;
+    } else {
+      await step("pb",500); await step("reval",350);
     }
   }
+  if(accepted.length){
+    for(const s of sites){
+      flow("imperva"); await step("read",380);
+      const cur=waf[s.id], changed=[], unchanged=[];
+      accepted.forEach(ip=> (action==="block" ? (cur.has(ip)?unchanged:changed) : (cur.has(ip)?changed:unchanged)).push(ip));
+      if(dry){ changed.forEach(ip=>out.push({ip,site:s.id,status:"would_be_"+(action==="block"?"blocked":"unblocked"),verified:"-",detail:`blocked IPs in policy: ${cur.size} (no write in dry-run)`})); }
+      else if(changed.length){
+        mark("put","run"); await sleep(450); const before=cur.size;
+        if(!failWrite) changed.forEach(ip=> action==="block"?cur.add(ip):cur.delete(ip));
+        mark("put","done"); mark("verify","run"); await sleep(420);
+        changed.forEach(ip=>{
+          const ok = action==="block"?cur.has(ip):!cur.has(ip);
+          out.push(ok?{ip,site:s.id,status:action==="block"?"blocked":"unblocked",verified:action==="block"?"yes":"removed",detail:`blocked IPs in policy ${before} → ${cur.size} (re-read from WAF)`}
+                     :{ip,site:s.id,status:"error",verified:"no",detail:"write accepted but NOT confirmed on re-read from WAF"});
+        });
+        mark("verify", out.some(r=>r.status==="error")?"fail":"done");
+      }
+      unchanged.forEach(ip=>out.push({ip,site:s.id,status:"no_change",verified:action==="block"?"yes":"-",detail:action==="block"?"already blocked":"not in policy"}));
+    }
+    if(soar){
+      flow("soar"); await step("res",400);
+      const okN=out.filter(r=>r.status==="blocked"||r.status==="unblocked").length;
+      c.status="closed"; c.run="success";
+      c.result=dry?`dry-run: ${out.filter(r=>r.status.startsWith("would")).length} would change`
+              :`${okN} ${action==="block"?"blocked":"unblocked"}${out.some(r=>r.status==="error")?", verification FAILED":", verified"}`;
+      renderSoar();
+    }
+  }
+  flow("splunk");
   if(!dry){
-    mark(4,"run"); await sleep(250);
+    mark("kv","run"); await sleep(250);
     out.forEach(r=>{
       const key=r.site+"_"+r.ip, ex=registry.get(key);
       if(action==="block" && (r.status==="blocked" || (r.status==="no_change" && !(ex&&ex.status==="blocked"))))
         registry.set(key,{site:r.site, ip:r.ip, status:"blocked", at:t, by:USER, actor:meta.actor, incident:meta.incident, comment:meta.comment});
       if(action==="unblock" && r.status==="unblocked" && ex){ ex.status="unblocked"; ex.unblockedAt=t; ex.unblockedBy=USER; ex.unblockReason=meta.comment; }
     });
-    // registry entries with failed write still claim nothing; daily stats
     const td=daily[daily.length-1];
     out.forEach(r=>{
       if(r.status==="blocked"){ td.blocked.add(r.ip); const k=meta.actor+"|"+meta.incident; td.byActor.set(k,(td.byActor.get(k)||new Set()).add(r.ip)); }
       if(r.status==="unblocked") td.unblocked.add(r.ip);
     });
-    mark(4,"done");
-  } else { mark(2,"done"); mark(3,"done"); mark(4,"done"); }
-  [1,2,3].forEach(i=>{ const el=$("st"+i); if(el && !el.className) el.className="done"; });
-  out.forEach(r=>audit.push({user:USER,action,ip:r.ip,site:r.site,status:r.status,verified:r.verified,actor:meta.actor,incident:meta.incident,comment:meta.comment,dry,t}));
+    mark("kv","done");
+  }
+  keys.forEach(([k])=>{ const el=$("st_"+k); if(el && !el.className && k!=="ref") el.className = out.some(r=>r.status==="error"&&r.verified==="unknown") ? "" : "done"; });
+  const backend = soar?"soar":"v2_policy";
+  out.forEach(r=>audit.push({user:USER,action,ip:r.ip,site:r.site,status:r.status,verified:r.verified,actor:meta.actor,incident:meta.incident,comment:meta.comment,dry,t,backend,cont:cont||"-"}));
   $("jobRows").innerHTML=out.map(r=>`<tr><td class="ip">${esc(r.ip)}</td><td class="mono">${r.site}</td><td><span class="pill ${statusPill(r.status)}">${r.status}</span></td>
     <td>${r.verified==="yes"?'<span class="pill p-safe">yes</span>':r.verified==="no"?'<span class="pill p-block">no</span>':esc(r.verified)}</td>
+    <td class="mono">${backend}</td><td class="mono">${cont||"-"}</td>
     <td>${esc(meta.actor)}</td><td class="mono">${esc(meta.incident)}</td><td class="small">${esc(r.detail)}</td></tr>`).join("");
-  mark(5,"run"); await refreshWaf(true); mark(5,"done");
+  mark("ref","run"); await refreshWaf(true); mark("ref","done");
+  flow(null);
   renderAll(); ["kTotal","kVerified","kNew","kToday","k30"].forEach(flash);
   const okN=out.filter(r=>r.status==="blocked"||r.status==="unblocked").length, errN=out.filter(r=>r.status==="error").length;
-  toast(dry?`Dry-run done. ${out.filter(r=>r.status.startsWith("would")).length} change(s) would be made.`
+  toast(soarDown?`SOAR did not answer: container ${cont} has no playbook run. Nothing was changed on the WAF.`
+        : dry?`Dry-run done. ${out.filter(r=>r.status.startsWith("would")).length} change(s) would be made.`
         : errN?`${errN} write(s) were not confirmed on the WAF. See the result table.`
-        : `${okN} change(s) applied and verified on the WAF. List refreshed.`);
+        : `${okN} change(s) applied${soar?" by SOAR (container "+cont+")":""} and verified on the WAF.`);
   busy=false; setBusy(false);
   return out;
 }
 function setBusy(b){ $("wafDot").className="dot"+(b?" busy":""); ["cConfirm","fSubmit","refreshNow","uConfirm"].forEach(id=>$(id).disabled=b); document.querySelectorAll("[data-block],[data-unblock]").forEach(x=>x.disabled=b); }
 
 /* ---------- auto refresh (impervalist) ---------- */
-let nextRefresh=Date.now()+120e3;
+let nextRefresh=Date.now()+300e3;
 async function refreshWaf(quiet){
-  $("wafStatus").textContent="Reading blacklist from WAF…"; $("wafDot").className="dot busy";
-  await sleep(quiet?300:600);
-  wafCheckedAt=Date.now(); nextRefresh=wafCheckedAt+120e3;
-  $("wafStatus").textContent="WAF list read at "+fmt(wafCheckedAt).slice(11);
+  const soar=MODE==="soar";
+  $("wafStatus").textContent= soar?"Asking SOAR to read policy 2169031…":"Reading policy 2169031 from WAF…"; $("wafDot").className="dot busy";
+  if(soar){ listContainers++; }
+  await sleep(quiet?300:(soar?1100:600));
+  wafCheckedAt=Date.now(); nextRefresh=wafCheckedAt+300e3;
+  $("wafStatus").textContent=(soar?"Read via SOAR at ":"WAF list read at ")+fmt(wafCheckedAt).slice(11);
   if(!busy) $("wafDot").className="dot";
-  renderWaf();
+  renderWaf(); renderSoar();
 }
 setInterval(()=>{ const s=Math.max(0,Math.round((nextRefresh-Date.now())/1000)); $("refreshIn").textContent=`Auto refresh in ${Math.floor(s/60)}:${pad(s%60)}`; if(s===0&&!busy) refreshWaf(); },1000);
 $("refreshNow").addEventListener("click",()=>refreshWaf());
@@ -627,7 +742,7 @@ $("attackers").addEventListener("click",e=>{
     ["IP",`<span class="mono">${esc(a.ip)}</span>`],["Suggestion",`<span class="pill ${pillClass[s[0]]}">${s[0]}</span> ${esc(s[1])}`],
     ["VirusTotal",v?`<span class="mono">${v.m}/${v.e}</span> malicious, ${v.s} suspicious, reputation ${v.rep}`:"no data"],
     ["Location",`${esc(a.city)}, ${esc(a.region)}, ${esc(a.country)} [${esc(a.cc)}]`],["ASN",`AS${esc(a.asn)} ${esc(a.owner)}`],
-    ["Sites",SITES.map(s=>`<span class="mono">${s.id}</span> ${esc(s.name)}`).join("<br>")]]
+    ["Policy",SITES.map(s=>`<span class="mono">${s.id}</span> ${esc(s.name)}`).join("<br>")]]
     .map(([k,v])=>`<div class="kv"><span class="label">${k}</span><b>${v}</b></div>`).join("");
   $("cActor").value="Unknown"; $("cIncident").value=""; $("cComment").value=`Imperva attack ${a.count} events, ${a.cat}`; $("cErr").textContent="";
   $("confirm").hidden=false; $("confirm").scrollIntoView({behavior:"smooth",block:"center"}); $("cIncident").focus({preventScroll:true});
@@ -667,7 +782,7 @@ $("waf").addEventListener("click",e=>{
     const ip=u.dataset.unblock, site=SITES.find(s=>s.id===u.dataset.site), r=registry.get(site.id+"_"+ip);
     pendingUnb={ip, site:site.id};
     $("uTitle").textContent=`Confirm unblock of ${ip} on ${site.name}`;
-    $("uInfo").innerHTML=[["IP",`<span class="mono">${esc(ip)}</span>`],["Site",`<span class="mono">${site.id}</span> ${esc(site.name)}`],
+    $("uInfo").innerHTML=[["IP",`<span class="mono">${esc(ip)}</span>`],["Policy",`<span class="mono">${site.id}</span> ${esc(site.name)}`],
       ["Blocked",r&&r.status==="blocked"?`${fmt(r.at)} by ${esc(r.by)}`:"outside Splunk (no record)"],
       ["Block description",r&&r.status==="blocked"?`${esc(r.actor)} · <span class="mono">${esc(r.incident)}</span> · ${esc(r.comment)}`:"-"]]
       .map(([k,v])=>`<div class="kv"><span class="label">${k}</span><b>${v}</b></div>`).join("");
@@ -695,6 +810,18 @@ $("uConfirm").addEventListener("click",async()=>{
   $("job").scrollIntoView({behavior:"smooth",block:"start"});
 });
 
-renderAll();
+function setMode(m){
+  MODE=m;
+  $("modeSoar").setAttribute("aria-pressed", String(m==="soar"));
+  $("modeDirect").setAttribute("aria-pressed", String(m!=="soar"));
+  $("flowTitle").textContent = m==="soar" ? "Backend: via Splunk SOAR (api_mode = soar)" : "Backend: direct API (api_mode = v2_policy)";
+  $("flowNote").textContent = m==="soar" ? "Search Head has no route to Imperva. SOAR calls the Imperva API." : "Search Head calls api.imperva.com itself. SOAR is not used.";
+  $("simSoarWrap").hidden = m!=="soar";
+  flow(null); renderSoar();
+}
+$("modeSoar").addEventListener("click",()=>{ if(!busy){ setMode("soar"); toast("api_mode = soar: requests go through the SOAR playbook."); } });
+$("modeDirect").addEventListener("click",()=>{ if(!busy){ setMode("v2_policy"); toast("api_mode = v2_policy: the Search Head calls Imperva directly."); } });
+
+renderAll(); setMode("soar");
 })();
 </script>
