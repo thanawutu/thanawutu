@@ -31,21 +31,17 @@ import splunk.Intersplunk as si  # noqa: E402
 
 import imperva_lib as il         # noqa: E402
 import vt_lib as vt              # noqa: E402
+from backend import get_backend   # noqa: E402
 from splunk_helpers import (get_logger, is_true, load_conf_stanza,  # noqa: E402
                             load_credential, splunk_home)
 
 VT_REALM = "virustotal"
-IMPERVA_REALM = "imperva_waf"
 
 
 def waf_blacklist(session_key, conf):
-    """Union of the blacklists of all configured sites (best effort)."""
-    api_id, api_key = load_credential(session_key, IMPERVA_REALM)
-    client, target_ids, _mode = il.make_client(conf, api_id, api_key)
-    out = set()
-    for sid in target_ids:
-        out.update(client.get_blacklist(sid))
-    return out
+    """Union of the block lists of all configured targets (best effort, direct or via SOAR)."""
+    rows = get_backend(conf, load_credential, session_key).list_blocked()
+    return {r["ip"] for r in rows if r.get("in_waf") == "yes"}
 
 
 def in_networks(ip, networks):

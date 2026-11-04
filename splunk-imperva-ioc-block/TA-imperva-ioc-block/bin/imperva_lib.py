@@ -414,3 +414,59 @@ def build_registry_doc(existing, key, site_id, ip, action, status, user, now, me
                     "unblock_incident_no": meta.get("incident_no", "")})
         return doc
     return None
+
+
+# --------------------------------------------------------------------------- #
+# High-level operations shared by the Splunk commands (direct mode) and the
+# SOAR playbook (soar mode). They return plain row dicts.
+# --------------------------------------------------------------------------- #
+def run_action(client, targets, ips, action="block", dry_run=False):
+    """Block/unblock already-validated `ips` on every target. Returns rows:
+    {ip, site_id, status, verified_in_waf, detail}"""
+    rows = []
+    ok = "blocked" if action == "block" else "unblocked"
+
+    def row(ip, sid, status, detail, verified="-"):
+        rows.append({"ip": ip, "site_id": sid, "status": status,
+                     "verified_in_waf": verified, "detail": detail})
+
+    for sid in targets:
+        if not ips:
+            break
+        try:
+            res = apply_action(client, sid, ips, action=action, dry_run=dry_run)
+            size = "blacklist size %d -> %d" % (res["blacklist_size_before"], res["blacklist_size_after"])
+            if getattr(client, "last_enabled", True) is False:
+                size += (" | WARNING: policy %s is DISABLED in Imperva - "
+                         "the block has NO effect until it is enabled" % sid)
+            for ip in res["changed"]:
+                if dry_run:
+                    row(ip, sid, "would_be_" + ok, size)
+                else:
+                    row(ip, sid, ok, size + " (re-read from WAF)", "yes" if action == "block" else "removed")
+            for ip in res["not_applied"]:
+                row(ip, sid, "error", "write accepted but NOT confirmed on re-read from WAF", "no")
+            for ip in res["unchanged"]:
+                row(ip, sid, "no_change",
+                    "already blocked" if action == "block" else "not in blacklist",
+                    "yes" if action == "block" else "-")
+        except ImpervaError as e:
+            for ip in ips:
+                row(ip, sid, "error", str(e), "unknown")
+    return rows
+
+
+def list_targets(client, targets):
+    """Read the live block list of every target. Returns rows:
+    {site_id, site_name, ip, in_waf[, detail]}"""
+    rows = []
+    for sid in targets:
+        try:
+            name, ips = client.get_site_acl(sid)
+            for ip in ips:
+                rows.append({"site_id": sid, "site_name": name, "ip": ip, "in_waf": "yes"})
+            if not ips:
+                rows.append({"site_id": sid, "site_name": name, "ip": "-", "in_waf": "empty"})
+        except ImpervaError as e:
+            rows.append({"site_id": sid, "site_name": "-", "ip": "-", "in_waf": "error", "detail": str(e)})
+    return rows

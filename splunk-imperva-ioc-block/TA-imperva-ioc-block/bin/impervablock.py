@@ -35,11 +35,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import splunk.Intersplunk as si  # noqa: E402
 
 import imperva_lib as il         # noqa: E402
+from backend import get_backend   # noqa: E402
+from soar_bridge import SoarError  # noqa: E402
 from splunk_helpers import (get_logger, is_true, kv_get, kv_upsert,  # noqa: E402
                             load_conf_stanza, load_credential, registry_key)
-
-REALM = "imperva_waf"
-
 
 def clean(v):
     return (v or "").replace('"', "'").replace("\n", " ").strip()
@@ -67,7 +66,6 @@ def main():
 
     try:
         conf = load_conf_stanza(session_key, "imperva", "settings")
-        api_id, api_key = load_credential(session_key, REALM)
 
         # ---- collect candidate IPs ------------------------------------------------
         candidates = il.parse_ip_list(opts.get("ip"))
@@ -93,45 +91,33 @@ def main():
         else:  # unblocking is always allowed for anything that parses
             accepted, rejected = il.validate_ips(candidates, (), 0, 0)
 
-        # targets = policy ids (api_mode=v2_policy) or site ids (api_mode=v1_site)
-        client, site_ids, _mode = il.make_client(
-            conf, api_id, api_key, override_ids=opts.get("policy_id") or opts.get("site_id"))
+        # direct (v2_policy / v1_site) or via Splunk SOAR (soar) - same rows either way
+        backend = get_backend(conf, load_credential, session_key,
+                              override_ids=opts.get("policy_id") or opts.get("site_id"))
 
         now = int(time.time())
         out = []
 
-        def row(ip, sid, status, detail, verified="-"):
+        def row(ip, sid, status, detail, verified="-", extra=None):
             r = {"_time": now, "ip": ip, "site_id": sid, "action": action, "status": status,
-                 "verified_in_waf": verified, "detail": detail, "user": user, "dry_run": dry_run}
+                 "verified_in_waf": verified, "detail": detail, "user": user, "dry_run": dry_run,
+                 "backend": backend.mode}
             r.update(meta)
+            r.update(extra or {})
             out.append(r)
 
         for ip, why in rejected:
             row(ip, "-", "rejected", why)
 
-        ok = "blocked" if action == "block" else "unblocked"
-        for sid in site_ids:
-            if not accepted:
-                break
+        if accepted:
             try:
-                res = il.apply_action(client, sid, accepted, action=action, dry_run=dry_run)
-                size = "blacklist size %d -> %d" % (res["blacklist_size_before"], res["blacklist_size_after"])
-                if getattr(client, "last_enabled", True) is False:
-                    size += " | WARNING: policy %s is DISABLED in Imperva - the block has NO effect until it is enabled" % sid
-                for ip in res["changed"]:
-                    if dry_run:
-                        row(ip, sid, "would_be_" + ok, size)
-                    else:
-                        row(ip, sid, ok, size + " (re-read from WAF)", "yes" if action == "block" else "removed")
-                for ip in res["not_applied"]:
-                    row(ip, sid, "error", "write accepted but NOT confirmed on re-read from WAF", "no")
-                for ip in res["unchanged"]:
-                    row(ip, sid, "no_change",
-                        "already blocked" if action == "block" else "not in blacklist",
-                        "yes" if action == "block" else "-")
-            except il.ImpervaError as e:
+                for r in backend.execute(action, accepted, dry_run, meta, user):
+                    extra = {"soar_container": r["soar_container"]} if "soar_container" in r else None
+                    row(r["ip"], r["site_id"], r["status"], r.get("detail", ""),
+                        r.get("verified_in_waf", "-"), extra)
+            except (il.ImpervaError, SoarError) as e:
                 for ip in accepted:
-                    row(ip, sid, "error", str(e), "unknown")
+                    row(ip, "-", "error", str(e), "unknown")
 
         # ---- registry (description / threat actor / incident) in KV store ------------
         if not dry_run:
@@ -153,8 +139,10 @@ def main():
                     r["detail"] += " | WARNING: description not saved to registry: %s" % e
 
         for r in out:
-            log.info('user=%s action=%s ip=%s site_id=%s status=%s verified_in_waf=%s dry_run=%s '
+            log.info('backend=%s soar_container=%s '
+                     'user=%s action=%s ip=%s site_id=%s status=%s verified_in_waf=%s dry_run=%s '
                      'threat_actor="%s" incident_no="%s" comment="%s" reason="%s" detail="%s"',
+                     r.get("backend", "-"), r.get("soar_container", "-"),
                      r["user"], r["action"], r["ip"], r["site_id"], r["status"], r["verified_in_waf"],
                      r["dry_run"], meta["threat_actor"], meta["incident_no"], meta["comment"],
                      meta["reason"], clean(r["detail"]))

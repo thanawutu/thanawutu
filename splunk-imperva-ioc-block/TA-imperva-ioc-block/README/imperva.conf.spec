@@ -1,5 +1,11 @@
 [settings]
-api_mode = v2_policy|v1_site
+api_mode = v2_policy|v1_site|soar
+soar_url = <url>
+soar_label = <string>
+soar_verify_ssl = <boolean>
+soar_proxy = <url>
+soar_wait_seconds = <integer>
+soar_delete_list_containers = <boolean>
 api_v2_base_url = <string>
 policy_ids = <comma separated list of Imperva ACL policy IDs>
 caid = <integer>

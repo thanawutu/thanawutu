@@ -120,6 +120,10 @@ Test it:
 curl -s "https://api.imperva.com/policies/v2/policies/<POLICY_ID>?extended=true" -H "accept: application/json" -H "x-API-Id: <API_ID>" -H "x-API-Key: <API_KEY>"
 ```
 
+## No route from the Search Head to Imperva? Use SOAR mode
+Set `api_mode = soar`. Splunk sends each block, unblock or list request to Splunk SOAR, and the playbook
+`imperva_ioc_block` calls Imperva. The dashboard works the same. Setup is in [soar/README.md](soar/README.md).
+
 ## Safety controls
 | Control | Where |
 |---|---|
@@ -182,7 +186,7 @@ index=imperva sourcetype="incapsula:cef" category!=normal act!=allowed
 
 ## Tests (no Splunk needed)
 ```bash
-python3 -m unittest -v tests/test_imperva_lib.py tests/test_vt_lib.py tests/test_policy_v2.py
+python3 -m unittest -v tests/test_imperva_lib.py tests/test_vt_lib.py tests/test_policy_v2.py tests/test_soar_e2e.py
 ```
 
 ## Notes

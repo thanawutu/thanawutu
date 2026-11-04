@@ -168,7 +168,7 @@
         <search>
           <query>| makeresults
 | impervablock action=block ip=$exec_ip|s$ dry_run=false reason=$exec_reason|s$ threat_actor=$exec_actor|s$ incident_no=$exec_incident|s$ comment=$exec_comment|s$
-| table _time ip site_id status verified_in_waf threat_actor incident_no comment detail user reason</query>
+| table _time ip site_id status verified_in_waf backend soar_container threat_actor incident_no comment detail user reason</query>
           <earliest>-1m</earliest>
           <latest>now</latest>
           <done>
@@ -262,7 +262,7 @@
 | sort 0 - blocked_at]]></query>
     <earliest>-1m</earliest>
     <latest>now</latest>
-    <refresh>120s</refresh>
+    <refresh>300s</refresh>
     <refreshType>delay</refreshType>
   </search>
 
@@ -403,7 +403,7 @@
 
   <row>
     <panel>
-      <title>Blocked IPs on Imperva WAF - read LIVE from the WAF policy (auto refresh 2 min + after every block)</title>
+      <title>Blocked IPs on Imperva WAF - read LIVE from the WAF policy (auto refresh 5 min + after every block/unblock)</title>
       <input type="text" token="waf_q" searchWhenChanged="true">
         <label>🔎 Search blocked list (IP, site, threat actor, incident, comment) - * = all</label>
         <default>*</default>
@@ -526,7 +526,7 @@
       <table>
         <search>
           <query>index=_internal source=*imperva_ioc_block.log
-| table _time user action ip site_id status verified_in_waf threat_actor incident_no comment dry_run reason detail
+| table _time user action ip site_id status verified_in_waf backend soar_container threat_actor incident_no comment dry_run reason detail
 | sort - _time</query>
           <earliest>-7d@d</earliest>
           <latest>now</latest>
