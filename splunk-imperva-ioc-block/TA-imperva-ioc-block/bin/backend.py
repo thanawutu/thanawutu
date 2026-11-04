@@ -24,7 +24,7 @@ class DirectBackend(object):
     def __init__(self, client, targets, mode):
         self.client, self.targets, self.mode = client, targets, mode
 
-    def execute(self, action, ips, dry_run, meta, user):
+    def execute(self, action, ips, dry_run, meta, user, protected=()):
         return il.run_action(self.client, self.targets, ips, action=action, dry_run=dry_run)
 
     def list_blocked(self):
@@ -37,8 +37,8 @@ class SoarBackend(object):
     def __init__(self, bridge, targets):
         self.bridge, self.targets = bridge, targets
 
-    def execute(self, action, ips, dry_run, meta, user):
-        return self.bridge.execute(action, ips, self.targets, dry_run, meta, user)
+    def execute(self, action, ips, dry_run, meta, user, protected=()):
+        return self.bridge.execute(action, ips, self.targets, dry_run, meta, user, protected=protected)
 
     def list_blocked(self):
         return self.bridge.list_blocked(self.targets)

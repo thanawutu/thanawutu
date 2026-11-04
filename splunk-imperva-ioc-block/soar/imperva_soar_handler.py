@@ -100,8 +100,10 @@ def process_request(cef, env=None, client_factory=None, vt_client_factory=None):
             if len(ips) > max_ips:
                 raise ImpervaError("%d IPs requested, SOAR limit is %d" % (len(ips), max_ips))
             if action == "block":
-                accepted, rejected = validate_ips(
-                    ips, parse_ip_list(env.get("IMPERVA_PROTECTED_NETWORKS", "")))
+                # SOAR's own list + Splunk's exclude list (union: Splunk can only add protection)
+                protected = parse_ip_list(env.get("IMPERVA_PROTECTED_NETWORKS", "")) + \
+                    parse_ip_list(cef.get("protected_networks", ""))
+                accepted, rejected = validate_ips(ips, protected)
             else:
                 accepted, rejected = validate_ips(ips, (), 0, 0)
             rows = [{"ip": ip, "site_id": "-", "status": "rejected", "verified_in_waf": "-",

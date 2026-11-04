@@ -63,13 +63,16 @@ def registry_key(site_id, ip):
     return "%s_%s" % (site_id, ip.replace("/", "_").replace(":", "-"))
 
 
-def _kv_path(suffix=""):
-    return "/servicesNS/nobody/%s/storage/collections/data/%s%s" % (APP, REGISTRY, suffix)
+EXCLUDES = "imperva_exclude_list"
 
 
-def kv_get(session_key, key):
+def _kv_path(suffix="", collection=REGISTRY):
+    return "/servicesNS/nobody/%s/storage/collections/data/%s%s" % (APP, collection, suffix)
+
+
+def kv_get(session_key, key, collection=REGISTRY):
     try:
-        resp, content = rest.simpleRequest(_kv_path("/" + key) + "?output_mode=json",
+        resp, content = rest.simpleRequest(_kv_path("/" + key, collection) + "?output_mode=json",
                                            sessionKey=session_key, method="GET")
     except Exception:  # noqa: BLE001
         return None
@@ -78,12 +81,44 @@ def kv_get(session_key, key):
     return json.loads(content)
 
 
-def kv_upsert(session_key, docs):
+def kv_upsert(session_key, docs, collection=REGISTRY):
     """docs: list of dicts each containing _key. Inserts or replaces."""
     if not docs:
         return
-    rest.simpleRequest(_kv_path("/batch_save"), sessionKey=session_key, method="POST",
+    rest.simpleRequest(_kv_path("/batch_save", collection), sessionKey=session_key, method="POST",
                        jsonargs=json.dumps(docs), raiseAllErrors=True)
+
+
+def kv_list(session_key, collection):
+    _resp, content = rest.simpleRequest(_kv_path("", collection) + "?output_mode=json",
+                                        sessionKey=session_key, method="GET", raiseAllErrors=True)
+    return json.loads(content) or []
+
+
+def kv_delete(session_key, key, collection):
+    rest.simpleRequest(_kv_path("/" + key, collection), sessionKey=session_key, method="DELETE",
+                       raiseAllErrors=True)
+
+
+def exclude_networks(session_key, conf):
+    """
+    All IP/CIDRs that must never be shown as attackers nor blocked:
+    [settings] protected_networks (imperva.conf) + the dashboard-managed KV store
+    collection imperva_exclude_list. Returns list of (cidr, description, source).
+    """
+    import imperva_lib as il
+    out, seen = [], set()
+    for c in il.parse_ip_list(conf.get("protected_networks", "")):
+        norm, err = il.normalize_cidr(c)
+        if norm and norm not in seen:
+            seen.add(norm)
+            out.append((norm, "imperva.conf protected_networks", "conf"))
+    for d in kv_list(session_key, EXCLUDES):
+        norm, err = il.normalize_cidr(d.get("cidr", ""))
+        if norm and norm not in seen:
+            seen.add(norm)
+            out.append((norm, d.get("description", ""), "dashboard"))
+    return out
 
 
 # --------------------------------------------------------------------------- #

@@ -150,7 +150,7 @@ class SoarBridge(object):
 
     # ------------------------------------------------------------------ API
     def call(self, action, ips=(), policy_ids=(), dry_run=False, meta=None, requested_by="-",
-             wait_seconds=None):
+             wait_seconds=None, protected=()):
         # `meta` (threat actor / incident no. / comment / reason) is deliberately NOT sent:
         # the WAF has no field for it. It is kept only in Splunk (KV store registry,
         # audit log, dashboard). SOAR receives just what it needs to act.
@@ -163,6 +163,10 @@ class SoarBridge(object):
             "requested_by": requested_by,
             "requested_from": "splunk",
         }
+        if protected:
+            # Splunk's exclude list (CIDRs only, no descriptions). SOAR unions it with its own
+            # IMPERVA_PROTECTED_NETWORKS, so Splunk can only make SOAR stricter, never looser.
+            req["protected_networks"] = ",".join(protected)
         cid = self.submit(req)
         try:
             rows = self.wait_result(cid, req["request_id"], wait_seconds)
@@ -174,8 +178,8 @@ class SoarBridge(object):
             r.setdefault("soar_container", cid)
         return rows
 
-    def execute(self, action, ips, policy_ids, dry_run, meta, requested_by):
-        return self.call(action, ips, policy_ids, dry_run, meta, requested_by)
+    def execute(self, action, ips, policy_ids, dry_run, meta, requested_by, protected=()):
+        return self.call(action, ips, policy_ids, dry_run, meta, requested_by, protected=protected)
 
     def list_blocked(self, policy_ids):
         return self.call("list", (), policy_ids)

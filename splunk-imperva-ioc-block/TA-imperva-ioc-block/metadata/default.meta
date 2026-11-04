@@ -33,3 +33,15 @@ export = system
 [transforms/imperva_block_registry]
 access = read : [ admin, imperva_blocker ], write : [ admin, imperva_blocker ]
 export = system
+
+[commands/impervaexclude]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = system
+
+[collections/imperva_exclude_list]
+access = read : [ admin, imperva_blocker ], write : [ admin, imperva_blocker ]
+export = system
+
+[transforms/imperva_exclude_list]
+access = read : [ admin, imperva_blocker ], write : [ admin, imperva_blocker ]
+export = system
