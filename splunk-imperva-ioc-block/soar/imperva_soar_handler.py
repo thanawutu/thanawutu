@@ -26,6 +26,8 @@ SOAR environment variables of the same names:
                                          and VirusTotal, e.g. http://10.12.30.100:8080
                                          (no global HTTPS_PROXY needed, so other SOAR apps are not affected)
   VT_PROXY                               optional, VirusTotal-only proxy (default: IMPERVA_PROXY)
+  IMPERVA_CHECK_ALL_POLICIES             optional, default true: before blocking, read every policy of
+                                         the account and refuse IPs that an enabled policy ALLOWs
 
 Do not edit soar/imperva_ioc_block_global_code.py by hand - it is generated
 by soar/build_global_code.py from this file + TA-imperva-ioc-block/bin/imperva_lib.py + vt_lib.py
@@ -35,7 +37,8 @@ import json
 import os
 
 from imperva_lib import (DEFAULT_V2_BASE_URL, ImpervaError, ImpervaPolicyClient,  # noqa: F401
-                         list_targets, parse_ip_list, run_action, validate_ips)
+                         allowlist_conflicts, list_targets, parse_ip_list, policy_ip_entries,
+                         run_action, validate_ips)
 from vt_lib import VT_BASE, VTClient, lookup_many  # noqa: F401
 # --- END LIB IMPORT ---
 
@@ -71,7 +74,7 @@ def process_request(cef, env=None, client_factory=None, vt_client_factory=None):
         if action == "vtcheck":  # read-only, no Imperva policy involved
             rows = process_vtcheck(cef, env, vt_client_factory)
             return {"request_id": rid, "status": "ok", "error": "", "result_json": json.dumps(rows)}
-        if action not in ("block", "unblock", "list"):
+        if action not in ("block", "unblock", "list", "policy_entries"):
             raise ImpervaError("unknown action %r" % action)
 
         allowed = parse_ip_list(env.get("IMPERVA_POLICY_IDS", ""))
@@ -90,7 +93,9 @@ def process_request(cef, env=None, client_factory=None, vt_client_factory=None):
         else:
             client = client_factory()
 
-        if action == "list":
+        if action == "policy_entries":   # read-only: IP rules of every policy in the account
+            rows = policy_ip_entries(client.list_policies())
+        elif action == "list":
             rows = list_targets(client, requested)
         else:
             ips = parse_ip_list(cef.get("ips", ""))
@@ -106,10 +111,23 @@ def process_request(cef, env=None, client_factory=None, vt_client_factory=None):
                 accepted, rejected = validate_ips(ips, protected)
             else:
                 accepted, rejected = validate_ips(ips, (), 0, 0)
+            note = ""
+            if action == "block" and accepted and \
+                    str(env.get("IMPERVA_CHECK_ALL_POLICIES", "true")).lower() != "false":
+                # never block an IP that another (enabled) WAF policy explicitly allows
+                try:
+                    conflicts = allowlist_conflicts(policy_ip_entries(client.list_policies()), accepted)
+                except ImpervaError as e:
+                    conflicts, note = {}, " | could not check other WAF policies: %s" % e
+                rejected += list(conflicts.items())
+                accepted = [ip for ip in accepted if ip not in conflicts]
             rows = [{"ip": ip, "site_id": "-", "status": "rejected", "verified_in_waf": "-",
                      "detail": "SOAR: " + why} for ip, why in rejected]
-            rows += run_action(client, requested, accepted, action=action,
-                               dry_run=str(cef.get("dry_run")).lower() == "true")
+            done = run_action(client, requested, accepted, action=action,
+                              dry_run=str(cef.get("dry_run")).lower() == "true")
+            for r in done:
+                r["detail"] = r.get("detail", "") + note
+            rows += done
         return {"request_id": rid, "status": "ok", "error": "", "result_json": json.dumps(rows)}
     except Exception as e:  # noqa: BLE001 - always answer Splunk
         return {"request_id": rid, "status": "error", "error": str(e), "result_json": "[]"}

@@ -42,7 +42,10 @@ class FakeImperva(BaseHTTPRequestHandler):
     def do_GET(self):
         if not self._auth_ok():
             return self._send(401, {"isError": True})
-        pid = self.path.split("?")[0].rsplit("/", 1)[-1]
+        path = self.path.split("?")[0].rstrip("/")
+        if path.endswith("/policies/v2/policies"):      # list every policy of the account
+            return self._send(200, {"value": list(self.store.values()), "isError": False})
+        pid = path.rsplit("/", 1)[-1]
         if pid not in self.store:
             return self._send(404, {"isError": True})
         self._send(200, {"value": self.store[pid], "isError": False})

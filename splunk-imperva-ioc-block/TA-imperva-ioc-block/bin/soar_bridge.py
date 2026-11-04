@@ -172,7 +172,7 @@ class SoarBridge(object):
             rows = self.wait_result(cid, req["request_id"], wait_seconds)
         finally:
             # list / vtcheck are read-only and frequent: do not keep their containers
-            if action in ("list", "vtcheck") and self.delete_list_containers:
+            if action in ("list", "vtcheck", "policy_entries") and self.delete_list_containers:
                 self.delete_container(cid)
         for r in rows:
             r.setdefault("soar_container", cid)
@@ -183,6 +183,10 @@ class SoarBridge(object):
 
     def list_blocked(self, policy_ids):
         return self.call("list", (), policy_ids)
+
+    def policy_entries(self):
+        """IP rules of every WAF policy in the account (read by SOAR)."""
+        return self.call("policy_entries")
 
     def vt_lookup(self, ips, wait_seconds=None):
         """VirusTotal lookups done by SOAR. Returns rows {ip, vt_status, vt_malicious, ...}."""

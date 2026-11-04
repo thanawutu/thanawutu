@@ -30,6 +30,11 @@ class DirectBackend(object):
     def list_blocked(self):
         return il.list_targets(self.client, self.targets)
 
+    def policy_entries(self):
+        if not hasattr(self.client, "list_policies"):
+            raise il.ImpervaError("checking all policies needs api_mode = v2_policy or soar")
+        return il.policy_ip_entries(self.client.list_policies())
+
 
 class SoarBackend(object):
     mode = "soar"
@@ -42,6 +47,12 @@ class SoarBackend(object):
 
     def list_blocked(self):
         return self.bridge.list_blocked(self.targets)
+
+    def policy_entries(self):
+        rows = self.bridge.policy_entries()
+        for r in rows:
+            r.pop("soar_container", None)
+        return rows
 
 
 def _ca_path(value):

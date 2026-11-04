@@ -105,12 +105,15 @@
 | eval location=trim(if(isnotnull(City) AND City!="", City.", ", "").if(isnotnull(Region) AND Region!="", Region.", ", "").coalesce(nullif(Country,""), "-"))." [VT: ".coalesce(vt_country,"-")."]"
 | eval asn=if(isnull(vt_asn) OR vt_asn="-", "-", "AS".vt_asn." ".vt_as_owner)
 | eval vt_score=if(vt_status="ok", vt_malicious."/".vt_engines." malicious, ".vt_suspicious." suspicious", vt_status)
+| impervapolicycheck field=src
+| eval suggestion_reason=case(waf_policy_verdict="ALLOWLISTED", "allowed by a WAF policy: ".waf_policies, waf_policy_verdict="BLOCKED_ELSEWHERE", "already blocked by another WAF policy: ".waf_policies, true(), suggestion_reason)
+| eval suggestion=case(waf_policy_verdict="ALLOWLISTED", "DO_NOT_BLOCK", waf_policy_verdict="BLOCKED_ELSEWHERE" OR waf_policy_verdict="BLOCKED_HERE", "ALREADY_BLOCKED", true(), suggestion)
 | eval Block=case(suggestion="ALREADY_BLOCKED","✔ Blocked", suggestion="DO_NOT_BLOCK","— Do not block", true(),"⛔ Block")
 | eval Dismiss="✖ Not block"
 | eval VirusTotal="🔗 Open"
 | eval prio=case(suggestion="BLOCK",1, suggestion="REVIEW",2, suggestion="MONITOR",3, suggestion="ALREADY_BLOCKED",4, true(),5)
 | sort prio - _sev_rank - last_seen
-| table Block Dismiss src rule_name incident_no severity first_detected last_detected notable_count status suggestion suggestion_reason vt_score location asn VirusTotal msg]]></query>
+| table Block Dismiss src rule_name incident_no severity first_detected last_detected notable_count status suggestion suggestion_reason waf_policies vt_score location asn VirusTotal msg]]></query>
         </search>
         <option name="count">15</option>
         <option name="wrap">true</option>
