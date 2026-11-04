@@ -78,6 +78,17 @@ curl -k -u admin https://localhost:8089/servicesNS/nobody/TA-imperva-ioc-block/s
   average per day, a daily block/unblock column chart, and daily blocks by threat actor / incident.
   The default `_internal` retention is 30 days. For longer history, query the registry (`blocked_at`).
 
+## Search and Unblock on the blocked list
+- **🔎 Search box** above *Blocked IPs on Imperva WAF* matches IP, site, threat actor, incident no., comment or user.
+  `*` (the default) shows everything.
+- **🔓 Unblock** on each row that is on the WAF opens a confirmation panel. It shows when the IP was blocked, by whom,
+  and the block description. Enter an *Unblock reason* and an *Incident / change no.*, then click **🔓 CONFIRM UNBLOCK**.
+  This runs `impervablock action=unblock site_id=<that site>`, so other sites keep the block.
+  The command re-reads the WAF to confirm the IP is gone, marks the registry record `unblocked`
+  (with time, user, reason and change no.), and refreshes the list.
+- **🔍 Search** on each row opens Splunk Search in a new tab with
+  `index=imperva sourcetype="incapsula:cef" src=<ip>` for the last 7 days.
+
 ## Safety controls
 | Control | Where |
 |---|---|

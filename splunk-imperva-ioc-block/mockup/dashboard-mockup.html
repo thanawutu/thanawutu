@@ -142,6 +142,11 @@ textarea{resize:vertical;min-height:38px;font-family:var(--font-data)}
 
 .toast{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:10px 14px;border-radius:6px;font-size:13px;max-width:min(420px,calc(100vw - 32px));box-shadow:0 6px 24px rgba(0,0,0,.25);z-index:20}
 .note{font-size:12px;color:var(--muted)}
+.b-unblock{background:var(--ok-bg);border-color:var(--ok);color:var(--ok);font-weight:600}
+.searchbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+.searchbar input{max-width:340px;flex:1 1 220px}
+.confirm.unb{border-color:var(--ok)}
+.events{font-family:var(--font-data);font-size:12px;background:var(--panel-2);border:1px solid var(--line);border-radius:var(--r);padding:10px;overflow-x:auto;white-space:pre;margin:0}
 </style>
 
 <header class="topbar">
@@ -268,15 +273,46 @@ textarea{resize:vertical;min-height:38px;font-family:var(--font-data)}
       <h2>Blocked IPs on Imperva WAF (read live from the WAF policy)</h2>
       <p><span class="mono">| impervalist</span> joined with the KV store registry · refreshes every 2 min and after every block</p>
     </div>
-    <div class="row-actions" style="margin-bottom:10px">
-      <input type="text" id="wafFilter" placeholder="Filter by IP, actor, incident…" style="max-width:320px">
+    <form class="searchbar" id="wafSearch" role="search">
+      <label class="label" for="wafFilter">Search</label>
+      <input type="text" id="wafFilter" placeholder="IP, site, threat actor, incident, comment">
+      <button type="submit" class="b-primary b-sm">Search</button>
+      <button type="button" class="b-sm b-ghost" id="wafClear">Clear</button>
       <span class="note" id="wafCount"></span>
-    </div>
+    </form>
     <div class="tbl-wrap">
       <table>
-        <thead><tr><th></th><th>Blocked time</th><th>ip</th><th>Site</th><th>Verification</th><th>Threat actor</th><th>Incident no.</th><th>Comment</th><th>Blocked by</th><th>Last checked on WAF</th></tr></thead>
+        <thead><tr><th>Actions</th><th></th><th>Blocked time</th><th>ip</th><th>Site</th><th>Verification</th><th>Threat actor</th><th>Incident no.</th><th>Comment</th><th>Blocked by</th><th>Last checked on WAF</th></tr></thead>
         <tbody id="waf"></tbody>
       </table>
+    </div>
+  </section>
+
+  <!-- Unblock confirm -->
+  <section class="confirm unb" id="unb" hidden aria-live="polite">
+    <div class="panel-head" style="margin:0">
+      <h2 id="uTitle">Confirm unblock</h2>
+      <p>This removes the IP from the blacklist of this site only. Other sites are not touched.</p>
+    </div>
+    <div class="confirm-grid" id="uInfo"></div>
+    <div class="fields">
+      <div class="field"><label for="uReason">Unblock reason *</label><input type="text" id="uReason" value="False positive"></div>
+      <div class="field"><label for="uIncident">Incident / change no. *</label><input type="text" id="uIncident" placeholder="CHG-2026-…"></div>
+    </div>
+    <div class="row-actions">
+      <button class="b-unblock" id="uConfirm" type="button">Confirm unblock on Imperva WAF</button>
+      <button class="b-ghost" id="uCancel" type="button">Cancel</button>
+      <span class="err" id="uErr"></span>
+    </div>
+  </section>
+
+  <!-- Per-IP event search -->
+  <section class="panel" id="ev" hidden>
+    <div class="panel-head"><h2 id="evTitle">Events</h2><button class="b-sm b-ghost" type="button" id="evClose">Close</button></div>
+    <p class="note" style="margin:0 0 8px">In Splunk this opens Search in a new tab with:</p>
+    <pre class="events" id="evSpl"></pre>
+    <div class="tbl-wrap" style="margin-top:10px">
+      <table><thead><tr><th>Category</th><th>WAF act</th><th style="text-align:right">Events (7d)</th><th>Location</th><th>VirusTotal</th></tr></thead><tbody id="evRows"></tbody></table>
     </div>
   </section>
 
@@ -436,7 +472,9 @@ function renderWaf(){
     if(x.inWaf && x.r) ver=`<span class="pill p-safe">Verified on WAF</span>`;
     else if(x.inWaf) ver=`<span class="pill p-monitor">On WAF – blocked outside Splunk</span>`;
     else ver=`<span class="pill p-block">NOT on WAF – removed or failed</span>`;
+    const acts = `<div class="row-actions" style="flex-wrap:nowrap;gap:6px">${x.inWaf?`<button class="b-unblock b-sm" type="button" data-unblock="${esc(x.ip)}" data-site="${x.site.id}">Unblock</button>`:`<span class="note">not on WAF</span>`}<button class="b-sm" type="button" data-events="${esc(x.ip)}" aria-label="Search events for ${esc(x.ip)}">🔍 Search</button></div>`;
     return `<tr class="${isNew?"is-new":""}">
+      <td>${acts}</td>
       <td>${isNew?'<span class="pill p-review">NEW</span>':""}</td>
       <td class="mono" style="white-space:nowrap">${x.r?fmt(x.r.at):"-"}</td>
       <td class="ip">${esc(x.ip)}</td>
@@ -446,7 +484,7 @@ function renderWaf(){
       <td class="mono">${esc(x.r?x.r.incident:"-")}</td>
       <td class="small">${esc(x.r?x.r.comment:"-")}</td>
       <td>${esc(x.r?x.r.by:"-")}</td>
-      <td class="mono note" style="white-space:nowrap">${fmt(wafCheckedAt)}</td></tr>`; }).join("") || `<tr><td colspan="10" class="note">No IPs match this filter.</td></tr>`;
+      <td class="mono note" style="white-space:nowrap">${fmt(wafCheckedAt)}</td></tr>`; }).join("") || `<tr><td colspan="11" class="note">No blocked IPs match “${esc(q)}”.</td></tr>`;
   $("wafCount").textContent = `${rows.length} of ${all.length} rows`;
   // KPIs
   const live=new Set(); SITES.forEach(s=>waf[s.id].forEach(ip=>live.add(ip)));
@@ -501,9 +539,10 @@ function renderAll(){ renderAttackers(); renderWaf(); renderStats(); renderAudit
 
 /* ---------- simulated impervablock ---------- */
 let busy=false;
-async function runImpervablock({ips, action, dry, meta, failWrite}){
+async function runImpervablock({ips, action, dry, meta, failWrite, siteIds}){
+  const sites = siteIds ? SITES.filter(s=>siteIds.includes(s.id)) : SITES;
   busy=true; setBusy(true);
-  $("job").hidden=false; $("jobTitle").textContent=`${action==="block"?"Block":"Unblock"} result${dry?" (dry-run)":""}: ${ips.join(", ")}`;
+  $("job").hidden=false; $("jobTitle").textContent=`${action==="block"?"Block":"Unblock"} result${dry?" (dry-run)":""}: ${ips.join(", ")}${siteIds?" · site "+siteIds.join(","):""}`;
   const steps=["Validate IPs","Read blacklist (sites/status)","Merge + write ACL (configure/acl)","Re-read from WAF to verify","Save description to KV store","Refresh WAF list"];
   $("jobSteps").innerHTML=steps.map((s,i)=>`<li id="st${i}">${s}</li>`).join(""); $("jobRows").innerHTML="";
   const mark=(i,c)=>{ const el=$("st"+i); if(el) el.className=c; };
@@ -513,7 +552,7 @@ async function runImpervablock({ips, action, dry, meta, failWrite}){
   for(const ip of ips){ const why = action==="block"?validate(ip):(v4(ip)?null:"invalid IP/CIDR"); if(why) out.push({ip,site:"-",status:"rejected",verified:"-",detail:why}); else accepted.push(ip); }
   mark(0,"done");
   if(accepted.length){
-    for(const s of SITES){
+    for(const s of sites){
       mark(1,"run"); await sleep(380); mark(1,"done");
       const cur=waf[s.id], changed=[], unchanged=[];
       accepted.forEach(ip=> (action==="block" ? (cur.has(ip)?unchanged:changed) : (cur.has(ip)?changed:unchanged)).push(ip));
@@ -538,7 +577,7 @@ async function runImpervablock({ips, action, dry, meta, failWrite}){
       const key=r.site+"_"+r.ip, ex=registry.get(key);
       if(action==="block" && (r.status==="blocked" || (r.status==="no_change" && !(ex&&ex.status==="blocked"))))
         registry.set(key,{site:r.site, ip:r.ip, status:"blocked", at:t, by:USER, actor:meta.actor, incident:meta.incident, comment:meta.comment});
-      if(action==="unblock" && r.status==="unblocked" && ex){ ex.status="unblocked"; ex.unblockedAt=t; }
+      if(action==="unblock" && r.status==="unblocked" && ex){ ex.status="unblocked"; ex.unblockedAt=t; ex.unblockedBy=USER; ex.unblockReason=meta.comment; }
     });
     // registry entries with failed write still claim nothing; daily stats
     const td=daily[daily.length-1];
@@ -562,7 +601,7 @@ async function runImpervablock({ips, action, dry, meta, failWrite}){
   busy=false; setBusy(false);
   return out;
 }
-function setBusy(b){ $("wafDot").className="dot"+(b?" busy":""); ["cConfirm","fSubmit","refreshNow"].forEach(id=>$(id).disabled=b); document.querySelectorAll("[data-block]").forEach(x=>x.disabled=b); }
+function setBusy(b){ $("wafDot").className="dot"+(b?" busy":""); ["cConfirm","fSubmit","refreshNow","uConfirm"].forEach(id=>$(id).disabled=b); document.querySelectorAll("[data-block],[data-unblock]").forEach(x=>x.disabled=b); }
 
 /* ---------- auto refresh (impervalist) ---------- */
 let nextRefresh=Date.now()+120e3;
@@ -617,7 +656,44 @@ $("bulk").addEventListener("submit",async e=>{
     meta:{actor:$("fActor").value.trim()||"Unknown", incident:$("fIncident").value.trim()||"N/A", comment:$("fComment").value.trim()||"-"}, failWrite:false});
   $("fConfirm").checked=false; $("job").scrollIntoView({behavior:"smooth",block:"start"});
 });
+$("wafSearch").addEventListener("submit",e=>{ e.preventDefault(); renderWaf(); });
 $("wafFilter").addEventListener("input",renderWaf);
+$("wafClear").addEventListener("click",()=>{ $("wafFilter").value=""; renderWaf(); $("wafFilter").focus(); });
+
+let pendingUnb=null;
+$("waf").addEventListener("click",e=>{
+  const u=e.target.closest("[data-unblock]"), ev=e.target.closest("[data-events]");
+  if(u && !busy){
+    const ip=u.dataset.unblock, site=SITES.find(s=>s.id===u.dataset.site), r=registry.get(site.id+"_"+ip);
+    pendingUnb={ip, site:site.id};
+    $("uTitle").textContent=`Confirm unblock of ${ip} on ${site.name}`;
+    $("uInfo").innerHTML=[["IP",`<span class="mono">${esc(ip)}</span>`],["Site",`<span class="mono">${site.id}</span> ${esc(site.name)}`],
+      ["Blocked",r&&r.status==="blocked"?`${fmt(r.at)} by ${esc(r.by)}`:"outside Splunk (no record)"],
+      ["Block description",r&&r.status==="blocked"?`${esc(r.actor)} · <span class="mono">${esc(r.incident)}</span> · ${esc(r.comment)}`:"-"]]
+      .map(([k,v])=>`<div class="kv"><span class="label">${k}</span><b>${v}</b></div>`).join("");
+    $("uReason").value="False positive"; $("uIncident").value=""; $("uErr").textContent="";
+    $("unb").hidden=false; $("unb").scrollIntoView({behavior:"smooth",block:"center"}); $("uIncident").focus({preventScroll:true});
+  }
+  if(ev){
+    const ip=ev.dataset.events, a=attackers.find(x=>x.ip===ip);
+    $("evTitle").textContent=`Imperva events for ${ip} (last 7 days)`;
+    $("evSpl").textContent=`index=imperva sourcetype="incapsula:cef" src=${ip}  earliest=-7d@d`;
+    $("evRows").innerHTML = a
+      ? a.cat.split(", ").map((c,i,arr)=>`<tr><td>${esc(c)}</td><td>${esc(a.act)}</td><td class="num">${Math.round(a.count/arr.length).toLocaleString()}</td><td>${esc(a.city)}, ${esc(a.country)}</td><td class="mono">${a.vt?a.vt.m+"/"+a.vt.e:"-"}</td></tr>`).join("")
+      : `<tr><td colspan="5" class="note">No events for this IP in the last 7 days. It is blocked at the WAF edge, so new requests are dropped before logging as attacks.</td></tr>`;
+    $("ev").hidden=false; $("ev").scrollIntoView({behavior:"smooth",block:"center"});
+  }
+});
+$("evClose").addEventListener("click",()=>$("ev").hidden=true);
+$("uCancel").addEventListener("click",()=>{ $("unb").hidden=true; pendingUnb=null; });
+$("uConfirm").addEventListener("click",async()=>{
+  if(!pendingUnb||busy) return;
+  const reason=$("uReason").value.trim(), inc=$("uIncident").value.trim();
+  if(!reason||!inc){ $("uErr").textContent="Fill in the unblock reason and incident / change no."; return; }
+  const {ip,site}=pendingUnb; $("unb").hidden=true; pendingUnb=null;
+  await runImpervablock({ips:[ip], action:"unblock", dry:false, meta:{actor:"-", incident:inc, comment:reason}, failWrite:false, siteIds:[site]});
+  $("job").scrollIntoView({behavior:"smooth",block:"start"});
+});
 
 renderAll();
 })();

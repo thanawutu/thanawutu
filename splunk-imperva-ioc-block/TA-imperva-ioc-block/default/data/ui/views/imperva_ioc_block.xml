@@ -4,6 +4,8 @@
 
   <init>
     <set token="waf_refresh">init</set>
+    <set token="waf_q">*</set>
+    <set token="form.waf_q">*</set>
   </init>
 
   <!-- Searches only run when the Submit button is pressed -->
@@ -402,19 +404,118 @@
   <row>
     <panel>
       <title>Blocked IPs on Imperva WAF - read LIVE from the WAF policy (auto refresh 2 min + after every block)</title>
+      <input type="text" token="waf_q" searchWhenChanged="true">
+        <label>🔎 Search blocked list (IP, site, threat actor, incident, comment) - * = all</label>
+        <default>*</default>
+      </input>
       <table>
         <search base="waf_list">
-          <query>| table new blocked_time ip site_id site_name verification threat_actor incident_no comment blocked_by reason last_checked_on_waf</query>
+          <query><![CDATA[| eval _q=lower(replace($waf_q|s$, "[*]", ""))
+| eval _hay=lower(ip." ".site_id." ".site_name." ".mvjoin(threat_actor," ")." ".mvjoin(incident_no," ")." ".mvjoin(comment," ")." ".mvjoin(blocked_by," "))
+| where _q="" OR like(_hay, "%"._q."%")
+| eval Unblock=if(in_waf="yes", "🔓 Unblock", "-")
+| eval Events="🔍 Search"
+| table Unblock Events new blocked_time ip site_id site_name verification threat_actor incident_no comment blocked_by reason last_checked_on_waf]]></query>
         </search>
         <option name="count">20</option>
         <option name="wrap">true</option>
-        <option name="drilldown">none</option>
+        <option name="drilldown">cell</option>
         <format type="color" field="verification">
           <colorPalette type="expression">case(like(value,"✔ Verified%"),"#53A051", like(value,"✔%"),"#5A9BD5", like(value,"✖%"),"#DC4E41", true(),"#F8BE34")</colorPalette>
         </format>
         <format type="color" field="new">
           <colorPalette type="map">{"🆕 NEW":#F8BE34}</colorPalette>
         </format>
+        <format type="color" field="Unblock">
+          <colorPalette type="map">{"🔓 Unblock":#53A051}</colorPalette>
+        </format>
+        <drilldown>
+          <!-- Per-row Unblock: opens the confirmation panel below (only for IPs really on the WAF) -->
+          <condition match="&quot;$click.name2$&quot;==&quot;Unblock&quot; AND &quot;$row.Unblock$&quot;==&quot;🔓 Unblock&quot;">
+            <set token="unb_ip">$row.ip$</set>
+            <set token="unb_site">$row.site_id$</set>
+            <set token="unb_site_name">$row.site_name$</set>
+            <set token="unb_desc">$row.threat_actor$ / $row.incident_no$ / $row.comment$</set>
+            <set token="unb_blocked">$row.blocked_time$ by $row.blocked_by$</set>
+            <set token="form.unb_reason">False positive</set>
+            <set token="unb_reason">False positive</set>
+            <set token="form.unb_incident">N/A</set>
+            <set token="unb_incident">N/A</set>
+          </condition>
+          <!-- Per-row Search: open the Imperva events of this IP in Search (new tab) -->
+          <condition field="Events">
+            <link target="_blank">search?q=search%20index%3Dimperva%20sourcetype%3D%22incapsula%3Acef%22%20src%3D$row.ip|u$&amp;earliest=-7d%40d&amp;latest=now</link>
+          </condition>
+          <condition></condition>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel depends="$unb_ip$">
+      <title>Confirm UNBLOCK of $unb_ip$ on site $unb_site$ ($unb_site_name$)</title>
+      <input type="text" token="unb_reason" searchWhenChanged="true">
+        <label>Unblock reason (required)</label>
+        <default>False positive</default>
+      </input>
+      <input type="text" token="unb_incident" searchWhenChanged="true">
+        <label>Incident / change no. (required)</label>
+        <default>N/A</default>
+      </input>
+      <table>
+        <search>
+          <query>| makeresults
+| eval Confirm="🔓 CONFIRM UNBLOCK", Cancel="✖ Cancel", ip=$unb_ip|s$, site_id=$unb_site|s$, site_name=$unb_site_name|s$, blocked=$unb_blocked|s$, block_description=$unb_desc|s$, unblock_reason=$unb_reason|s$, incident_no=$unb_incident|s$
+| table Confirm Cancel ip site_id site_name blocked block_description unblock_reason incident_no</query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">1</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">cell</option>
+        <format type="color" field="Confirm">
+          <colorPalette type="map">{"🔓 CONFIRM UNBLOCK":#53A051}</colorPalette>
+        </format>
+        <drilldown>
+          <condition field="Confirm">
+            <set token="unb_exec_ip">$row.ip$</set>
+            <set token="unb_exec_site">$row.site_id$</set>
+            <set token="unb_exec_reason">$row.unblock_reason$</set>
+            <set token="unb_exec_incident">$row.incident_no$</set>
+            <unset token="unb_ip"></unset>
+          </condition>
+          <condition field="Cancel">
+            <unset token="unb_ip"></unset>
+          </condition>
+          <condition></condition>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel depends="$unb_exec_ip$">
+      <title>Unblock result: $unb_exec_ip$ (site $unb_exec_site$) - click a row to dismiss</title>
+      <table>
+        <search>
+          <query>| makeresults
+| impervablock action=unblock ip=$unb_exec_ip|s$ site_id=$unb_exec_site|s$ dry_run=false reason=$unb_exec_reason|s$ incident_no=$unb_exec_incident|s$
+| table _time ip site_id action status verified_in_waf detail user reason incident_no</query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+          <done>
+            <set token="waf_refresh">$job.sid$</set>
+          </done>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">cell</option>
+        <format type="color" field="status">
+          <colorPalette type="map">{"unblocked":#53A051,"no_change":#708794,"error":#B6488E}</colorPalette>
+        </format>
+        <drilldown>
+          <unset token="unb_exec_ip"></unset>
+        </drilldown>
       </table>
     </panel>
   </row>
