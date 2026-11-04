@@ -191,12 +191,12 @@ textarea{resize:vertical;min-height:38px;font-family:var(--font-data)}
   <section class="panel" aria-label="How a block request travels">
     <div class="panel-head">
       <h2 id="flowTitle">Backend: via Splunk SOAR (api_mode = soar)</h2>
-      <p id="flowNote">Search Head has no route to Imperva. SOAR calls the Imperva API.</p>
+      <p id="flowNote">Search Head has no internet route. SOAR calls the Imperva API and VirusTotal.</p>
     </div>
     <div class="flow">
       <div class="node" id="nSplunk"><span class="label">1 · Splunk Search Head</span><span class="t">Dashboard · impervablock</span><span class="d">validates IPs, writes registry + audit</span></div>
       <div class="arrow" id="a1"><span>POST /rest/container</span><i></i><span>ph-auth-token</span></div>
-      <div class="node" id="nSoar"><span class="label">2 · Splunk SOAR</span><span class="t">Playbook imperva_ioc_block</span><span class="d">re-validates: policy allow-list, protected nets</span></div>
+      <div class="node" id="nSoar"><span class="label">2 · Splunk SOAR</span><span class="t">Playbook imperva_ioc_block</span><span class="d">re-validates: policy allow-list, protected nets · also queries VirusTotal for vtcheck</span></div>
       <div class="arrow" id="a2"><span>GET / PUT</span><i></i><span>x-API-Id / x-API-Key</span></div>
       <div class="node" id="nImperva"><span class="label">3 · Imperva Cloud WAF</span><span class="t">Policy 2169031</span><span class="d">BlockIOCsFromSplunk · ACL · IP/BLOCK</span></div>
     </div>
@@ -815,7 +815,7 @@ function setMode(m){
   $("modeSoar").setAttribute("aria-pressed", String(m==="soar"));
   $("modeDirect").setAttribute("aria-pressed", String(m!=="soar"));
   $("flowTitle").textContent = m==="soar" ? "Backend: via Splunk SOAR (api_mode = soar)" : "Backend: direct API (api_mode = v2_policy)";
-  $("flowNote").textContent = m==="soar" ? "Search Head has no route to Imperva. SOAR calls the Imperva API." : "Search Head calls api.imperva.com itself. SOAR is not used.";
+  $("flowNote").textContent = m==="soar" ? "Search Head has no internet route. SOAR calls the Imperva API and VirusTotal." : "Search Head calls api.imperva.com itself. SOAR is not used.";
   $("simSoarWrap").hidden = m!=="soar";
   flow(null); renderSoar();
 }
