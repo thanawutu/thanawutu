@@ -9,6 +9,9 @@
     <set token="ex_refresh">init</set>
     <set token="ex_desc">-</set>
     <set token="form.ex_desc">-</set>
+    <set token="ioc_range">-24h@h</set>
+    <set token="form.ioc_range">-24h@h</set>
+    <set token="ioc_range_label">Last 24 hours</set>
   </init>
 
   <!-- Searches only run when the Submit button is pressed -->
@@ -53,18 +56,37 @@
 
   <row>
     <panel>
-      <title>Attacking IPs (last 24h, count &gt; 300) + VirusTotal verdict - click "⛔ Block" to block that IP</title>
-      <!-- Base search: Imperva attack events grouped by source IP -->
+      <title>Detected IOCs from ES notables ($ioc_range_label$) + VirusTotal verdict - click "⛔ Block" to block that IP</title>
+      <input type="dropdown" token="ioc_range" searchWhenChanged="true">
+        <label>Notables from</label>
+        <choice value="-24h@h">Last 24 hours</choice>
+        <choice value="-7d@d">Last 7 days</choice>
+        <choice value="-30d@d">Last 30 days</choice>
+        <default>-24h@h</default>
+        <change>
+          <set token="ioc_range_label">$label$</set>
+        </change>
+      </input>
+      <!-- Base search: IOC IPs from ES notable events.
+           Which notables: macro `imperva_ioc_notables` (Settings > Advanced search > Search macros).
+           IP = threat_match_value when the threat match is on an IP field (Threat Activity
+           correlation searches), plus src. Private ranges and the Exclude list are removed. -->
       <search id="attack_ips">
-        <query><![CDATA[index=imperva sourcetype="incapsula:cef" category!=normal act!=allowed
-| lookup geo_attr_countries iso2 AS ccode OUTPUT country
-| fillnull value="-" src act category country clapp eventtype dproc cs2Label http_method dest_ip dest_name dest_port
-| stats values(fileId) AS SessionID values(clapp) AS clapp values(act) AS act values(category) AS category values(country) AS country values(eventtype) AS eventtype values(dproc) AS dproc values(cs2Label) AS cs2Label values(http_method) AS http_method values(dest_ip) AS dest_ip values(dest_name) AS dest_name values(dest_port) AS dest_port count BY src
-| where count > 300
+        <query><![CDATA[`imperva_ioc_notables`
+| eval _tm_ip=if(match(lower(coalesce(threat_match_field, "")), "ip|src|dest|addr"), threat_match_value, null())
+| eval ioc_ip=mvdedup(mvappend(_tm_ip, coalesce(src, src_ip)))
+| mvexpand ioc_ip
+| where isnotnull(ioc_ip) AND match(ioc_ip, "^[0-9A-Fa-f:.]+$") AND (match(ioc_ip, "^\d{1,3}(\.\d{1,3}){3}$") OR match(ioc_ip, ":"))
+| where NOT (cidrmatch("10.0.0.0/8", ioc_ip) OR cidrmatch("172.16.0.0/12", ioc_ip) OR cidrmatch("192.168.0.0/16", ioc_ip) OR cidrmatch("127.0.0.0/8", ioc_ip) OR cidrmatch("169.254.0.0/16", ioc_ip) OR cidrmatch("100.64.0.0/10", ioc_ip) OR cidrmatch("0.0.0.0/8", ioc_ip) OR cidrmatch("224.0.0.0/3", ioc_ip))
+| eval rule=coalesce(rule_name, search_name, source)
+| stats count AS notable_count values(rule) AS rule_name values(urgency) AS urgency values(status_label) AS status values(threat_collection) AS threat_collection values(threat_key) AS threat_key values(dest) AS dest min(_time) AS first_seen max(_time) AS last_seen BY ioc_ip
+| rename ioc_ip AS src
+| eval count=notable_count
 | where NOT ([| impervaexclude | append [| makeresults | eval cidr="255.255.255.255/32"] | eval q="cidrmatch(\"".cidr."\", src)" | stats values(q) AS q | eval search=mvjoin(q, " OR ") | fields search])
 | eval _ex_refresh=$ex_refresh|s$
-| eval msg="Attack_IP=".src.", Attack_Country=".mvjoin(country,", ").", WAF_Action=".mvjoin(act,", ").", Category=".mvjoin(category,", ")]]></query>
-        <earliest>-24h@h</earliest>
+| eval last_seen_time=strftime(last_seen, "%Y-%m-%d %H:%M")
+| eval msg="Notable IOC=".src.", Rules=".mvjoin(rule_name, "; ").", Urgency=".coalesce(mvjoin(urgency, ","), "-").", Threat=".coalesce(mvjoin(threat_collection, ","), "-")]]></query>
+        <earliest>$ioc_range$</earliest>
         <latest>now</latest>
       </search>
       <table>
@@ -72,14 +94,14 @@
           <query><![CDATA[| sort - count | head 50
 | vtcheck field=src count_field=count
 | iplocation src
-| eval location=trim(if(isnotnull(City) AND City!="", City.", ", "").if(isnotnull(Region) AND Region!="", Region.", ", "").coalesce(nullif(Country,""), mvjoin(country,", "), "-"))." [VT: ".coalesce(vt_country,"-")."]"
+| eval location=trim(if(isnotnull(City) AND City!="", City.", ", "").if(isnotnull(Region) AND Region!="", Region.", ", "").coalesce(nullif(Country,""), "-"))." [VT: ".coalesce(vt_country,"-")."]"
 | eval asn=if(isnull(vt_asn) OR vt_asn="-", "-", "AS".vt_asn." ".vt_as_owner)
 | eval vt_score=if(vt_status="ok", vt_malicious."/".vt_engines." malicious, ".vt_suspicious." suspicious", vt_status)
 | eval Block=case(suggestion="ALREADY_BLOCKED","✔ Blocked", suggestion="DO_NOT_BLOCK","— Do not block", true(),"⛔ Block")
 | eval VirusTotal="🔗 Open"
 | eval prio=case(suggestion="BLOCK",1, suggestion="REVIEW",2, suggestion="MONITOR",3, suggestion="ALREADY_BLOCKED",4, true(),5)
 | sort prio - count
-| table Block src suggestion suggestion_reason vt_score vt_reputation location asn vt_network count category act dest_name VirusTotal msg]]></query>
+| table Block src suggestion suggestion_reason vt_score vt_reputation location asn notable_count rule_name urgency status threat_collection last_seen_time VirusTotal msg]]></query>
         </search>
         <option name="count">15</option>
         <option name="wrap">true</option>
@@ -111,7 +133,7 @@
           <condition>
             <!-- Any other cell: fill the manual form (bulk / dry-run / unblock) -->
             <set token="form.ip_list">$row.src$</set>
-            <set token="form.reason">Imperva attack: $row.msg$</set>
+            <set token="form.reason">Notable IOC: $row.msg$</set>
             <unset token="form.confirm"></unset>
           </condition>
         </drilldown>
@@ -198,7 +220,7 @@
 
   <row>
     <panel>
-      <title>Select ALL attacking IPs (click)</title>
+      <title>Select ALL IOC IPs (click)</title>
       <table>
         <search base="attack_ips">
           <query>| where src!="-"
@@ -211,7 +233,7 @@
         <drilldown>
           <!-- Puts every IP in the text box (limited by max_ips_per_action in imperva.conf) -->
           <set token="form.ip_list">$row.ips$</set>
-          <set token="form.reason">Imperva attack IPs count&gt;300 (bulk)</set>
+          <set token="form.reason">Notable IOC IPs (bulk)</set>
           <unset token="form.confirm"></unset>
         </drilldown>
       </table>

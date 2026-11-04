@@ -45,3 +45,6 @@ export = system
 [transforms/imperva_exclude_list]
 access = read : [ admin, imperva_blocker ], write : [ admin, imperva_blocker ]
 export = system
+
+[macros/imperva_ioc_notables]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
