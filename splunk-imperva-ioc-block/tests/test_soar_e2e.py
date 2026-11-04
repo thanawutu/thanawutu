@@ -294,6 +294,38 @@ class TestSoarE2E(unittest.TestCase):
             bad.execute("block", ["8.8.4.4"], ["1777"], False, {}, "a")
 
 
+class TestPlaybookProxy(unittest.TestCase):
+    """IMPERVA_PROXY / VT_PROXY are passed to the clients (no global HTTPS_PROXY needed)."""
+    def test_proxy_env_is_used(self):
+        seen = {}
+
+        class RecImperva(object):
+            def __init__(self, *a, **kw):
+                seen["imperva"] = kw.get("proxy")
+
+            def get_site_acl(self, pid):
+                return "p", []
+
+        class RecVT(object):
+            def __init__(self, *a, **kw):
+                seen["vt"] = kw.get("proxy")
+
+            def lookup_ip(self, ip):
+                return {"vt_status": "ok"}
+
+        old = SOAR_NS["ImpervaPolicyClient"], SOAR_NS["VTClient"]
+        SOAR_NS["ImpervaPolicyClient"], SOAR_NS["VTClient"] = RecImperva, RecVT
+        try:
+            env = {"IMPERVA_API_ID": "1", "IMPERVA_API_KEY": "k", "IMPERVA_POLICY_IDS": "2169031",
+                   "IMPERVA_PROXY": "http://10.12.30.100:8080", "VT_API_KEY": "v"}
+            r1 = SOAR_NS["process_request"]({"request_id": "a", "action": "list"}, env)
+            r2 = SOAR_NS["process_request"]({"request_id": "b", "action": "vtcheck", "ips": "8.8.4.4"}, env)
+        finally:
+            SOAR_NS["ImpervaPolicyClient"], SOAR_NS["VTClient"] = old
+        self.assertEqual((r1["status"], r2["status"]), ("ok", "ok"))
+        self.assertEqual(seen, {"imperva": "http://10.12.30.100:8080", "vt": "http://10.12.30.100:8080"})
+
+
 class TestGeneratedCodeInSync(unittest.TestCase):
     def test_committed_file_matches_build(self):
         path = os.path.join(HERE, "..", "soar", "imperva_ioc_block_global_code.py")

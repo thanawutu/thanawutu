@@ -21,7 +21,9 @@ containers created by the live list are deleted after they are read (`soar_delet
 ## A. Splunk SOAR
 
 1. **Network**
-   - SOAR → `api.imperva.com:443`. If SOAR uses a proxy, set `HTTPS_PROXY` in its environment.
+   - SOAR → `api.imperva.com:443` and `www.virustotal.com:443`. If they go through a proxy, set
+     `IMPERVA_PROXY`. **Do not** set a global `HTTPS_PROXY` just for this: every other SOAR app would then
+     use the proxy too.
    - Search Head → SOAR REST port (443, or 8443 for unprivileged on-prem installs).
 2. **Label**: Administration → Event Settings → Label Settings → add `imperva_ioc_block`.
 3. **Automation user** for Splunk: Administration → User Management → Users → **+ User**, type **Automation**.
@@ -42,6 +44,7 @@ containers created by the live list are deleted after they are read (`soar_delet
    | `VT_API_KEY` | VirusTotal API key (secret). SOAR does the VirusTotal lookups too |
    | `VT_REQUESTS_PER_MINUTE` | `4` for the public API; raise it for a premium key |
    | `VT_MAX_LOOKUPS` | `10` new lookups per request |
+   | `IMPERVA_PROXY` | e.g. `http://10.12.30.100:8080`. A proxy used **only by this playbook** for Imperva and VirusTotal |
 
 5. **Playbook**: Playbooks → **+ Playbook** → Automation.
    1. Name it `imperva_ioc_block`. Set *Operates on* to label `imperva_ioc_block`, and use Python 3.

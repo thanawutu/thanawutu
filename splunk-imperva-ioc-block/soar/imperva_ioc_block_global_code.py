@@ -734,7 +734,10 @@ Settings come from SOAR environment variables
   VT_REQUESTS_PER_MINUTE                 optional, default 4 (public API); raise for premium
   VT_MAX_LOOKUPS                         optional, default 10 per request
   VT_API_BASE                            optional, default https://www.virustotal.com/api/v3
-  HTTPS_PROXY                            optional, honoured automatically
+  IMPERVA_PROXY                          optional, proxy used ONLY by this playbook for Imperva
+                                         and VirusTotal, e.g. http://10.12.30.100:8080
+                                         (no global HTTPS_PROXY needed, so other SOAR apps are not affected)
+  VT_PROXY                               optional, VirusTotal-only proxy (default: IMPERVA_PROXY)
 
 Do not edit soar/imperva_ioc_block_global_code.py by hand - it is generated
 by soar/build_global_code.py from this file + TA-imperva-ioc-block/bin/imperva_lib.py + vt_lib.py
@@ -752,7 +755,8 @@ def process_vtcheck(cef, env, vt_client_factory=None):
         key = env.get("VT_API_KEY")
         if not key:
             raise ImpervaError("VT_API_KEY is not set on SOAR")
-        client = VTClient(key, base_url=env.get("VT_API_BASE") or VT_BASE)
+        client = VTClient(key, base_url=env.get("VT_API_BASE") or VT_BASE,
+                          proxy=env.get("VT_PROXY") or env.get("IMPERVA_PROXY") or None)
     else:
         client = vt_client_factory()
     ips = parse_ip_list(cef.get("ips", ""))
@@ -787,7 +791,8 @@ def process_request(cef, env=None, client_factory=None, vt_client_factory=None):
         if client_factory is None:
             client = ImpervaPolicyClient(env.get("IMPERVA_API_ID"), env.get("IMPERVA_API_KEY"),
                                          base_url=env.get("IMPERVA_API_BASE") or DEFAULT_V2_BASE_URL,
-                                         caid=env.get("IMPERVA_CAID") or None)
+                                         caid=env.get("IMPERVA_CAID") or None,
+                                         proxy=env.get("IMPERVA_PROXY") or None)
         else:
             client = client_factory()
 
