@@ -51,3 +51,36 @@ def load_credential(session_key, realm):
             return c.get("username"), c.get("clear_password")
     raise RuntimeError("No credential with realm '%s' in storage/passwords "
                        "(user needs list_storage_passwords capability)" % realm)
+
+
+# --------------------------------------------------------------------------- #
+# KV store registry of blocks (description / threat actor / incident no.)
+# --------------------------------------------------------------------------- #
+REGISTRY = "imperva_block_registry"
+
+
+def registry_key(site_id, ip):
+    return "%s_%s" % (site_id, ip.replace("/", "_").replace(":", "-"))
+
+
+def _kv_path(suffix=""):
+    return "/servicesNS/nobody/%s/storage/collections/data/%s%s" % (APP, REGISTRY, suffix)
+
+
+def kv_get(session_key, key):
+    try:
+        resp, content = rest.simpleRequest(_kv_path("/" + key) + "?output_mode=json",
+                                           sessionKey=session_key, method="GET")
+    except Exception:  # noqa: BLE001
+        return None
+    if int(resp.status) != 200:
+        return None
+    return json.loads(content)
+
+
+def kv_upsert(session_key, docs):
+    """docs: list of dicts each containing _key. Inserts or replaces."""
+    if not docs:
+        return
+    rest.simpleRequest(_kv_path("/batch_save"), sessionKey=session_key, method="POST",
+                       jsonargs=json.dumps(docs), raiseAllErrors=True)

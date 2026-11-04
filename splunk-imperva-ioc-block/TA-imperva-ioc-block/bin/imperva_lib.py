@@ -156,13 +156,19 @@ class ImpervaClient(object):
                 js.get("res"), js.get("res_message") or js.get("debug_info")))
         return js
 
-    def get_blacklist(self, site_id):
+    def get_site_acl(self, site_id):
+        """Return (site_domain, [blacklisted ips]) read live from Imperva."""
         js = self._post("/api/prov/v1/sites/status", {"site_id": site_id, "tests": ""})
         rules = (js.get("security") or {}).get("acls", {}).get("rules", []) or []
+        ips = []
         for r in rules:
             if r.get("id") == BLACKLIST_RULE_ID:
-                return list(r.get("ips") or [])
-        return []
+                ips = list(r.get("ips") or [])
+                break
+        return js.get("domain") or "-", ips
+
+    def get_blacklist(self, site_id):
+        return self.get_site_acl(site_id)[1]
 
     def set_blacklist(self, site_id, ips):
         return self._post("/api/prov/v1/sites/configure/acl", {
@@ -172,10 +178,15 @@ class ImpervaClient(object):
         })
 
 
-def apply_action(client, site_id, ips, action="block", dry_run=False):
+def apply_action(client, site_id, ips, action="block", dry_run=False, verify=True):
     """
-    Read current blacklist of site_id, merge, and write it back.
-    Returns a dict summarising what happened.
+    Read current blacklist of site_id, merge, write it back and (optionally)
+    re-read it to VERIFY the change really landed on the WAF.
+
+    Returns dict:
+      changed      IPs added (block) / removed (unblock) and verified
+      unchanged    already blocked (block) / not in list (unblock)
+      not_applied  written but NOT found as expected on re-read (verification failed)
     """
     current = client.get_blacklist(site_id)
     if action == "block":
@@ -185,12 +196,54 @@ def apply_action(client, site_id, ips, action="block", dry_run=False):
     else:
         raise ImpervaError("unknown action %r (use block|unblock)" % action)
 
+    not_applied = []
+    after = current
     if changed and not dry_run:
         client.set_blacklist(site_id, new_list)
+        after = new_list
+        if verify:
+            after = client.get_blacklist(site_id)
+            live = set(after)
+            if action == "block":
+                not_applied = [ip for ip in changed if ip not in live]
+            else:
+                not_applied = [ip for ip in changed if ip in live]
+            changed = [ip for ip in changed if ip not in not_applied]
     return {
         "site_id": site_id,
         "changed": changed,
         "unchanged": unchanged,
+        "not_applied": not_applied,
         "blacklist_size_before": len(current),
-        "blacklist_size_after": len(new_list) if not dry_run else len(current),
+        "blacklist_size_after": len(after) if not dry_run else len(current),
     }
+
+
+def build_registry_doc(existing, key, site_id, ip, action, status, user, now, meta):
+    """
+    Decide what to store in the KV store registry for one (site, ip) result.
+    meta: dict(threat_actor, incident_no, comment, reason)
+    Returns the full document to save, or None (nothing to store).
+    """
+    meta = dict((k, (v or "").strip()) for k, v in (meta or {}).items())
+    if action == "block" and status == "blocked":
+        doc = {"_key": key, "site_id": site_id, "ip": ip, "status": "blocked",
+               "blocked_at": now, "blocked_by": user, "source": "splunk"}
+        doc.update(meta)
+        return doc
+    if action == "block" and status == "no_change":
+        if existing and existing.get("status") == "blocked":
+            return None  # keep the original description / time
+        doc = {"_key": key, "site_id": site_id, "ip": ip, "status": "blocked",
+               "blocked_at": now, "blocked_by": user,
+               "source": "already in WAF - registered from splunk"}
+        doc.update(meta)
+        return doc
+    if action == "unblock" and status == "unblocked":
+        doc = dict(existing or {"_key": key, "site_id": site_id, "ip": ip})
+        doc.pop("_user", None)
+        doc.update({"_key": key, "status": "unblocked", "unblocked_at": now,
+                    "unblocked_by": user, "unblock_reason": meta.get("reason", ""),
+                    "unblock_incident_no": meta.get("incident_no", "")})
+        return doc
+    return None

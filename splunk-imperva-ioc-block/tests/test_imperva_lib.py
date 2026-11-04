@@ -77,5 +77,52 @@ class TestApply(unittest.TestCase):
         self.assertEqual(res["unchanged"], ["9.9.9.9"])
 
 
+class LyingClient(FakeClient):
+    """WAF accepts the write but the IP does not show up on re-read."""
+    def set_blacklist(self, site_id, ips):
+        self.writes.append((site_id, list(ips)))
+
+
+class TestVerify(unittest.TestCase):
+    def test_verified(self):
+        c = FakeClient([])
+        res = il.apply_action(c, "1", ["8.8.8.8"], "block")
+        self.assertEqual(res["changed"], ["8.8.8.8"])
+        self.assertEqual(res["not_applied"], [])
+
+    def test_not_confirmed_on_reread(self):
+        c = LyingClient([])
+        res = il.apply_action(c, "1", ["8.8.8.8"], "block")
+        self.assertEqual(res["changed"], [])
+        self.assertEqual(res["not_applied"], ["8.8.8.8"])
+
+
+class TestRegistry(unittest.TestCase):
+    META = {"threat_actor": "APT-X", "incident_no": "INC-1", "comment": "c", "reason": "r"}
+
+    def test_block_creates_record(self):
+        d = il.build_registry_doc(None, "k", "1", "8.8.8.8", "block", "blocked", "bob", 100, self.META)
+        self.assertEqual((d["status"], d["blocked_at"], d["threat_actor"], d["incident_no"]),
+                         ("blocked", 100, "APT-X", "INC-1"))
+
+    def test_no_change_keeps_original(self):
+        old = {"_key": "k", "status": "blocked", "blocked_at": 50}
+        self.assertIsNone(il.build_registry_doc(old, "k", "1", "8.8.8.8", "block", "no_change", "bob", 100, self.META))
+
+    def test_no_change_registers_outside_block(self):
+        d = il.build_registry_doc(None, "k", "1", "8.8.8.8", "block", "no_change", "bob", 100, self.META)
+        self.assertIn("already in WAF", d["source"])
+
+    def test_unblock_keeps_history(self):
+        old = {"_key": "k", "status": "blocked", "blocked_at": 50, "threat_actor": "APT-X", "_user": "nobody"}
+        d = il.build_registry_doc(old, "k", "1", "8.8.8.8", "unblock", "unblocked", "amy", 100, {"reason": "FP"})
+        self.assertEqual((d["status"], d["blocked_at"], d["threat_actor"], d["unblocked_by"]),
+                         ("unblocked", 50, "APT-X", "amy"))
+        self.assertNotIn("_user", d)
+
+    def test_errors_not_stored(self):
+        self.assertIsNone(il.build_registry_doc(None, "k", "1", "8.8.8.8", "block", "error", "b", 1, {}))
+
+
 if __name__ == "__main__":
     unittest.main()

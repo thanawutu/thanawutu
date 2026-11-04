@@ -19,3 +19,14 @@ access = read : [ admin, imperva_blocker ], write : [ admin ]
 [commands/vtcheck]
 access = read : [ admin, imperva_blocker ], write : [ admin ]
 export = system
+
+[commands/impervalist]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = system
+
+# KV store registry: analysts must be able to write descriptions
+[collections/imperva_block_registry]
+access = read : [ admin, imperva_blocker ], write : [ admin, imperva_blocker ]
+
+[transforms/imperva_block_registry]
+access = read : [ admin, imperva_blocker ], write : [ admin, imperva_blocker ]

@@ -54,6 +54,30 @@ Store the VirusTotal key:
 curl -k -u admin https://localhost:8089/servicesNS/nobody/TA-imperva-ioc-block/storage/passwords -d name=vt -d password=<VT_API_KEY> -d realm=virustotal
 ```
 
+## Live blocked-IP list, verification and description registry
+- **`| impervalist`** is a generating command that reads the *Blacklisted IPs* ACL **live from Imperva**
+  (`sites/status`) for every configured site, with no Splunk data in between.
+- **Verification on write:** after each block or unblock, `impervablock` re-reads the blacklist from the WAF.
+  The `verified_in_waf` column is `yes` only when the IP is really there. If the write was
+  accepted but the IP is missing, the status becomes `error`.
+- **Description per block:** *Threat actor name*, *Incident no.* and *Comment* go into the bulk form,
+  or into the confirmation panel for the per-IP button. They are stored with date/time and user in the KV store
+  collection `imperva_block_registry` (`_key = <site_id>_<ip>`) and written to the audit log.
+- **Blocked IPs on Imperva WAF** table: the live WAF list joined with the registry.
+
+  | verification | meaning |
+  |---|---|
+  | ✔ Verified on WAF | blocked from Splunk and present on the WAF |
+  | ✔ On WAF (blocked outside Splunk) | present on the WAF, no description in Splunk |
+  | ✖ NOT on WAF | registry says blocked but the WAF no longer has it (removed manually, or the write failed) |
+  | ⚠ Unknown | the WAF API could not be read |
+
+  The list refreshes **every 2 minutes** and **right after every block** (token `$waf_refresh$`).
+  Blocks from the last hour are marked `🆕 NEW`.
+- **Statistics (last 30 days, from the audit log):** total unique IPs blocked, IPs blocked today with trend,
+  average per day, a daily block/unblock column chart, and daily blocks by threat actor / incident.
+  The default `_internal` retention is 30 days. For longer history, query the registry (`blocked_at`).
+
 ## Safety controls
 | Control | Where |
 |---|---|
@@ -106,7 +130,9 @@ confirmation panel, then click `✅ CONFIRM BLOCK`. That blocks the IP for real 
 
 You can also run it straight from SPL:
 ```
-| makeresults | impervablock action=block ip="8.8.4.4" dry_run=true reason="TI-123"
+| makeresults | impervablock action=block ip="8.8.4.4" dry_run=true reason="TI-123" threat_actor="APT-X" incident_no="INC-2026-0042" comment="C2 beacon"
+| impervalist
+| inputlookup imperva_block_registry
 index=imperva sourcetype="incapsula:cef" category!=normal act!=allowed
 | stats count BY src | where count > 300
 | impervablock action=block field=src dry_run=true reason="Imperva attack count>300"

@@ -13,24 +13,36 @@ Options:
     field    take IPs from this field of input rows (default: none)
     site_id  override site id(s) from imperva.conf (comma separated)
     dry_run  true -> read & compute only, do not write to Imperva
-    reason   free text, written to the audit log
+    reason        free text, written to the audit log and registry
+    threat_actor  threat actor name                 (stored in KV store registry)
+    incident_no   incident / ticket number          (stored in KV store registry)
+    comment       any other comment                 (stored in KV store registry)
+
+After writing, the blacklist is re-read from Imperva to VERIFY the change
+(column verified_in_waf). Successful blocks are recorded in the KV store
+collection imperva_block_registry with date/time, user and description.
 
 Credentials are read from Splunk storage/passwords (realm = imperva_waf,
 username = <Imperva API ID>, password = <Imperva API Key>).
 """
 
-import datetime
 import os
 import sys
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import splunk.Intersplunk as si  # noqa: E402
 
 import imperva_lib as il         # noqa: E402
-from splunk_helpers import get_logger, is_true, load_conf_stanza, load_credential  # noqa: E402
+from splunk_helpers import (get_logger, is_true, kv_get, kv_upsert,  # noqa: E402
+                            load_conf_stanza, load_credential, registry_key)
 
 REALM = "imperva_waf"
+
+
+def clean(v):
+    return (v or "").replace('"', "'").replace("\n", " ").strip()
 
 
 def main():
@@ -42,7 +54,12 @@ def main():
 
     action = opts.get("action", "block").lower()
     dry_run = is_true(opts.get("dry_run", "false"))
-    reason = opts.get("reason", "")
+    meta = {
+        "reason": clean(opts.get("reason")),
+        "threat_actor": clean(opts.get("threat_actor")),
+        "incident_no": clean(opts.get("incident_no")),
+        "comment": clean(opts.get("comment")),
+    }
 
     if not session_key:
         si.generateErrorResults("No session key - set passauth = true in commands.conf")
@@ -87,40 +104,65 @@ def main():
             proxy=conf.get("proxy") or None,
             verify_ssl=is_true(conf.get("verify_ssl", "true")))
 
-        now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        now = int(time.time())
         out = []
-        for ip, why in rejected:
-            out.append({"_time": now, "ip": ip, "site_id": "-", "action": action,
-                        "status": "rejected", "detail": why, "user": user,
-                        "dry_run": dry_run, "reason": reason})
 
+        def row(ip, sid, status, detail, verified="-"):
+            r = {"_time": now, "ip": ip, "site_id": sid, "action": action, "status": status,
+                 "verified_in_waf": verified, "detail": detail, "user": user, "dry_run": dry_run}
+            r.update(meta)
+            out.append(r)
+
+        for ip, why in rejected:
+            row(ip, "-", "rejected", why)
+
+        ok = "blocked" if action == "block" else "unblocked"
         for sid in site_ids:
             if not accepted:
                 break
             try:
                 res = il.apply_action(client, sid, accepted, action=action, dry_run=dry_run)
-                ok = "blocked" if action == "block" else "unblocked"
+                size = "blacklist size %d -> %d" % (res["blacklist_size_before"], res["blacklist_size_after"])
                 for ip in res["changed"]:
-                    out.append({"_time": now, "ip": ip, "site_id": sid, "action": action,
-                                "status": ("would_be_" + ok) if dry_run else ok,
-                                "detail": "blacklist size %d -> %d" % (
-                                    res["blacklist_size_before"], res["blacklist_size_after"]),
-                                "user": user, "dry_run": dry_run, "reason": reason})
+                    if dry_run:
+                        row(ip, sid, "would_be_" + ok, size)
+                    else:
+                        row(ip, sid, ok, size + " (re-read from WAF)", "yes" if action == "block" else "removed")
+                for ip in res["not_applied"]:
+                    row(ip, sid, "error", "write accepted but NOT confirmed on re-read from WAF", "no")
                 for ip in res["unchanged"]:
-                    out.append({"_time": now, "ip": ip, "site_id": sid, "action": action,
-                                "status": "no_change",
-                                "detail": "already blocked" if action == "block" else "not in blacklist",
-                                "user": user, "dry_run": dry_run, "reason": reason})
+                    row(ip, sid, "no_change",
+                        "already blocked" if action == "block" else "not in blacklist",
+                        "yes" if action == "block" else "-")
             except il.ImpervaError as e:
                 for ip in accepted:
-                    out.append({"_time": now, "ip": ip, "site_id": sid, "action": action,
-                                "status": "error", "detail": str(e), "user": user,
-                                "dry_run": dry_run, "reason": reason})
+                    row(ip, sid, "error", str(e), "unknown")
 
-        for row in out:
-            log.info("user=%s action=%s ip=%s site_id=%s status=%s dry_run=%s reason=\"%s\" detail=\"%s\"",
-                     row["user"], row["action"], row["ip"], row["site_id"], row["status"],
-                     row["dry_run"], reason.replace('"', "'"), row["detail"].replace('"', "'"))
+        # ---- registry (description / threat actor / incident) in KV store ------------
+        if not dry_run:
+            docs = []
+            for r in out:
+                if r["status"] not in ("blocked", "unblocked", "no_change"):
+                    continue
+                key = registry_key(r["site_id"], r["ip"])
+                existing = kv_get(session_key, key) if r["status"] != "blocked" else None
+                doc = il.build_registry_doc(existing, key, r["site_id"], r["ip"], action,
+                                            r["status"], user, now, meta)
+                if doc:
+                    docs.append(doc)
+            try:
+                kv_upsert(session_key, docs)
+            except Exception as e:  # noqa: BLE001 - the WAF change already happened
+                log.error("registry write failed: %s", e)
+                for r in out:
+                    r["detail"] += " | WARNING: description not saved to registry: %s" % e
+
+        for r in out:
+            log.info('user=%s action=%s ip=%s site_id=%s status=%s verified_in_waf=%s dry_run=%s '
+                     'threat_actor="%s" incident_no="%s" comment="%s" reason="%s" detail="%s"',
+                     r["user"], r["action"], r["ip"], r["site_id"], r["status"], r["verified_in_waf"],
+                     r["dry_run"], meta["threat_actor"], meta["incident_no"], meta["comment"],
+                     meta["reason"], clean(r["detail"]))
         si.outputResults(out)
 
     except Exception as e:  # noqa: BLE001 - surface any failure to the dashboard
