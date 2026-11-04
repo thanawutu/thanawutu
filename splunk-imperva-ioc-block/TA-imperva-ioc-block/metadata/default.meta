@@ -51,3 +51,15 @@ access = read : [ admin, imperva_blocker ], write : [ admin ]
 
 [macros/imperva_ioc_fields]
 access = read : [ admin, imperva_blocker ], write : [ admin ]
+
+[commands/impervadismiss]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = system
+
+[collections/imperva_ioc_dismissed]
+access = read : [ admin, imperva_blocker ], write : [ admin, imperva_blocker ]
+export = system
+
+[transforms/imperva_ioc_dismissed]
+access = read : [ admin, imperva_blocker ], write : [ admin, imperva_blocker ]
+export = system

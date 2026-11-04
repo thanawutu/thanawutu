@@ -12,6 +12,12 @@
     <set token="ioc_range">-24h@h</set>
     <set token="form.ioc_range">-24h@h</set>
     <set token="ioc_range_label">Last 24 hours</set>
+    <set token="dis_reason">Reviewed - not blocking</set>
+    <set token="form.dis_reason">Reviewed - not blocking</set>
+    <set token="bulk_actor">Unknown</set>
+    <set token="form.bulk_actor">Unknown</set>
+    <set token="bulk_comment">Bulk block from detected IOCs</set>
+    <set token="form.bulk_comment">Bulk block from detected IOCs</set>
   </init>
 
   <!-- Searches only run when the Submit button is pressed -->
@@ -85,6 +91,8 @@
 | eval count=notable_count
 | where NOT ([| impervaexclude | append [| makeresults | eval cidr="255.255.255.255/32"] | eval q="cidrmatch(\"".cidr."\", src)" | stats values(q) AS q | eval search=mvjoin(q, " OR ") | fields search])
 | eval _ex_refresh=$ex_refresh|s$
+| lookup imperva_ioc_dismissed ip AS src OUTPUT dismissed_at
+| where isnull(dismissed_at) OR last_seen > tonumber(dismissed_at)
 | eval severity=case(_sev_rank=5,"critical", _sev_rank=4,"high", _sev_rank=3,"medium", _sev_rank=2,"low", _sev_rank=1,"informational", true(),"-")
 | eval first_detected=strftime(first_seen, "%Y-%m-%d %H:%M"), last_detected=strftime(last_seen, "%Y-%m-%d %H:%M")
 | eval rule_name=mvjoin(rule_name, "; "), incident_no=coalesce(mvjoin(incident_no, ", "), "-"), status=coalesce(mvjoin(status, ", "), "-")
@@ -101,10 +109,11 @@
 | eval asn=if(isnull(vt_asn) OR vt_asn="-", "-", "AS".vt_asn." ".vt_as_owner)
 | eval vt_score=if(vt_status="ok", vt_malicious."/".vt_engines." malicious, ".vt_suspicious." suspicious", vt_status)
 | eval Block=case(suggestion="ALREADY_BLOCKED","✔ Blocked", suggestion="DO_NOT_BLOCK","— Do not block", true(),"⛔ Block")
+| eval Dismiss="✖ Not block"
 | eval VirusTotal="🔗 Open"
 | eval prio=case(suggestion="BLOCK",1, suggestion="REVIEW",2, suggestion="MONITOR",3, suggestion="ALREADY_BLOCKED",4, true(),5)
 | sort prio - _sev_rank - last_seen
-| table Block src rule_name incident_no severity first_detected last_detected notable_count status suggestion suggestion_reason vt_score location asn VirusTotal msg]]></query>
+| table Block Dismiss src rule_name incident_no severity first_detected last_detected notable_count status suggestion suggestion_reason vt_score location asn VirusTotal msg]]></query>
         </search>
         <option name="count">15</option>
         <option name="wrap">true</option>
@@ -118,8 +127,19 @@
         <format type="color" field="Block">
           <colorPalette type="map">{"⛔ Block":#DC4E41,"✔ Blocked":#708794,"— Do not block":#53A051}</colorPalette>
         </format>
+        <format type="color" field="Dismiss">
+          <colorPalette type="map">{"✖ Not block":#708794}</colorPalette>
+        </format>
         <drilldown>
           <!-- Per-row button: opens the confirmation panel below -->
+          <condition field="Dismiss">
+            <!-- "Not block": confirm, then hide the IP until it is detected again -->
+            <set token="dis_ip">$row.src$</set>
+            <set token="dis_incident">$row.incident_no$</set>
+            <set token="dis_rule">$row.rule_name$</set>
+            <set token="form.dis_reason">Reviewed - not blocking</set>
+            <set token="dis_reason">Reviewed - not blocking</set>
+          </condition>
           <condition field="Block">
             <set token="pending_ip">$row.src$</set>
             <set token="pending_sug">$row.suggestion$ - $row.suggestion_reason$</set>
@@ -142,6 +162,183 @@
             <set token="form.reason">Notable IOC: $row.msg$</set>
             <unset token="form.confirm"></unset>
           </condition>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel depends="$dis_ip$">
+      <title>Not block $dis_ip$ - it disappears from the table until it is detected again</title>
+      <input type="text" token="dis_reason" searchWhenChanged="true">
+        <label>Reason (required)</label>
+        <default>Reviewed - not blocking</default>
+      </input>
+      <table>
+        <search>
+          <query>| makeresults
+| eval Confirm="✖ CONFIRM NOT BLOCK", Cancel="↩ Cancel", ip=$dis_ip|s$, incident_no=$dis_incident|s$, rule_name=$dis_rule|s$, reason=$dis_reason|s$
+| table Confirm Cancel ip incident_no rule_name reason</query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">1</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">cell</option>
+        <format type="color" field="Confirm">
+          <colorPalette type="map">{"✖ CONFIRM NOT BLOCK":#708794}</colorPalette>
+        </format>
+        <drilldown>
+          <condition field="Confirm">
+            <set token="dis_exec_ip">$row.ip$</set>
+            <set token="dis_exec_reason">$row.reason$</set>
+            <set token="dis_exec_incident">$row.incident_no$</set>
+            <unset token="dis_ip"></unset>
+          </condition>
+          <condition field="Cancel">
+            <unset token="dis_ip"></unset>
+          </condition>
+          <condition></condition>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel depends="$dis_exec_ip$">
+      <title>Not block result: $dis_exec_ip$ (click to dismiss)</title>
+      <table>
+        <search>
+          <query>| impervadismiss action=add ip=$dis_exec_ip|s$ reason=$dis_exec_reason|s$ incident_no=$dis_exec_incident|s$
+| table _time ip status detail reason incident_no user</query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+          <done>
+            <set token="ex_refresh">$job.sid$</set>
+          </done>
+        </search>
+        <option name="count">1</option>
+        <option name="drilldown">cell</option>
+        <drilldown>
+          <unset token="dis_exec_ip"></unset>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <!-- ================= Block many IPs at once: pick IPs or pick incident numbers ================= -->
+  <row>
+    <panel>
+      <title>Block several IPs at once - pick IPs, or pick Incident no. to block all IPs of those incidents</title>
+      <input type="multiselect" token="sel_ips" searchWhenChanged="true">
+        <label>Select IPs</label>
+        <delimiter>,</delimiter>
+        <fieldForLabel>label</fieldForLabel>
+        <fieldForValue>src</fieldForValue>
+        <search base="attack_ips">
+          <query>| sort - last_seen | eval label=src." | ".incident_no." | ".rule_name | table src label</query>
+        </search>
+      </input>
+      <input type="multiselect" token="sel_inc" searchWhenChanged="true">
+        <label>or select Incident no.</label>
+        <delimiter>,</delimiter>
+        <fieldForLabel>label</fieldForLabel>
+        <fieldForValue>incident</fieldForValue>
+        <search base="attack_ips">
+          <query>| eval incident=split(incident_no, ", ") | mvexpand incident | where incident!="-"
+| stats dc(src) AS n values(rule_name) AS rule BY incident
+| eval label=incident." (".n." IPs) ".mvjoin(rule, "; ") | table incident label</query>
+        </search>
+      </input>
+      <input type="text" token="bulk_actor" searchWhenChanged="true">
+        <label>Threat actor</label>
+        <default>Unknown</default>
+      </input>
+      <input type="text" token="bulk_comment" searchWhenChanged="true">
+        <label>Comment</label>
+        <default>Bulk block from detected IOCs</default>
+      </input>
+      <table depends="$sel_ips$">
+        <title>Confirm: block the selected IPs</title>
+        <search base="attack_ips">
+          <query>| where like(",".$sel_ips|s$.",", "%,".src.",%")
+| stats values(src) AS ips values(incident_no) AS incidents values(rule_name) AS rules
+| eval n=mvcount(ips), Confirm="⛔ CONFIRM BLOCK ".n." IPs", Cancel="✖ Cancel", ips=mvjoin(ips, ","), incidents=mvjoin(incidents, ", "), rules=mvjoin(rules, "; ")
+| table Confirm Cancel n ips incidents rules</query>
+        </search>
+        <option name="count">1</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">cell</option>
+        <format type="color" field="Confirm">
+          <colorPalette type="expression">"#DC4E41"</colorPalette>
+        </format>
+        <drilldown>
+          <condition field="Confirm">
+            <set token="bulk_exec_ips">$row.ips$</set>
+            <set token="bulk_exec_inc">$row.incidents$</set>
+            <unset token="form.sel_ips"></unset>
+            <unset token="sel_ips"></unset>
+          </condition>
+          <condition field="Cancel">
+            <unset token="form.sel_ips"></unset>
+            <unset token="sel_ips"></unset>
+          </condition>
+          <condition></condition>
+        </drilldown>
+      </table>
+      <table depends="$sel_inc$">
+        <title>Confirm: block every IP of the selected incidents</title>
+        <search base="attack_ips">
+          <query>| eval _inc=split(incident_no, ", ") | mvexpand _inc
+| where like(",".$sel_inc|s$.",", "%,"._inc.",%")
+| stats values(src) AS ips values(_inc) AS incidents values(rule_name) AS rules
+| eval n=mvcount(ips), Confirm="⛔ CONFIRM BLOCK ".n." IPs", Cancel="✖ Cancel", ips=mvjoin(ips, ","), incidents=mvjoin(incidents, ", "), rules=mvjoin(rules, "; ")
+| table Confirm Cancel n incidents ips rules</query>
+        </search>
+        <option name="count">1</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">cell</option>
+        <format type="color" field="Confirm">
+          <colorPalette type="expression">"#DC4E41"</colorPalette>
+        </format>
+        <drilldown>
+          <condition field="Confirm">
+            <set token="bulk_exec_ips">$row.ips$</set>
+            <set token="bulk_exec_inc">$row.incidents$</set>
+            <unset token="form.sel_inc"></unset>
+            <unset token="sel_inc"></unset>
+          </condition>
+          <condition field="Cancel">
+            <unset token="form.sel_inc"></unset>
+            <unset token="sel_inc"></unset>
+          </condition>
+          <condition></condition>
+        </drilldown>
+      </table>
+      <table depends="$bulk_exec_ips$">
+        <title>Bulk block result (click to dismiss)</title>
+        <search>
+          <query>| makeresults
+| impervablock action=block ip=$bulk_exec_ips|s$ dry_run=false incident_no=$bulk_exec_inc|s$ threat_actor=$bulk_actor|s$ comment=$bulk_comment|s$ reason="Bulk block from detected IOCs"
+| table _time ip site_id status verified_in_waf backend soar_container incident_no threat_actor detail</query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+          <done>
+            <set token="waf_refresh">$job.sid$</set>
+            <set token="ex_refresh">$job.sid$</set>
+          </done>
+        </search>
+        <option name="count">50</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">cell</option>
+        <format type="color" field="status">
+          <colorPalette type="map">{"blocked":#DC4E41,"no_change":#708794,"rejected":#AF575A,"error":#B6488E}</colorPalette>
+        </format>
+        <format type="color" field="verified_in_waf">
+          <colorPalette type="map">{"yes":#53A051,"no":#DC4E41,"unknown":#F8BE34}</colorPalette>
+        </format>
+        <drilldown>
+          <unset token="bulk_exec_ips"></unset>
         </drilldown>
       </table>
     </panel>
@@ -548,6 +745,49 @@
         </format>
         <drilldown>
           <unset token="unb_exec_ip"></unset>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <!-- ================= "Not block" decisions ================= -->
+  <row>
+    <panel>
+      <title>Dismissed IPs (Not block) - hidden until detected again. Click "↩ Restore" to show it again now</title>
+      <table>
+        <search>
+          <query>| impervadismiss
+| eval _r=$ex_refresh|s$
+| eval Restore="↩ Restore", dismissed=if(isnum(dismissed_at), strftime(dismissed_at, "%Y-%m-%d %H:%M:%S"), "-")
+| table Restore ip reason incident_no dismissed_by dismissed</query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">cell</option>
+        <drilldown>
+          <condition field="Restore">
+            <set token="dis_restore">$row.ip$</set>
+          </condition>
+          <condition></condition>
+        </drilldown>
+      </table>
+      <table depends="$dis_restore$">
+        <title>Restore result: $dis_restore$ (click to dismiss)</title>
+        <search>
+          <query>| impervadismiss action=remove ip=$dis_restore|s$
+| table _time ip status detail user</query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+          <done>
+            <set token="ex_refresh">$job.sid$</set>
+          </done>
+        </search>
+        <option name="count">1</option>
+        <option name="drilldown">cell</option>
+        <drilldown>
+          <unset token="dis_restore"></unset>
         </drilldown>
       </table>
     </panel>
