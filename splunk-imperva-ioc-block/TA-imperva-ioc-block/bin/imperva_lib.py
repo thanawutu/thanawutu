@@ -271,15 +271,23 @@ class ImpervaPolicyClient(object):
         return js
 
     def get_policy(self, policy_id):
-        return self._request("GET", "/policies/v2/policies/%s" % policy_id,
-                             {"extended": "true"}).get("value") or {}
+        pol = self._request("GET", "/policies/v2/policies/%s" % policy_id,
+                            {"extended": "true"}).get("value") or {}
+        self.last_enabled = pol.get("enabled", True)
+        return pol
+
+    def is_enabled(self, policy_id):
+        return bool(self.get_policy(policy_id).get("enabled", True))
 
     def get_site_acl(self, policy_id):
         """Return (policy_name, [blocked ips]) read live from Imperva."""
         pol = self.get_policy(policy_id)
         st = find_ip_block_setting(pol)
         ips = list(((st or {}).get("data") or {}).get("ips") or [])
-        return pol.get("name") or "-", ips
+        name = pol.get("name") or "-"
+        if not pol.get("enabled", True):
+            name += " [POLICY DISABLED]"
+        return name, ips
 
     def get_blacklist(self, policy_id):
         return self.get_site_acl(policy_id)[1]
@@ -288,6 +296,19 @@ class ImpervaPolicyClient(object):
         pol = self.get_policy(policy_id)
         return self._request("PUT", "/policies/v2/policies/%s" % policy_id,
                              body=policy_with_blocked_ips(pol, ips))
+
+    def modify_ips(self, policy_id, add=(), remove=()):
+        """
+        Re-read the policy immediately before the PUT and apply only our delta,
+        so IPs that someone else added/removed in the console in the meantime
+        are not lost (minimises the read-modify-write race).
+        """
+        pol = self.get_policy(policy_id)
+        st = find_ip_block_setting(pol)
+        live = list(((st or {}).get("data") or {}).get("ips") or [])
+        new_list, _, _, _, _ = merge_blacklist(live, to_add=add, to_remove=remove)
+        return self._request("PUT", "/policies/v2/policies/%s" % policy_id,
+                             body=policy_with_blocked_ips(pol, new_list))
 
 
 def make_client(conf, api_id, api_key, override_ids=None):
@@ -341,7 +362,11 @@ def apply_action(client, site_id, ips, action="block", dry_run=False, verify=Tru
     not_applied = []
     after = current
     if changed and not dry_run:
-        client.set_blacklist(site_id, new_list)
+        if hasattr(client, "modify_ips"):  # v2 policy: delta on a fresh read
+            client.modify_ips(site_id, add=changed if action == "block" else (),
+                              remove=changed if action == "unblock" else ())
+        else:
+            client.set_blacklist(site_id, new_list)
         after = new_list
         if verify:
             after = client.get_blacklist(site_id)

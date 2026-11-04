@@ -116,6 +116,27 @@ class TestPolicyV2(unittest.TestCase):
         with self.assertRaises(il.ImpervaError):
             bad.get_blacklist("1777")
 
+    def test_concurrent_console_edit_is_kept(self):
+        # someone adds 9.9.9.9 in the console between our read and our write
+        real_get = self.c.get_policy
+        calls = {"n": 0}
+
+        def racy_get(pid):
+            calls["n"] += 1
+            if calls["n"] == 2:  # the fresh read inside modify_ips
+                FakeImperva.store[pid]["policySettings"][1]["data"]["ips"].append("9.9.9.9")
+            return real_get(pid)
+        self.c.get_policy = racy_get
+        il.apply_action(self.c, "1777", ["8.8.4.4"], "block")
+        self.c.get_policy = real_get
+        self.assertEqual(sorted(self.c.get_blacklist("1777")), ["1.1.1.1", "8.8.4.4", "9.9.9.9"])
+
+    def test_disabled_policy_flagged(self):
+        FakeImperva.store["1777"]["enabled"] = False
+        name, _ = self.c.get_site_acl("1777")
+        self.assertIn("DISABLED", name)
+        self.assertFalse(self.c.last_enabled)
+
     def test_make_client(self):
         c, ids, mode = il.make_client({"policy_ids": "1777, 1778"}, "a", "b")
         self.assertEqual((type(c).__name__, ids, mode), ("ImpervaPolicyClient", ["1777", "1778"], "v2_policy"))

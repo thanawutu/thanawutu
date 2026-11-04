@@ -116,6 +116,8 @@ def main():
             try:
                 res = il.apply_action(client, sid, accepted, action=action, dry_run=dry_run)
                 size = "blacklist size %d -> %d" % (res["blacklist_size_before"], res["blacklist_size_after"])
+                if getattr(client, "last_enabled", True) is False:
+                    size += " | WARNING: policy %s is DISABLED in Imperva - the block has NO effect until it is enabled" % sid
                 for ip in res["changed"]:
                     if dry_run:
                         row(ip, sid, "would_be_" + ok, size)
