@@ -1,4 +1,8 @@
 [settings]
+api_mode = v2_policy|v1_site
+api_v2_base_url = <string>
+policy_ids = <comma separated list of Imperva ACL policy IDs>
+caid = <integer>
 api_base_url = <string>
 site_ids = <comma separated list of Imperva site IDs>
 max_ips_per_action = <integer>

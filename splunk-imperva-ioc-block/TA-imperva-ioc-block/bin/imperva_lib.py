@@ -178,6 +178,148 @@ class ImpervaClient(object):
         })
 
 
+# --------------------------------------------------------------------------- #
+# Imperva Policies API v2 client (ACL policy, IP BLOCK setting)
+#   GET  {base}/policies/v2/policies/{id}?extended=true  -> {"value": {...}, "isError": false}
+#   PUT  {base}/policies/v2/policies/{id}                -> full policy body (overwrite)
+# Same interface as ImpervaClient, but the target id is a POLICY id, so one
+# write updates every site/account the policy is applied to.
+# --------------------------------------------------------------------------- #
+DEFAULT_V2_BASE_URL = "https://api.imperva.com"
+_SUBMIT_KEYS = ("name", "description", "enabled", "accountId", "policyType",
+                "policySettings", "defaultPolicyConfig")
+
+
+def find_ip_block_setting(policy):
+    for st in policy.get("policySettings") or []:
+        if st.get("policySettingType") == "IP" and st.get("settingsAction") == "BLOCK":
+            return st
+    return None
+
+
+def policy_with_blocked_ips(policy, ips):
+    """
+    Return the PUT body for `policy` with its IP/BLOCK setting set to `ips`.
+    Every other setting, exception and field is kept as it is.
+    """
+    if policy.get("policyType") != "ACL":
+        raise ImpervaError("policy %s is type %r, not ACL - refusing to modify"
+                           % (policy.get("id"), policy.get("policyType")))
+    body = {k: policy[k] for k in _SUBMIT_KEYS if k in policy}
+    settings = [dict(st) for st in (policy.get("policySettings") or [])]
+    idx = next((i for i, st in enumerate(settings)
+                if st.get("policySettingType") == "IP" and st.get("settingsAction") == "BLOCK"), None)
+    if idx is None:
+        if ips:
+            settings.append({"settingsAction": "BLOCK", "policySettingType": "IP",
+                             "data": {"ips": list(ips)}})
+    elif ips:
+        st = settings[idx]
+        st["data"] = dict(st.get("data") or {}, ips=list(ips))
+    else:
+        # an IP setting with an empty list is not valid - drop it
+        settings.pop(idx)
+    body["policySettings"] = settings
+    body.setdefault("defaultPolicyConfig", [])
+    return body
+
+
+class ImpervaPolicyClient(object):
+    def __init__(self, api_id, api_key, base_url=DEFAULT_V2_BASE_URL, timeout=30,
+                 proxy=None, verify_ssl=True, caid=None):
+        if not api_id or not api_key:
+            raise ImpervaError("Imperva API ID / API Key not configured")
+        self.api_id, self.api_key = api_id, api_key
+        self.base_url = (base_url or DEFAULT_V2_BASE_URL).rstrip("/")
+        self.timeout = timeout
+        self.caid = caid
+        handlers = []
+        if proxy:
+            handlers.append(urllib.request.ProxyHandler({"http": proxy, "https": proxy}))
+        ctx = ssl.create_default_context()
+        if not verify_ssl:
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+        handlers.append(urllib.request.HTTPSHandler(context=ctx))
+        self._opener = urllib.request.build_opener(*handlers)
+
+    def _request(self, method, path, query=None, body=None):
+        q = dict(query or {})
+        if self.caid:
+            q["caid"] = self.caid
+        url = self.base_url + path + ("?" + urllib.parse.urlencode(q) if q else "")
+        data = json.dumps(body).encode("utf-8") if body is not None else None
+        req = urllib.request.Request(url, data=data, method=method)
+        req.add_header("x-API-Id", self.api_id)
+        req.add_header("x-API-Key", self.api_key)
+        req.add_header("Accept", "application/json")
+        if data is not None:
+            req.add_header("Content-Type", "application/json")
+        try:
+            with self._opener.open(req, timeout=self.timeout) as resp:
+                raw = resp.read().decode("utf-8")
+        except urllib.error.HTTPError as e:
+            raise ImpervaError("HTTP %s %s %s: %s" % (e.code, method, path, e.read()[:300]))
+        except urllib.error.URLError as e:
+            raise ImpervaError("Cannot reach Imperva API (%s): %s" % (path, e.reason))
+        try:
+            js = json.loads(raw)
+        except ValueError:
+            raise ImpervaError("Non-JSON response from %s: %s" % (path, raw[:300]))
+        if js.get("isError"):
+            raise ImpervaError("Imperva API error on %s: %s" % (path, raw[:300]))
+        return js
+
+    def get_policy(self, policy_id):
+        return self._request("GET", "/policies/v2/policies/%s" % policy_id,
+                             {"extended": "true"}).get("value") or {}
+
+    def get_site_acl(self, policy_id):
+        """Return (policy_name, [blocked ips]) read live from Imperva."""
+        pol = self.get_policy(policy_id)
+        st = find_ip_block_setting(pol)
+        ips = list(((st or {}).get("data") or {}).get("ips") or [])
+        return pol.get("name") or "-", ips
+
+    def get_blacklist(self, policy_id):
+        return self.get_site_acl(policy_id)[1]
+
+    def set_blacklist(self, policy_id, ips):
+        pol = self.get_policy(policy_id)
+        return self._request("PUT", "/policies/v2/policies/%s" % policy_id,
+                             body=policy_with_blocked_ips(pol, ips))
+
+
+def make_client(conf, api_id, api_key, override_ids=None):
+    """
+    Build the client and target ids from imperva.conf [settings].
+      api_mode = v2_policy (default) -> ImpervaPolicyClient, targets = policy_ids
+      api_mode = v1_site             -> ImpervaClient,       targets = site_ids
+    """
+    def truthy(v):
+        return str(v).strip().lower() in ("1", "t", "true", "y", "yes")
+
+    mode = (conf.get("api_mode") or "v2_policy").strip().lower()
+    common = dict(timeout=int(conf.get("timeout", 30)), proxy=conf.get("proxy") or None,
+                  verify_ssl=truthy(conf.get("verify_ssl", "true")))
+    if mode == "v1_site":
+        client = ImpervaClient(api_id, api_key,
+                               base_url=conf.get("api_base_url") or DEFAULT_BASE_URL, **common)
+        ids = parse_ip_list(override_ids or conf.get("site_ids", ""))
+        what = "site_ids"
+    elif mode == "v2_policy":
+        client = ImpervaPolicyClient(api_id, api_key,
+                                     base_url=conf.get("api_v2_base_url") or DEFAULT_V2_BASE_URL,
+                                     caid=conf.get("caid") or None, **common)
+        ids = parse_ip_list(override_ids or conf.get("policy_ids", ""))
+        what = "policy_ids"
+    else:
+        raise ImpervaError("api_mode must be v2_policy or v1_site, not %r" % mode)
+    if not ids:
+        raise ImpervaError("No %s configured in imperva.conf [settings]" % what)
+    return client, ids, mode
+
+
 def apply_action(client, site_id, ips, action="block", dry_run=False, verify=True):
     """
     Read current blacklist of site_id, merge, write it back and (optionally)

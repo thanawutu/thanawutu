@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import splunk.Intersplunk as si  # noqa: E402
 
 import imperva_lib as il         # noqa: E402
-from splunk_helpers import get_logger, is_true, load_conf_stanza, load_credential  # noqa: E402
+from splunk_helpers import get_logger, load_conf_stanza, load_credential  # noqa: E402
 
 
 def main():
@@ -31,12 +31,8 @@ def main():
     try:
         conf = load_conf_stanza(session_key, "imperva", "settings")
         api_id, api_key = load_credential(session_key, "imperva_waf")
-        client = il.ImpervaClient(api_id, api_key,
-                                  base_url=conf.get("api_base_url", il.DEFAULT_BASE_URL),
-                                  timeout=int(conf.get("timeout", 30)),
-                                  proxy=conf.get("proxy") or None,
-                                  verify_ssl=is_true(conf.get("verify_ssl", "true")))
-        site_ids = il.parse_ip_list(opts.get("site_id") or conf.get("site_ids", ""))
+        client, site_ids, _mode = il.make_client(
+            conf, api_id, api_key, override_ids=opts.get("policy_id") or opts.get("site_id"))
         now = int(time.time())
         out = []
         for sid in site_ids:

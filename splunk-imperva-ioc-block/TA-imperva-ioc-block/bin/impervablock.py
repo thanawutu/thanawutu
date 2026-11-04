@@ -93,16 +93,9 @@ def main():
         else:  # unblocking is always allowed for anything that parses
             accepted, rejected = il.validate_ips(candidates, (), 0, 0)
 
-        site_ids = il.parse_ip_list(opts.get("site_id") or conf.get("site_ids", ""))
-        if not site_ids:
-            raise il.ImpervaError("No site_ids configured in imperva.conf [settings]")
-
-        client = il.ImpervaClient(
-            api_id, api_key,
-            base_url=conf.get("api_base_url", il.DEFAULT_BASE_URL),
-            timeout=int(conf.get("timeout", 30)),
-            proxy=conf.get("proxy") or None,
-            verify_ssl=is_true(conf.get("verify_ssl", "true")))
+        # targets = policy ids (api_mode=v2_policy) or site ids (api_mode=v1_site)
+        client, site_ids, _mode = il.make_client(
+            conf, api_id, api_key, override_ids=opts.get("policy_id") or opts.get("site_id"))
 
         now = int(time.time())
         out = []

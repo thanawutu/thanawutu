@@ -41,13 +41,9 @@ IMPERVA_REALM = "imperva_waf"
 def waf_blacklist(session_key, conf):
     """Union of the blacklists of all configured sites (best effort)."""
     api_id, api_key = load_credential(session_key, IMPERVA_REALM)
-    client = il.ImpervaClient(api_id, api_key,
-                              base_url=conf.get("api_base_url", il.DEFAULT_BASE_URL),
-                              timeout=int(conf.get("timeout", 30)),
-                              proxy=conf.get("proxy") or None,
-                              verify_ssl=is_true(conf.get("verify_ssl", "true")))
+    client, target_ids, _mode = il.make_client(conf, api_id, api_key)
     out = set()
-    for sid in il.parse_ip_list(conf.get("site_ids", "")):
+    for sid in target_ids:
         out.update(client.get_blacklist(sid))
     return out
 

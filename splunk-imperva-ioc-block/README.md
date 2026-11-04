@@ -89,6 +89,37 @@ curl -k -u admin https://localhost:8089/servicesNS/nobody/TA-imperva-ioc-block/s
 - **🔍 Search** on each row opens Splunk Search in a new tab with
   `index=imperva sourcetype="incapsula:cef" src=<ip>` for the last 7 days.
 
+## Imperva API mode: Policies v2 (default) or v1 site ACL
+Set `api_mode` in `local/imperva.conf`:
+
+| `api_mode` | Endpoint | Target IDs | Effect |
+|---|---|---|---|
+| `v2_policy` (default) | `GET/PUT https://api.imperva.com/policies/v2/policies/{policyId}` | `policy_ids` | Updates the **IP / BLOCK** setting of an **ACL policy**. Every site the policy is applied to gets the block |
+| `v1_site` | `POST https://my.imperva.com/api/prov/v1/sites/configure/acl` | `site_ids` | Legacy per-site "Blacklisted IPs" ACL rule |
+
+Both modes authenticate with the `x-API-Id` / `x-API-Key` headers.
+
+How v2 works:
+- It reads the policy (`?extended=true`), changes only the `policySettings` entry with
+  `policySettingType=IP, settingsAction=BLOCK` (creating it if missing), and PUTs the whole policy back.
+- GEO/URL settings, exceptions and `defaultPolicyConfig` are kept.
+- It refuses to touch a policy whose `policyType` is not `ACL`.
+- When the last IP is unblocked, the empty IP setting is removed.
+
+In v2 mode the dashboard/registry field `site_id` holds the **policy ID**, and `site_name` holds the policy name.
+
+Prepare a dedicated policy:
+1. Cloud Security Console → **Policies** → **Add policy** → type **ACL**. Name it, e.g. `SOC IOC Blocklist`.
+2. Add one IP block entry (any test IP), save, and apply the policy to the target websites.
+3. Copy its **Policy ID**, then `policy_ids = <id>`.
+4. The API key needs permission to read and edit policies.
+5. If the key belongs to a parent account, set `caid`.
+
+Test it:
+```bash
+curl -s "https://api.imperva.com/policies/v2/policies/<POLICY_ID>?extended=true" -H "accept: application/json" -H "x-API-Id: <API_ID>" -H "x-API-Key: <API_KEY>"
+```
+
 ## Safety controls
 | Control | Where |
 |---|---|
@@ -151,7 +182,7 @@ index=imperva sourcetype="incapsula:cef" category!=normal act!=allowed
 
 ## Tests (no Splunk needed)
 ```bash
-python3 -m unittest -v tests/test_imperva_lib.py tests/test_vt_lib.py
+python3 -m unittest -v tests/test_imperva_lib.py tests/test_vt_lib.py tests/test_policy_v2.py
 ```
 
 ## Notes
