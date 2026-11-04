@@ -1,0 +1,4 @@
+<nav search_view="search">
+  <view name="imperva_ioc_block" default="true" />
+  <view name="search" />
+</nav>

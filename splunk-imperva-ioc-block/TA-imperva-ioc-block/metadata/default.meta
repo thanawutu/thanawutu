@@ -1,0 +1,17 @@
+[]
+access = read : [ * ], write : [ admin ]
+export = none
+
+# Only admin / imperva_blocker may run the command that changes the WAF
+[commands/impervablock]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = system
+
+[views/imperva_ioc_block]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+
+[passwords]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+
+[imperva]
+access = read : [ admin, imperva_blocker ], write : [ admin ]

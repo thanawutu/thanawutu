@@ -1,0 +1,101 @@
+<form version="1.1" theme="dark" hideFilters="false">
+  <label>Imperva WAF - Block Malicious IP IOCs</label>
+  <description>1) Click an IOC row (or type IPs)  2) Choose action / mode  3) Tick "I confirm"  4) Press Submit. Default mode is Dry-run (preview only).</description>
+
+  <!-- Searches only run when the Submit button is pressed -->
+  <fieldset submitButton="true" autoRun="false">
+    <input type="text" token="ip_list" searchWhenChanged="false">
+      <label>IP / CIDR (comma separated)</label>
+      <default></default>
+    </input>
+    <input type="dropdown" token="action" searchWhenChanged="false">
+      <label>Action</label>
+      <choice value="block">Block</choice>
+      <choice value="unblock">Unblock</choice>
+      <default>block</default>
+    </input>
+    <input type="radio" token="dry_run" searchWhenChanged="false">
+      <label>Mode</label>
+      <choice value="true">Dry-run (preview)</choice>
+      <choice value="false">Apply to Imperva</choice>
+      <default>true</default>
+    </input>
+    <input type="text" token="reason" searchWhenChanged="false">
+      <label>Reason / Ticket</label>
+      <default>Manual IOC block from Splunk</default>
+    </input>
+    <input type="checkbox" token="confirm" searchWhenChanged="false">
+      <label>Confirmation</label>
+      <choice value="yes">I confirm</choice>
+    </input>
+  </fieldset>
+
+  <row>
+    <panel>
+      <title>Malicious IP IOCs (click a row to select the IP)</title>
+      <table>
+        <search>
+          <!-- Replace with your own IOC source, e.g. ES threat intel:
+               | inputlookup ip_intel | rename ip as ip
+               or an index:  index=threat_intel type=ip | stats latest(*) as * by ip -->
+          <query>| inputlookup malicious_ip_iocs
+| table ip ioc_source confidence first_seen description
+| sort - confidence</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">row</option>
+        <drilldown>
+          <!-- Fills the IP text box; user still has to confirm + Submit -->
+          <set token="form.ip_list">$row.ip$</set>
+          <unset token="form.confirm"></unset>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel depends="$confirm$">
+      <title>Result: $action$ $ip_list$ (dry_run=$dry_run$)</title>
+      <table>
+        <search>
+          <!-- $confirm$ is referenced so this search is NOT dispatched until "I confirm" is ticked -->
+          <query>| makeresults
+| eval confirmed=$confirm|s$
+| impervablock action=$action|s$ ip=$ip_list|s$ dry_run=$dry_run|s$ reason=$reason|s$
+| table _time ip site_id action status detail dry_run user reason</query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+          <done>
+            <!-- force re-confirmation for the next click -->
+            <unset token="form.confirm"></unset>
+          </done>
+        </search>
+        <option name="count">50</option>
+        <option name="drilldown">none</option>
+        <format type="color" field="status">
+          <colorPalette type="map">{"blocked":#DC4E41,"unblocked":#53A051,"would_be_blocked":#F8BE34,"would_be_unblocked":#F8BE34,"no_change":#708794,"rejected":#AF575A,"error":#B6488E}</colorPalette>
+        </format>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Audit log - who blocked what</title>
+      <table>
+        <search>
+          <query>index=_internal source=*imperva_ioc_block.log
+| table _time user action ip site_id status dry_run reason detail
+| sort - _time</query>
+          <earliest>-7d@d</earliest>
+          <latest>now</latest>
+          <refresh>60s</refresh>
+        </search>
+        <option name="count">20</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+</form>
