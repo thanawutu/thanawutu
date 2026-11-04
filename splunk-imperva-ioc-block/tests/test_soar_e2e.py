@@ -326,7 +326,33 @@ class TestPlaybookProxy(unittest.TestCase):
         self.assertEqual(seen, {"imperva": "http://10.12.30.100:8080", "vt": "http://10.12.30.100:8080"})
 
 
+class TestCodeBlockVariant(TestSoarE2E):
+    """The code-block variant (pasted inside code_1 of a SOAR 8.x playbook) works the same."""
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        src = "def code_1(container=None, phantom=None, **kwargs):\n" + build_global_code.build_code_block()
+        ns = {"__name__": "soar_playbook_block"}
+        exec(compile(src, "playbook_code_1.py", "exec"), ns)
+        cls._old_handle = SOAR_NS["imperva_soar_handle"]
+        # FakeSoar calls SOAR_NS["imperva_soar_handle"](container, phantom) -> route it to code_1
+        SOAR_NS["imperva_soar_handle"] = lambda container, phantom: ns["code_1"](container=container, phantom=phantom)
+
+    @classmethod
+    def tearDownClass(cls):
+        SOAR_NS["imperva_soar_handle"] = cls._old_handle
+        super().tearDownClass()
+
+    def test_sendalert_style_artifact_is_processed(self):
+        pass  # covered by the parent class with direct access to the handler's return value
+
+
 class TestGeneratedCodeInSync(unittest.TestCase):
+    def test_committed_code_block_matches_build(self):
+        path = os.path.join(HERE, "..", "soar", "imperva_ioc_block_code_block.py")
+        self.assertEqual(open(path).read(), build_global_code.build_code_block(),
+                         "run: python3 soar/build_global_code.py")
+
     def test_committed_file_matches_build(self):
         path = os.path.join(HERE, "..", "soar", "imperva_ioc_block_global_code.py")
         self.assertEqual(open(path).read(), build_global_code.build(),

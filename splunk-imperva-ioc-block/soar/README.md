@@ -48,13 +48,14 @@ containers created by the live list are deleted after they are read (`soar_delet
 
 5. **Playbook**: Playbooks → **+ Playbook** → Automation.
    1. Name it `imperva_ioc_block`. Set *Operates on* to label `imperva_ioc_block`, and use Python 3.
-   2. Open **Global Custom Code** and paste the whole of `imperva_ioc_block_global_code.py`.
-      This file is generated, so don't edit it. Rebuild it with `python3 soar/build_global_code.py`.
-   3. Add one **Code** block, wired `start → code → end`.
-   4. In its custom code section, add this one line:
-      ```python
-      imperva_soar_handle(container, phantom)
-      ```
+   2. Add one **Code** block, wired `start → code → end`.
+   3. **SOAR 8.x** (no Global Custom Code section in the editor): open *Python editor*, find
+      `def code_1(` and paste the whole of **`imperva_ioc_block_code_block.py`** between
+      `## Custom Code Start` and `## Custom Code End`. It is already indented and ends with the call
+      `imperva_soar_handle(container, phantom)`.
+   4. **Editors that have Global Custom Code**: paste `imperva_ioc_block_global_code.py` there instead,
+      and put only `imperva_soar_handle(container, phantom)` in the code block.
+   5. Both files are generated, so don't edit them. Rebuild with `python3 soar/build_global_code.py`.
    5. Save, and set the playbook **Active**.
 6. **Check it on SOAR**: in the debug output of a test run you should see
    `imperva block request ... -> ok`. If the environment variables do not reach the playbook on your
