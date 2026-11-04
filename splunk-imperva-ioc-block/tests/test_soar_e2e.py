@@ -373,7 +373,7 @@ class TestPasteRobustness(TestSoarE2E):
 
 class TestFullPlaybookFile(TestSoarE2E):
     """The complete SOAR 8.x playbook file (imperva_ioc_block_playbook.py) runs end to end."""
-    def test_full_playbook_list(self):
+    def _run_playbook(self, cid, request_cef, playbook_src=None):
         import types
         st = FakeSoar.store
         fake = FakePhantom(self.soar_base, st)
@@ -389,21 +389,46 @@ class TestFullPlaybookFile(TestSoarE2E):
         sys.modules["phantom"], sys.modules["phantom.rules"] = pkg, mod
         try:
             ns = {"__name__": "playbook"}
-            exec(compile(build_global_code.build_playbook(), "imperva_ioc_block_playbook.py", "exec"), ns)
-            st["containers"][555] = {"id": 555, "label": "imperva_ioc_block", "status": "new", "artifacts": [
-                {"id": 1, "name": "imperva_request",
-                 "cef": {"request_id": "test-001", "action": "list", "policy_ids": "1777"}}]}
-            ns["on_start"]({"id": 555, "label": "imperva_ioc_block"})
+            src = playbook_src or build_global_code.build_playbook()
+            exec(compile(src, "imperva_ioc_block_playbook.py", "exec"), ns)
+            st["containers"][cid] = {"id": cid, "label": "imperva_ioc_block", "status": "new", "artifacts": [
+                {"id": 1, "name": "imperva_request", "cef": request_cef}]}
+            ns["on_start"]({"id": cid, "label": "imperva_ioc_block"})
         finally:
             for k, v in old.items():
                 if v is None:
                     sys.modules.pop(k, None)
                 else:
                     sys.modules[k] = v
-        res = [a for a in st["containers"][555]["artifacts"] if a["name"] == "imperva_result"][0]["cef"]
+        return [a for a in st["containers"][cid]["artifacts"] if a["name"] == "imperva_result"][0]["cef"]
+
+    def test_full_playbook_list(self):
+        res = self._run_playbook(555, {"request_id": "test-001", "action": "list", "policy_ids": "1777"})
         self.assertEqual(res["status"], "ok", res)
         self.assertEqual(json.loads(res["result_json"])[0]["ip"], "1.1.1.1")
-        self.assertEqual(st["containers"][555]["status"], "closed")
+        self.assertEqual(FakeSoar.store["containers"][555]["status"], "closed")
+
+    def test_playbook_without_env_uses_imperva_config(self):
+        """Real SOAR 8.x case: playbooks do not see Global Environment variables."""
+        for k in list(self.env):
+            os.environ.pop(k, None)
+        src = build_global_code.build_playbook()
+        for k, v in (("IMPERVA_API_ID", "id1"), ("IMPERVA_API_KEY", "key1"), ("IMPERVA_POLICY_IDS", "1777")):
+            src = src.replace('"%s": "",' % k, '"%s": "%s",' % (k, v), 1)
+        src = src.replace('"IMPERVA_PROTECTED_NETWORKS": "",', '"IMPERVA_PROTECTED_NETWORKS": "",', 1)
+        # point the library at the fake Imperva server through the config too
+        src = src.replace('"IMPERVA_CAID": "",', '"IMPERVA_CAID": "", "IMPERVA_API_BASE": "%s",' % self.imp_base, 1)
+        res = self._run_playbook(556, {"request_id": "t-cfg", "action": "block", "ips": "8.8.4.4"}, src)
+        self.assertEqual(res["status"], "ok", res)
+        row = json.loads(res["result_json"])[0]
+        self.assertEqual((row["status"], row["verified_in_waf"]), ("blocked", "yes"))
+
+    def test_playbook_without_env_and_without_config_explains(self):
+        for k in list(self.env):
+            os.environ.pop(k, None)
+        res = self._run_playbook(557, {"request_id": "t-none", "action": "list"})
+        self.assertEqual(res["status"], "error")
+        self.assertIn("IMPERVA_POLICY_IDS", res["error"])
 
 
 class TestGeneratedCodeInSync(unittest.TestCase):

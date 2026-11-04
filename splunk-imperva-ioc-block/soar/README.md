@@ -30,8 +30,10 @@ containers created by the live list are deleted after they are read (`soar_delet
    - Role: allowed to create containers and artifacts, read containers and playbook runs, and delete containers.
    - *Allowed IPs*: the Search Head IP(s).
    - Copy the user's **REST API token**. Splunk sends it as the `ph-auth-token` header.
-4. **Environment variables**: Administration → Administration Settings → Environment Variables.
-   Tick *secret* for the keys.
+4. **Settings**: SOAR 8.x passes the *Global Environment* variables only to apps, **not to
+   playbooks**. Put the values in the **`IMPERVA_CONFIG`** dict at the top of the playbook's code block.
+   Environment variables with the same names are used only as a fallback.
+   The values are visible to anyone who can edit playbooks, so restrict playbook edit rights.
 
    | Name | Value |
    |---|---|

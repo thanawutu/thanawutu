@@ -9,8 +9,9 @@ that Splunk polls for.
 SOAR re-validates every request itself (allowed policy IDs, public IPs,
 protected networks, max IPs) - it never trusts Splunk blindly.
 
-Settings come from SOAR environment variables
-(Administration > Administration Settings > Environment Variables; mark keys secret):
+Settings come from the IMPERVA_CONFIG dict at the top of the playbook code block
+(SOAR 8.x does not pass Global Environment variables to playbooks), falling back to
+SOAR environment variables of the same names:
   IMPERVA_API_ID, IMPERVA_API_KEY        required
   IMPERVA_POLICY_IDS                     required, allow-list e.g. "2169031"
   IMPERVA_PROTECTED_NETWORKS             optional, comma separated IP/CIDR
@@ -140,12 +141,27 @@ def request_from_artifact(a):
     }
 
 
-def imperva_soar_handle(container, phantom):
+def effective_env(config=None, base=None):
+    """
+    Settings = SOAR environment variables (if the playbook can see them) overridden by the
+    IMPERVA_CONFIG dict at the top of the playbook code block. SOAR 8.x passes the Global
+    Environment only to apps, not to playbooks, so IMPERVA_CONFIG is the reliable source.
+    Empty values in IMPERVA_CONFIG do not override.
+    """
+    env = dict(os.environ if base is None else base)
+    for k, v in (config or {}).items():
+        if v is not None and str(v).strip() != "":
+            env[k] = str(v).strip()
+    return env
+
+
+def imperva_soar_handle(container, phantom, config=None):
     """
     Entry point called from the playbook's custom code block:
-        imperva_soar_handle(container, phantom)
+        imperva_soar_handle(container, phantom, IMPERVA_CONFIG)
     Processes every request artifact in the container that has no result yet.
     """
+    env = effective_env(config)
     url = phantom.build_phantom_rest_url("container", container["id"], "artifacts")
     resp = phantom.requests.get(url, params={"page_size": 0}, verify=False)
     artifacts = resp.json().get("data", [])
@@ -156,7 +172,7 @@ def imperva_soar_handle(container, phantom):
         if cef is None or cef.get("request_id") in answered:
             continue
         answered.add(cef.get("request_id"))
-        result = process_request(cef)
+        result = process_request(cef, env)
         result["requested_from"] = cef.get("requested_from", "splunk")
         phantom.debug("imperva %s request %s -> %s %s" % (
             cef.get("action"), cef.get("request_id"), result["status"], result["error"]))
