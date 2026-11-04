@@ -49,12 +49,16 @@ audit → $SPLUNK_HOME/var/log/splunk/imperva_ioc_block.log  (indexed into _inte
    # proxy = http://proxy.corp:8080
    ```
 5. Give analysts the `imperva_blocker` role (Settings → Roles).
-6. Point the IOC panel at your own feed. Edit the first panel's query: the lookup
-   `malicious_ip_iocs.csv`, ES `ip_intel`, or `index=threat_intel`.
+6. The IOC panel reads from Imperva WAF logs (`index=imperva sourcetype="incapsula:cef"`). It shows
+   attack events (`category!=normal act!=allowed`) from the last 24h, grouped by `src`, and keeps
+   sources with `count > 300`. To change the threshold or time range, edit the base search
+   `attack_ips` in the dashboard.
 
 ## Usage
 Dashboard: **Apps → Imperva IOC Block**
-1. Click an IOC row. The IP fills the text box. You can also paste several IPs, separated by commas.
+1. Click a row in *Attacking IPs*. Its `src` goes into the IP box and its `msg` goes into Reason.
+   Or click the *Select ALL* panel to load every attacking IP at once (capped by `max_ips_per_action`).
+   You can also paste several IPs, separated by commas.
 2. Pick Block or Unblock and set the Mode (Dry-run first).
 3. Fill in Reason / Ticket.
 4. Tick **I confirm** and press **Submit**.
@@ -63,7 +67,9 @@ Dashboard: **Apps → Imperva IOC Block**
 You can also run it straight from SPL:
 ```
 | makeresults | impervablock action=block ip="8.8.4.4" dry_run=true reason="TI-123"
-| inputlookup malicious_ip_iocs | where confidence="high" | impervablock action=block field=ip
+index=imperva sourcetype="incapsula:cef" category!=normal act!=allowed
+| stats count BY src | where count > 300
+| impervablock action=block field=src dry_run=true reason="Imperva attack count>300"
 ```
 
 ## Tests (no Splunk needed)

@@ -32,23 +32,48 @@
 
   <row>
     <panel>
-      <title>Malicious IP IOCs (click a row to select the IP)</title>
+      <title>Attacking IPs from Imperva WAF logs (last 24h, count &gt; 300) - click a row to select the IP</title>
+      <!-- Base search: Imperva attack events grouped by source IP -->
+      <search id="attack_ips">
+        <query><![CDATA[index=imperva sourcetype="incapsula:cef" category!=normal act!=allowed
+| lookup geo_attr_countries iso2 AS ccode OUTPUT country
+| fillnull value="-" src act category country clapp eventtype dproc cs2Label http_method dest_ip dest_name dest_port
+| stats values(fileId) AS SessionID values(clapp) AS clapp values(act) AS act values(category) AS category values(country) AS country values(eventtype) AS eventtype values(dproc) AS dproc values(cs2Label) AS cs2Label values(http_method) AS http_method values(dest_ip) AS dest_ip values(dest_name) AS dest_name values(dest_port) AS dest_port count BY src
+| where count > 300
+| eval msg="Attack_IP=".src.", Attack_Country=".mvjoin(country,", ").", WAF_Action=".mvjoin(act,", ").", Category=".mvjoin(category,", ")]]></query>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </search>
       <table>
-        <search>
-          <!-- Replace with your own IOC source, e.g. ES threat intel:
-               | inputlookup ip_intel | rename ip as ip
-               or an index:  index=threat_intel type=ip | stats latest(*) as * by ip -->
-          <query>| inputlookup malicious_ip_iocs
-| table ip ioc_source confidence first_seen description
-| sort - confidence</query>
-          <earliest>-24h@h</earliest>
-          <latest>now</latest>
+        <search base="attack_ips">
+          <query>| table src count country act category clapp http_method dest_name dest_port msg
+| sort - count</query>
         </search>
         <option name="count">10</option>
         <option name="drilldown">row</option>
         <drilldown>
-          <!-- Fills the IP text box; user still has to confirm + Submit -->
-          <set token="form.ip_list">$row.ip$</set>
+          <!-- Puts the IP in the text box. The user still has to tick "I confirm" and press Submit -->
+          <set token="form.ip_list">$row.src$</set>
+          <set token="form.reason">Imperva attack: $row.msg$</set>
+          <unset token="form.confirm"></unset>
+        </drilldown>
+      </table>
+    </panel>
+    <panel>
+      <title>Select ALL attacking IPs (click)</title>
+      <table>
+        <search base="attack_ips">
+          <query>| where src!="-"
+| stats count AS total_ips values(src) AS ips
+| eval ips=mvjoin(ips, ",")
+| table total_ips ips</query>
+        </search>
+        <option name="count">1</option>
+        <option name="drilldown">row</option>
+        <drilldown>
+          <!-- Puts every IP in the text box (limited by max_ips_per_action in imperva.conf) -->
+          <set token="form.ip_list">$row.ips$</set>
+          <set token="form.reason">Imperva attack IPs count&gt;300 (bulk)</set>
           <unset token="form.confirm"></unset>
         </drilldown>
       </table>
