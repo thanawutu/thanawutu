@@ -63,9 +63,6 @@ def registry_key(site_id, ip):
     return "%s_%s" % (site_id, ip.replace("/", "_").replace(":", "-"))
 
 
-EXCLUDES = "imperva_exclude_list"
-
-
 def _kv_path(suffix="", collection=REGISTRY):
     return "/servicesNS/nobody/%s/storage/collections/data/%s%s" % (APP, collection, suffix)
 
@@ -100,25 +97,10 @@ def kv_delete(session_key, key, collection):
                        raiseAllErrors=True)
 
 
-def exclude_networks(session_key, conf):
-    """
-    All IP/CIDRs that must never be shown as attackers nor blocked:
-    [settings] protected_networks (imperva.conf) + the dashboard-managed KV store
-    collection imperva_exclude_list. Returns list of (cidr, description, source).
-    """
+def protected_networks(conf):
+    """IP/CIDRs that must never be blocked: imperva.conf [settings] protected_networks."""
     import imperva_lib as il
-    out, seen = [], set()
-    for c in il.parse_ip_list(conf.get("protected_networks", "")):
-        norm, err = il.normalize_cidr(c)
-        if norm and norm not in seen:
-            seen.add(norm)
-            out.append((norm, "imperva.conf protected_networks", "conf"))
-    for d in kv_list(session_key, EXCLUDES):
-        norm, err = il.normalize_cidr(d.get("cidr", ""))
-        if norm and norm not in seen:
-            seen.add(norm)
-            out.append((norm, d.get("description", ""), "dashboard"))
-    return out
+    return il.parse_ip_list(conf.get("protected_networks", ""))
 
 
 # --------------------------------------------------------------------------- #

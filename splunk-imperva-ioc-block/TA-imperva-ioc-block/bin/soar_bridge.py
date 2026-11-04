@@ -164,7 +164,7 @@ class SoarBridge(object):
             "requested_from": "splunk",
         }
         if protected:
-            # Splunk's exclude list (CIDRs only, no descriptions). SOAR unions it with its own
+            # Splunk's protected_networks (CIDRs only). SOAR unions it with its own
             # IMPERVA_PROTECTED_NETWORKS, so Splunk can only make SOAR stricter, never looser.
             req["protected_networks"] = ",".join(protected)
         cid = self.submit(req)

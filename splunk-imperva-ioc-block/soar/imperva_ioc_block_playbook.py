@@ -529,29 +529,6 @@ def list_targets(client, targets):
     return rows
 
 
-# --------------------------------------------------------------------------- #
-# Exclude list (IPs never shown as attackers and never blocked)
-# --------------------------------------------------------------------------- #
-def normalize_cidr(value):
-    """'1.2.3.4' -> ('1.2.3.4/32', None); '18.143.202.7/24' -> ('18.143.202.0/24', None);
-    invalid -> (None, reason). Always returns CIDR notation (cidrmatch() needs it)."""
-    v = (value or "").strip().strip('"').strip("'")
-    if not v:
-        return None, "empty"
-    try:
-        net = ipaddress.ip_network(v, strict=False)
-    except ValueError:
-        return None, "invalid IP/CIDR %r" % v
-    if net.version == 4 and net.prefixlen < 8:
-        return None, "CIDR wider than /8 is not allowed in the exclude list"
-    if net.version == 6 and net.prefixlen < 32:
-        return None, "IPv6 CIDR wider than /32 is not allowed in the exclude list"
-    return str(net), None
-
-
-def exclude_key(cidr):
-    return cidr.replace("/", "_").replace(":", "-")
-
 
 # ==========================================================================
 # vt_lib

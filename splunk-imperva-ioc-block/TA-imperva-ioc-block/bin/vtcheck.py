@@ -31,8 +31,8 @@ import splunk.Intersplunk as si  # noqa: E402
 import imperva_lib as il         # noqa: E402
 import vt_lib as vt              # noqa: E402
 from backend import get_backend, get_soar_bridge   # noqa: E402
-from splunk_helpers import (exclude_networks, get_logger, is_true,  # noqa: E402
-                            load_conf_stanza, load_credential, parse_options, splunk_home)
+from splunk_helpers import (get_logger, is_true, load_conf_stanza,  # noqa: E402
+                            load_credential, parse_options, protected_networks, splunk_home)
 
 VT_REALM = "virustotal"
 
@@ -78,11 +78,7 @@ def main():
         rpm = max(1, int(vconf.get("requests_per_minute", 4)))
         max_lookups = int(vconf.get("max_lookups_per_run", 10))
         thresholds = {k: int(vconf[k]) for k in vt.DEFAULT_THRESHOLDS if vconf.get(k)}
-        try:
-            protected = [c for c, _d, _s in exclude_networks(session_key, iconf)]
-        except Exception as e:  # noqa: BLE001
-            log.warning("cannot read exclude list: %s", e)
-            protected = il.parse_ip_list(iconf.get("protected_networks", ""))
+        protected = protected_networks(iconf)
 
         blocked = set()
         waf_ok = False

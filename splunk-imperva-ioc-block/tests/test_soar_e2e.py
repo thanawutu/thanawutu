@@ -288,6 +288,13 @@ class TestSoarE2E(unittest.TestCase):
         # re-running the playbook on the same container does not block twice
         self.assertEqual(SOAR_NS["imperva_soar_handle"]({"id": cid, "label": "imperva_ioc_block"}, phantom), 0)
 
+    def test_splunk_protected_list_unioned_on_soar(self):
+        rows = self.bridge.execute("block", ["18.143.202.10"], ["1777"], False, {}, "a",
+                                   protected=["18.143.202.0/24"])
+        self.assertEqual(rows[0]["status"], "rejected")
+        self.assertIn("SOAR: overlaps protected network 18.143.202.0/24", rows[0]["detail"])
+        self.assertEqual(FakeImperva.puts, [])
+
     def test_bad_token(self):
         bad = sb.SoarBridge(self.soar_base, "wrong", wait_seconds=1)
         with self.assertRaises(sb.SoarError):

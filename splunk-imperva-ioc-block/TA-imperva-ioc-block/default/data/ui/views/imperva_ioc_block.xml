@@ -7,8 +7,6 @@
     <set token="waf_q">*</set>
     <set token="form.waf_q">*</set>
     <set token="ex_refresh">init</set>
-    <set token="ex_desc">-</set>
-    <set token="form.ex_desc">-</set>
     <set token="ioc_range">-24h@h</set>
     <set token="form.ioc_range">-24h@h</set>
     <set token="ioc_range_label">Last 24 hours</set>
@@ -89,7 +87,6 @@
 | stats count AS notable_count values(ioc_rule) AS rule_name values(ioc_incident) AS incident_no max(_sev_rank) AS _sev_rank values(status_label) AS status values(threat_collection) AS threat_collection values(dest) AS dest min(_time) AS first_seen max(_time) AS last_seen BY ioc_ip
 | rename ioc_ip AS src
 | eval count=notable_count
-| where NOT ([| impervaexclude | append [| makeresults | eval cidr="255.255.255.255/32"] | eval q="cidrmatch(\"".cidr."\", src)" | stats values(q) AS q | eval search=mvjoin(q, " OR ") | fields search])
 | eval _ex_refresh=$ex_refresh|s$
 | lookup imperva_ioc_dismissed ip AS src OUTPUT dismissed_at
 | where isnull(dismissed_at) OR last_seen > tonumber(dismissed_at)
@@ -788,132 +785,6 @@
         <option name="drilldown">cell</option>
         <drilldown>
           <unset token="dis_restore"></unset>
-        </drilldown>
-      </table>
-    </panel>
-  </row>
-
-  <!-- ================= Exclude list: never shown as attackers, never blocked ================= -->
-  <row>
-    <panel>
-      <title>Excluded IPs - never shown as attackers and never blocked (Splunk + SOAR)</title>
-      <input type="text" token="ex_cidr" searchWhenChanged="true">
-        <label>➕ IP or CIDR to exclude (e.g. 1.2.3.0/24)</label>
-      </input>
-      <input type="text" token="ex_desc" searchWhenChanged="true">
-        <label>Description (owner / reason)</label>
-        <default>-</default>
-      </input>
-      <table depends="$ex_cidr$">
-        <title>Confirm: add $ex_cidr$ to the exclude list</title>
-        <search>
-          <query>| makeresults
-| eval Add="➕ ADD TO EXCLUDE LIST", Cancel="✖ Cancel", cidr=$ex_cidr|s$, description=$ex_desc|s$
-| table Add Cancel cidr description</query>
-          <earliest>-1m</earliest>
-          <latest>now</latest>
-        </search>
-        <option name="count">1</option>
-        <option name="drilldown">cell</option>
-        <format type="color" field="Add">
-          <colorPalette type="map">{"➕ ADD TO EXCLUDE LIST":#5A9BD5}</colorPalette>
-        </format>
-        <drilldown>
-          <condition field="Add">
-            <set token="ex_add">$row.cidr$</set>
-            <set token="ex_add_desc">$row.description$</set>
-            <unset token="form.ex_cidr"></unset>
-            <unset token="ex_cidr"></unset>
-          </condition>
-          <condition field="Cancel">
-            <unset token="form.ex_cidr"></unset>
-            <unset token="ex_cidr"></unset>
-          </condition>
-          <condition></condition>
-        </drilldown>
-      </table>
-      <table depends="$ex_add$">
-        <title>Add result: $ex_add$ (click to dismiss)</title>
-        <search>
-          <query>| impervaexclude action=add cidr=$ex_add|s$ description=$ex_add_desc|s$
-| table _time cidr status detail description user</query>
-          <earliest>-1m</earliest>
-          <latest>now</latest>
-          <done>
-            <set token="ex_refresh">$job.sid$</set>
-          </done>
-        </search>
-        <option name="count">1</option>
-        <option name="drilldown">cell</option>
-        <drilldown>
-          <unset token="ex_add"></unset>
-        </drilldown>
-      </table>
-      <table>
-        <title>Exclude list</title>
-        <search>
-          <query>| impervaexclude
-| eval _r=$ex_refresh|s$
-| eval Remove=if(source="dashboard", "🗑 Remove", "(imperva.conf)")
-| eval added=if(isnum(added_at), strftime(added_at, "%Y-%m-%d %H:%M:%S"), "-")
-| table Remove cidr description source added_by added</query>
-          <earliest>-1m</earliest>
-          <latest>now</latest>
-        </search>
-        <option name="count">20</option>
-        <option name="wrap">true</option>
-        <option name="drilldown">cell</option>
-        <format type="color" field="Remove">
-          <colorPalette type="map">{"🗑 Remove":#DC4E41}</colorPalette>
-        </format>
-        <drilldown>
-          <condition match="&quot;$click.name2$&quot;==&quot;Remove&quot; AND &quot;$row.Remove$&quot;==&quot;🗑 Remove&quot;">
-            <set token="ex_rm">$row.cidr$</set>
-            <set token="ex_rm_desc">$row.description$</set>
-          </condition>
-          <condition></condition>
-        </drilldown>
-      </table>
-      <table depends="$ex_rm$">
-        <title>Confirm: remove $ex_rm$ from the exclude list (it can then be shown and blocked again)</title>
-        <search>
-          <query>| makeresults
-| eval Confirm="🗑 CONFIRM REMOVE", Cancel="✖ Cancel", cidr=$ex_rm|s$, description=$ex_rm_desc|s$
-| table Confirm Cancel cidr description</query>
-          <earliest>-1m</earliest>
-          <latest>now</latest>
-        </search>
-        <option name="count">1</option>
-        <option name="drilldown">cell</option>
-        <format type="color" field="Confirm">
-          <colorPalette type="map">{"🗑 CONFIRM REMOVE":#DC4E41}</colorPalette>
-        </format>
-        <drilldown>
-          <condition field="Confirm">
-            <set token="ex_rm_exec">$row.cidr$</set>
-            <unset token="ex_rm"></unset>
-          </condition>
-          <condition field="Cancel">
-            <unset token="ex_rm"></unset>
-          </condition>
-          <condition></condition>
-        </drilldown>
-      </table>
-      <table depends="$ex_rm_exec$">
-        <title>Remove result: $ex_rm_exec$ (click to dismiss)</title>
-        <search>
-          <query>| impervaexclude action=remove cidr=$ex_rm_exec|s$ reason="removed from dashboard"
-| table _time cidr status detail user</query>
-          <earliest>-1m</earliest>
-          <latest>now</latest>
-          <done>
-            <set token="ex_refresh">$job.sid$</set>
-          </done>
-        </search>
-        <option name="count">1</option>
-        <option name="drilldown">cell</option>
-        <drilldown>
-          <unset token="ex_rm_exec"></unset>
         </drilldown>
       </table>
     </panel>

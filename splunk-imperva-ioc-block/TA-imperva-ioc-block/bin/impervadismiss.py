@@ -3,7 +3,7 @@ Splunk generating command: impervadismiss
 
 "Not block" decisions from the dashboard. A dismissed IP is hidden from the
 detected-IOC table until it is detected again after the dismissal (then it
-shows up again). Unlike the exclude list it can still be blocked later.
+shows up again). It can still be blocked later.
 
 Usage:
     | impervadismiss                                     (= action=list)

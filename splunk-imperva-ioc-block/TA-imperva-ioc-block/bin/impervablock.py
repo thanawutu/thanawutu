@@ -37,9 +37,10 @@ import splunk.Intersplunk as si  # noqa: E402
 import imperva_lib as il         # noqa: E402
 from backend import get_backend   # noqa: E402
 from soar_bridge import SoarError  # noqa: E402
-from splunk_helpers import (exclude_networks, get_logger, is_true, kv_get,  # noqa: E402
+from splunk_helpers import (get_logger, is_true, kv_get,  # noqa: E402
                             kv_upsert, load_conf_stanza, load_credential, parse_options,
-                            registry_key)
+                            protected_networks, registry_key)
+
 
 def clean(v):
     return (v or "").replace('"', "'").replace("\n", " ").strip()
@@ -84,12 +85,8 @@ def main():
             raise il.ImpervaError("%d IPs requested, max_ips_per_action is %d"
                                   % (len(candidates), max_ips))
 
-        # never block: imperva.conf protected_networks + dashboard exclude list (KV store)
-        try:
-            protected = [c for c, _d, _s in exclude_networks(session_key, conf)]
-        except Exception as e:  # noqa: BLE001 - fall back to the conf list, never to "no protection"
-            log.warning("cannot read exclude list, using protected_networks only: %s", e)
-            protected = il.parse_ip_list(conf.get("protected_networks", ""))
+        # never block: imperva.conf protected_networks (also sent to SOAR, which adds its own list)
+        protected = protected_networks(conf)
         if action == "block":
             accepted, rejected = il.validate_ips(
                 candidates, protected,
