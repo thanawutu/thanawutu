@@ -25,8 +25,11 @@ access = read : [ admin, imperva_blocker ], write : [ admin ]
 export = system
 
 # KV store registry: analysts must be able to write descriptions
+# export = system: usable from any app (Search, ES, other dashboards); still only admin/imperva_blocker
 [collections/imperva_block_registry]
 access = read : [ admin, imperva_blocker ], write : [ admin, imperva_blocker ]
+export = system
 
 [transforms/imperva_block_registry]
 access = read : [ admin, imperva_blocker ], write : [ admin, imperva_blocker ]
+export = system

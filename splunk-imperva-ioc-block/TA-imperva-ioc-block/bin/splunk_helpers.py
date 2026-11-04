@@ -84,3 +84,33 @@ def kv_upsert(session_key, docs):
         return
     rest.simpleRequest(_kv_path("/batch_save"), sessionKey=session_key, method="POST",
                        jsonargs=json.dumps(docs), raiseAllErrors=True)
+
+
+# --------------------------------------------------------------------------- #
+# Option parsing for legacy (Intersplunk) commands
+# --------------------------------------------------------------------------- #
+def parse_options(argv, known):
+    """
+    Robust key=value parsing for legacy search commands.
+
+    splunk.Intersplunk.getKeywordsAndOptions() cuts quoted values that contain
+    spaces (comment="setup test from Splunk" -> "setup"). Splunk hands the
+    command the words separately, so we re-join argv, honour quotes with shlex,
+    and append any word that is not a known `key=` to the previous option's value.
+    """
+    import re
+    import shlex
+    raw = " ".join(argv)
+    try:
+        toks = shlex.split(raw)
+    except ValueError:          # unbalanced quote, e.g. an apostrophe in a comment
+        toks = [t.strip('"') for t in raw.split()]
+    opts, last = {}, None
+    for t in toks:
+        m = re.match(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$", t, re.S)
+        if m and m.group(1) in known:
+            last = m.group(1)
+            opts[last] = m.group(2)
+        elif last is not None:
+            opts[last] = (opts[last] + " " + t).strip()
+    return opts

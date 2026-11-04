@@ -32,7 +32,7 @@ import imperva_lib as il         # noqa: E402
 import vt_lib as vt              # noqa: E402
 from backend import get_backend, get_soar_bridge   # noqa: E402
 from splunk_helpers import (get_logger, is_true, load_conf_stanza,  # noqa: E402
-                            load_credential, splunk_home)
+                            load_credential, parse_options, splunk_home)
 
 VT_REALM = "virustotal"
 
@@ -59,7 +59,7 @@ def in_networks(ip, networks):
 
 def main():
     results, _dummy, settings = si.getOrganizedResults()
-    _kw, opts = si.getKeywordsAndOptions()
+    opts = parse_options(sys.argv[1:], ("field", "count_field", "check_waf"))
     session_key = settings.get("sessionKey")
     log = get_logger("imperva_vtcheck", "imperva_vtcheck.log")
     field = opts.get("field", "src")

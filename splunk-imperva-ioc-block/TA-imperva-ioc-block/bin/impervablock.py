@@ -38,7 +38,7 @@ import imperva_lib as il         # noqa: E402
 from backend import get_backend   # noqa: E402
 from soar_bridge import SoarError  # noqa: E402
 from splunk_helpers import (get_logger, is_true, kv_get, kv_upsert,  # noqa: E402
-                            load_conf_stanza, load_credential, registry_key)
+                            load_conf_stanza, load_credential, parse_options, registry_key)
 
 def clean(v):
     return (v or "").replace('"', "'").replace("\n", " ").strip()
@@ -46,7 +46,8 @@ def clean(v):
 
 def main():
     results, _dummy, settings = si.getOrganizedResults()
-    _kw, opts = si.getKeywordsAndOptions()
+    opts = parse_options(sys.argv[1:], ("action", "ip", "field", "site_id", "policy_id", "dry_run",
+                                        "reason", "threat_actor", "incident_no", "comment"))
     session_key = settings.get("sessionKey")
     user = settings.get("owner", "unknown")
     log = get_logger("imperva_ioc_block", "imperva_ioc_block.log")
