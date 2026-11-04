@@ -77,6 +77,8 @@
            correlation searches), plus src. Private ranges and the Exclude list are removed. -->
       <search id="attack_ips">
         <query><![CDATA[`imperva_ioc_notables`
+| eval _finding_guid=lower(coalesce(source_guid, mvindex(split(source_event_id, "@@"), 0)))
+| join type=left max=1 _finding_guid [| impervanotes | rename finding_guid AS _finding_guid | fields _finding_guid ithm]
 | eval _tm_ip=if(match(lower(coalesce(threat_match_field, "")), "ip|src|dest|addr"), threat_match_value, null())
 | eval ioc_ip=mvdedup(mvappend(_tm_ip, coalesce(src, src_ip)))
 | mvexpand ioc_ip

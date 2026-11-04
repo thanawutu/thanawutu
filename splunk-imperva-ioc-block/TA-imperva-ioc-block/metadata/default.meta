@@ -55,3 +55,7 @@ export = system
 [commands/impervapolicycheck]
 access = read : [ admin, imperva_blocker ], write : [ admin ]
 export = system
+
+[commands/impervanotes]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = system
