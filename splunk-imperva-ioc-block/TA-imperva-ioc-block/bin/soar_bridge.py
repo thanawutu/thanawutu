@@ -122,8 +122,9 @@ class SoarBridge(object):
                 return run.get("message") or "playbook run %s failed" % run.get("id")
         return None
 
-    def wait_result(self, cid, rid):
-        deadline = self._now() + self.wait_seconds
+    def wait_result(self, cid, rid, wait_seconds=None):
+        wait_seconds = self.wait_seconds if wait_seconds is None else wait_seconds
+        deadline = self._now() + wait_seconds
         while True:
             cef = self._find_result(cid, rid)
             if cef is not None:
@@ -138,7 +139,7 @@ class SoarBridge(object):
                 raise SoarError("SOAR playbook failed on container %s: %s" % (cid, failed))
             if self._now() >= deadline:
                 raise SoarError("No result from SOAR within %ss (container %s). Is the playbook "
-                                "active for label '%s'?" % (self.wait_seconds, cid, self.label))
+                                "active for label '%s'?" % (wait_seconds, cid, self.label))
             self._sleep(self.poll_interval)
 
     def delete_container(self, cid):
@@ -148,7 +149,8 @@ class SoarBridge(object):
             pass  # cleanup is best effort
 
     # ------------------------------------------------------------------ API
-    def call(self, action, ips=(), policy_ids=(), dry_run=False, meta=None, requested_by="-"):
+    def call(self, action, ips=(), policy_ids=(), dry_run=False, meta=None, requested_by="-",
+             wait_seconds=None):
         meta = meta or {}
         req = {
             "request_id": uuid.uuid4().hex,
@@ -165,9 +167,10 @@ class SoarBridge(object):
         }
         cid = self.submit(req)
         try:
-            rows = self.wait_result(cid, req["request_id"])
+            rows = self.wait_result(cid, req["request_id"], wait_seconds)
         finally:
-            if action == "list" and self.delete_list_containers:
+            # list / vtcheck are read-only and frequent: do not keep their containers
+            if action in ("list", "vtcheck") and self.delete_list_containers:
                 self.delete_container(cid)
         for r in rows:
             r.setdefault("soar_container", cid)
@@ -178,3 +181,7 @@ class SoarBridge(object):
 
     def list_blocked(self, policy_ids):
         return self.call("list", (), policy_ids)
+
+    def vt_lookup(self, ips, wait_seconds=None):
+        """VirusTotal lookups done by SOAR. Returns rows {ip, vt_status, vt_malicious, ...}."""
+        return self.call("vtcheck", ips, wait_seconds=wait_seconds)

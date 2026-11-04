@@ -173,3 +173,52 @@ def suggest(vt, attack_count=0, protected=False, thresholds=None):
     if high_volume:
         return "REVIEW", "VT clean but very high attack volume (%d events)" % count
     return "MONITOR", "VT clean (0 malicious), moderate volume (%d events)" % count
+
+
+# --------------------------------------------------------------------------- #
+# Batch lookup with rate limiting - shared by the Splunk command (direct mode)
+# and the SOAR playbook (vt via SOAR).
+# --------------------------------------------------------------------------- #
+def _is_public(ip):
+    try:
+        return ipaddress.ip_address(ip).is_global
+    except ValueError:
+        return False
+
+
+def lookup_many(client, ips, rpm=4, max_lookups=10, _sleep=time.sleep, _now=time.time):
+    """
+    Look up each IP once, at most `max_lookups` API calls, spaced 60/rpm seconds.
+    Returns {ip: info}; info["vt_status"] is ok | not_found | private_ip | error |
+    rate_limited | not_checked (max_lookups_per_run).
+    Stops calling the API after the first HTTP 429.
+    """
+    out, calls, last, limited = {}, 0, None, False
+    gap = 60.0 / max(1, int(rpm))
+    for ip in ips:
+        if ip in out:
+            continue
+        base = {"vt_link": VT_GUI + ip}
+        if not _is_public(ip):
+            out[ip] = dict(base, vt_status="private_ip")
+            continue
+        if limited:
+            out[ip] = dict(base, vt_status="rate_limited")
+            continue
+        if calls >= max_lookups:
+            out[ip] = dict(base, vt_status="not_checked (max_lookups_per_run)")
+            continue
+        if last is not None:
+            wait = gap - (_now() - last)
+            if wait > 0:
+                _sleep(wait)
+        last = _now()
+        calls += 1
+        try:
+            out[ip] = client.lookup_ip(ip)
+        except VTRateLimited:
+            limited = True
+            out[ip] = dict(base, vt_status="rate_limited")
+        except VTError as e:
+            out[ip] = dict(base, vt_status="error", vt_error=str(e))
+    return out

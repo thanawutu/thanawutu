@@ -20,6 +20,7 @@ verify_ssl = <boolean>
 timeout = <integer>
 
 [virustotal]
+vt_via = auto|direct|soar
 api_base_url = <string>
 requests_per_minute = <integer>
 max_lookups_per_run = <integer>

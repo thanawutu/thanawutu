@@ -9,6 +9,9 @@ Splunk dashboard / SPL ──HTTPS──▶ Splunk SOAR ──HTTPS──▶ Imp
       /artifacts for the result        (rows as JSON), closes container
 ```
 The dashboard, buttons, verification, KV store registry and audit log all work as in direct mode.
+**VirusTotal lookups also go through SOAR** (`vt_via = auto`), so the Search Head needs no internet
+access at all. SOAR checks VirusTotal for the `vtcheck` command and returns the verdicts.
+Splunk caches them for 24h, so the next dashboard load costs no VirusTotal quota.
 Each block/unblock leaves a **closed container on SOAR** as an extra audit trail. The short-lived
 containers created by the live list are deleted after they are read (`soar_delete_list_containers`).
 
@@ -33,6 +36,9 @@ containers created by the live list are deleted after they are read (`soar_delet
    | `IMPERVA_PROTECTED_NETWORKS` | own egress, partner and scanner IPs (never blocked) |
    | `IMPERVA_MAX_IPS` | `50` |
    | `IMPERVA_CAID` | only if the key belongs to a parent account |
+   | `VT_API_KEY` | VirusTotal API key (secret). SOAR does the VirusTotal lookups too |
+   | `VT_REQUESTS_PER_MINUTE` | `4` for the public API; raise it for a premium key |
+   | `VT_MAX_LOOKUPS` | `10` new lookups per request |
 
 5. **Playbook**: Playbooks → **+ Playbook** → Automation.
    1. Name it `imperva_ioc_block`. Set *Operates on* to label `imperva_ioc_block`, and use Python 3.
@@ -76,6 +82,26 @@ containers created by the live list are deleted after they are read (`soar_delet
    | `\| makeresults \| impervablock action=block ip="<TEST_IP>" incident_no="TEST-001"` | `blocked`, `verified_in_waf=yes`, `soar_container=<id>` |
    | `\| makeresults \| impervablock action=unblock ip="<TEST_IP>" reason="test"` | `unblocked`, `verified_in_waf=removed` |
 
+## Relation to `| sendalert sendtophantom` (Splunk App for SOAR Export)
+`sendtophantom` already sends data from the Search Head to SOAR over the same REST API, so the network path exists.
+- Use the same SOAR server as the Export app's *"Splunk - SOAR"* entry for `soar_url`. Its automation user
+  token can be reused, but a dedicated one is better.
+- `sendalert` is fire-and-forget. `impervablock` waits for the playbook result, so the dashboard can show
+  `verified_in_waf` and save the description.
+
+The playbook **also accepts containers created by `sendalert sendtophantom`**, or by a detection rule's
+*Send to SOAR* adaptive response. Use label `imperva_ioc_block` and give the event these fields:
+`imperva_action` (`block`/`unblock`), and `src` (or `ip`/`ips`/`src_ip`). Optional fields: `threat_actor`,
+`incident_no`, `comment`. Example, in the same style as your AD dashboard:
+```
+| makeresults
+| eval imperva_action="block", src="185.220.101.47", threat_actor="Unknown", incident_no="INC-2026-0400", comment="from detection rule"
+| sendalert sendtophantom param.phantom_server="Splunk - SOAR" param.label="imperva_ioc_block" param.severity="low" param.sensitivity="amber" param.name="Imperva IOC block from Splunk"
+```
+SOAR applies the same allow-list and IP checks, then writes the result into the container.
+These blocks appear in the dashboard's live list as *"On WAF (blocked outside Splunk)"*, because
+`sendalert` does not write the Splunk KV store registry. The details are in the SOAR container.
+
 ## Troubleshooting
 | Message | Fix |
 |---|---|
@@ -85,3 +111,5 @@ containers created by the live list are deleted after they are read (`soar_delet
 | `SOAR playbook failed ...` | Open the container on SOAR and read the playbook debug log |
 | `policy ids [...] are not allowed on SOAR` | Add the policy to `IMPERVA_POLICY_IDS` on SOAR |
 | `HTTP 401 ... /policies/v2` | Imperva key in the SOAR environment variables is wrong |
+| `vt_status=error`, `VT_API_KEY is not set on SOAR` | Add `VT_API_KEY` to the SOAR environment variables |
+| `vt_status=rate_limited` | VirusTotal quota used up. Lower `max_lookups_per_run` or use a premium key |

@@ -23,7 +23,6 @@ Settings: imperva.conf [virustotal]. API key: storage/passwords realm "virustota
 import ipaddress
 import os
 import sys
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -31,7 +30,7 @@ import splunk.Intersplunk as si  # noqa: E402
 
 import imperva_lib as il         # noqa: E402
 import vt_lib as vt              # noqa: E402
-from backend import get_backend   # noqa: E402
+from backend import get_backend, get_soar_bridge   # noqa: E402
 from splunk_helpers import (get_logger, is_true, load_conf_stanza,  # noqa: E402
                             load_credential, splunk_home)
 
@@ -69,12 +68,11 @@ def main():
     try:
         vconf = load_conf_stanza(session_key, "imperva", "virustotal")
         iconf = load_conf_stanza(session_key, "imperva", "settings")
-        _u, api_key = load_credential(session_key, VT_REALM)
+        # vt_via: auto (= soar when api_mode = soar) | direct | soar
+        vt_via = (vconf.get("vt_via") or "auto").strip().lower()
+        if vt_via == "auto":
+            vt_via = "soar" if (iconf.get("api_mode") or "").strip().lower() == "soar" else "direct"
 
-        client = vt.VTClient(api_key, base_url=vconf.get("api_base_url", vt.VT_BASE),
-                             timeout=int(vconf.get("timeout", 30)),
-                             proxy=vconf.get("proxy") or iconf.get("proxy") or None,
-                             verify_ssl=is_true(vconf.get("verify_ssl", "true")))
         cache = vt.VTCache(os.path.join(splunk_home(), "var", "run", "splunk", "ta_imperva_vt_cache.json"),
                            ttl_seconds=int(float(vconf.get("cache_ttl_hours", 24)) * 3600))
         rpm = max(1, int(vconf.get("requests_per_minute", 4)))
@@ -91,38 +89,57 @@ def main():
             except Exception as e:  # noqa: BLE001 - enrichment is best effort
                 log.warning("cannot read Imperva blacklist: %s", e)
 
-        lookups_done, last_call, rate_limited = 0, 0.0, False
+        # ---- pass 1: which IPs need a fresh VirusTotal lookup -----------------
+        todo, cached_info = [], {}
         for r in results:
             ip = (r.get(field) or "").strip()
-            info = {"vt_status": "skipped", "vt_link": vt.VT_GUI + ip}
-            r["vt_cached"] = "no"
-            cached = cache.get(ip)
-            if cached is not None:
-                info, r["vt_cached"] = dict(cached), "yes"
-            elif not ip or ip == "-":
-                info["vt_status"] = "no_ip"
-            elif rate_limited:
-                info["vt_status"] = "rate_limited"
-            elif lookups_done >= max_lookups:
-                info["vt_status"] = "not_checked (max_lookups_per_run)"
+            if not ip or ip == "-" or ip in cached_info or ip in todo:
+                continue
+            hit = cache.get(ip)
+            if hit is not None:
+                cached_info[ip] = hit
             else:
-                try:
-                    if not vt_is_public(ip):
-                        info["vt_status"] = "private_ip"
-                    else:
-                        wait = 60.0 / rpm - (time.time() - last_call)
-                        if last_call and wait > 0:
-                            time.sleep(wait)
-                        last_call = time.time()
-                        info = client.lookup_ip(ip)
-                        lookups_done += 1
-                        cache.put(ip, info)
-                except vt.VTRateLimited as e:
-                    rate_limited, info["vt_status"] = True, "rate_limited"
-                    log.warning("ip=%s %s", ip, e)
-                except vt.VTError as e:
-                    info["vt_status"] = "error"
-                    log.warning("ip=%s %s", ip, e)
+                todo.append(ip)
+
+        # ---- lookups: directly from the Search Head, or through SOAR ----------
+        fresh = {}
+        if todo:
+            try:
+                if vt_via == "soar":
+                    bridge = get_soar_bridge(iconf, load_credential, session_key)
+                    wait = max(bridge.wait_seconds, int(min(len(todo), max_lookups) * 60.0 / rpm) + 45)
+                    for row in bridge.vt_lookup(todo, wait_seconds=wait):
+                        ip = row.pop("ip", None)
+                        row.pop("soar_container", None)
+                        if ip:
+                            fresh[ip] = row
+                else:
+                    _u, api_key = load_credential(session_key, VT_REALM)
+                    client = vt.VTClient(api_key, base_url=vconf.get("api_base_url", vt.VT_BASE),
+                                         timeout=int(vconf.get("timeout", 30)),
+                                         proxy=vconf.get("proxy") or iconf.get("proxy") or None,
+                                         verify_ssl=is_true(vconf.get("verify_ssl", "true")))
+                    fresh = vt.lookup_many(client, todo, rpm=rpm, max_lookups=max_lookups)
+            except Exception as e:  # noqa: BLE001 - show the error per row, keep the table
+                log.warning("VirusTotal lookup via %s failed: %s", vt_via, e)
+                fresh = {ip: {"vt_status": "error", "vt_error": str(e), "vt_link": vt.VT_GUI + ip}
+                         for ip in todo}
+            for ip, info in fresh.items():
+                if info.get("vt_status") in ("ok", "not_found"):
+                    cache.put(ip, info)
+        lookups_done = sum(1 for i in fresh.values() if i.get("vt_status") in ("ok", "not_found", "error"))
+        rate_limited = any(i.get("vt_status") == "rate_limited" for i in fresh.values())
+
+        # ---- pass 2: enrich rows + suggestion ----------------------------------
+        for r in results:
+            ip = (r.get(field) or "").strip()
+            if ip in cached_info:
+                info, r["vt_cached"] = dict(cached_info[ip]), "yes"
+            else:
+                info = fresh.get(ip) or {"vt_status": "no_ip" if not ip or ip == "-" else "skipped",
+                                         "vt_link": vt.VT_GUI + ip}
+                r["vt_cached"] = "no"
+            r["vt_via"] = "cache" if r["vt_cached"] == "yes" else vt_via
 
             r.update({k: str(v) for k, v in info.items()})
             r["waf_blocked"] = ("yes" if ip in blocked else "no") if waf_ok else "unknown"
@@ -136,18 +153,11 @@ def main():
             cache.save()
         except (IOError, OSError) as e:
             log.warning("cannot save VT cache: %s", e)
-        log.info("vtcheck rows=%d api_lookups=%d rate_limited=%s", len(results), lookups_done, rate_limited)
+        log.info("vtcheck via=%s rows=%d api_lookups=%d rate_limited=%s", vt_via, len(results), lookups_done, rate_limited)
         si.outputResults(results)
     except Exception as e:  # noqa: BLE001
         log.error("vtcheck failed: %s", e)
         si.generateErrorResults("vtcheck: %s" % e)
-
-
-def vt_is_public(ip):
-    try:
-        return ipaddress.ip_address(ip).is_global
-    except ValueError:
-        return False
 
 
 def _int(v):

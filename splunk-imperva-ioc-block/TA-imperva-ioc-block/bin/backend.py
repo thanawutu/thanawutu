@@ -44,19 +44,24 @@ class SoarBackend(object):
         return self.bridge.list_blocked(self.targets)
 
 
+def get_soar_bridge(conf, load_credential, session_key):
+    """SoarBridge from imperva.conf [settings] + token in storage/passwords realm splunk_soar."""
+    _user, token = load_credential(session_key, SOAR_REALM)
+    return sb.SoarBridge(
+        conf.get("soar_url", ""), token,
+        label=conf.get("soar_label") or "imperva_ioc_block",
+        verify_ssl=_true(conf.get("soar_verify_ssl", "true")),
+        proxy=conf.get("soar_proxy") or None,
+        timeout=int(conf.get("timeout", 30)),
+        wait_seconds=int(conf.get("soar_wait_seconds", 90)),
+        delete_list_containers=_true(conf.get("soar_delete_list_containers", "true")))
+
+
 def get_backend(conf, load_credential, session_key, override_ids=None):
     """load_credential(session_key, realm) -> (username, password)"""
     mode = (conf.get("api_mode") or "v2_policy").strip().lower()
     if mode == "soar":
-        _user, token = load_credential(session_key, SOAR_REALM)
-        bridge = sb.SoarBridge(
-            conf.get("soar_url", ""), token,
-            label=conf.get("soar_label") or "imperva_ioc_block",
-            verify_ssl=_true(conf.get("soar_verify_ssl", "true")),
-            proxy=conf.get("soar_proxy") or None,
-            timeout=int(conf.get("timeout", 30)),
-            wait_seconds=int(conf.get("soar_wait_seconds", 90)),
-            delete_list_containers=_true(conf.get("soar_delete_list_containers", "true")))
+        bridge = get_soar_bridge(conf, load_credential, session_key)
         targets = il.parse_ip_list(override_ids or conf.get("policy_ids", ""))
         if not targets:
             raise il.ImpervaError("No policy_ids configured in imperva.conf [settings]")

@@ -1,4 +1,4 @@
-# GENERATED FILE - do not edit. Source: imperva_lib.py + imperva_soar_handler.py
+# GENERATED FILE - do not edit. Source: imperva_lib.py + vt_lib.py + imperva_soar_handler.py
 # Rebuild with: python3 soar/build_global_code.py
 # Paste ALL of this into the SOAR playbook > Global Custom Code.
 
@@ -480,6 +480,235 @@ def list_targets(client, targets):
 
 
 # ==========================================================================
+# vt_lib
+# ==========================================================================
+"""
+VirusTotal v3 IP reputation lookup + block suggestion logic.
+No Splunk imports here (unit-testable).
+
+API: GET https://www.virustotal.com/api/v3/ip_addresses/{ip}   header: x-apikey
+Free (public) API limits: 4 requests/minute, 500/day  -> results are cached on disk.
+"""
+
+import ipaddress
+import json
+import os
+import ssl
+import tempfile
+import time
+import urllib.error
+import urllib.request
+
+VT_BASE = "https://www.virustotal.com/api/v3"
+VT_GUI = "https://www.virustotal.com/gui/ip-address/"
+
+
+class VTError(Exception):
+    pass
+
+
+class VTRateLimited(VTError):
+    pass
+
+
+def _opener(proxy=None, verify_ssl=True):
+    handlers = []
+    if proxy:
+        handlers.append(urllib.request.ProxyHandler({"http": proxy, "https": proxy}))
+    ctx = ssl.create_default_context()
+    if not verify_ssl:
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+    handlers.append(urllib.request.HTTPSHandler(context=ctx))
+    return urllib.request.build_opener(*handlers)
+
+
+def parse_vt_response(ip, js):
+    """Flatten the VT JSON for one IP into Splunk-friendly fields."""
+    a = (js.get("data") or {}).get("attributes") or {}
+    st = a.get("last_analysis_stats") or {}
+    total = sum(int(v or 0) for v in st.values())
+    return {
+        "vt_status": "ok",
+        "vt_malicious": int(st.get("malicious", 0) or 0),
+        "vt_suspicious": int(st.get("suspicious", 0) or 0),
+        "vt_harmless": int(st.get("harmless", 0) or 0),
+        "vt_undetected": int(st.get("undetected", 0) or 0),
+        "vt_engines": total,
+        "vt_reputation": int(a.get("reputation", 0) or 0),
+        "vt_country": a.get("country") or "-",
+        "vt_continent": a.get("continent") or "-",
+        "vt_asn": a.get("asn") or "-",
+        "vt_as_owner": a.get("as_owner") or "-",
+        "vt_network": a.get("network") or "-",
+        "vt_last_analysis": a.get("last_analysis_date") or 0,
+        "vt_link": VT_GUI + ip,
+    }
+
+
+class VTClient(object):
+    def __init__(self, api_key, base_url=VT_BASE, timeout=30, proxy=None, verify_ssl=True):
+        if not api_key:
+            raise VTError("VirusTotal API key not configured")
+        self.api_key = api_key
+        self.base_url = (base_url or VT_BASE).rstrip("/")
+        self.timeout = timeout
+        self._opener = _opener(proxy, verify_ssl)
+
+    def lookup_ip(self, ip):
+        req = urllib.request.Request("%s/ip_addresses/%s" % (self.base_url, ip), method="GET")
+        req.add_header("x-apikey", self.api_key)
+        req.add_header("Accept", "application/json")
+        try:
+            with self._opener.open(req, timeout=self.timeout) as resp:
+                js = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            if e.code == 429:
+                raise VTRateLimited("VirusTotal quota exceeded (HTTP 429)")
+            if e.code == 404:
+                r = {"vt_status": "not_found", "vt_link": VT_GUI + ip}
+                return r
+            raise VTError("VirusTotal HTTP %s: %s" % (e.code, e.read()[:200]))
+        except urllib.error.URLError as e:
+            raise VTError("Cannot reach VirusTotal: %s" % e.reason)
+        return parse_vt_response(ip, js)
+
+
+# --------------------------------------------------------------------------- #
+# Disk cache  {ip: {"ts": epoch, "data": {...}}}
+# --------------------------------------------------------------------------- #
+class VTCache(object):
+    def __init__(self, path, ttl_seconds=86400):
+        self.path = path
+        self.ttl = ttl_seconds
+        self.data = {}
+        try:
+            with open(path) as f:
+                self.data = json.load(f)
+        except (IOError, OSError, ValueError):
+            self.data = {}
+
+    def get(self, ip, now=None):
+        e = self.data.get(ip)
+        now = now or time.time()
+        if e and now - e.get("ts", 0) < self.ttl:
+            return e["data"]
+        return None
+
+    def put(self, ip, data, now=None):
+        self.data[ip] = {"ts": now or time.time(), "data": data}
+
+    def save(self):
+        d = os.path.dirname(self.path) or "."
+        fd, tmp = tempfile.mkstemp(dir=d, prefix=".vtcache")
+        with os.fdopen(fd, "w") as f:
+            json.dump(self.data, f)
+        os.replace(tmp, self.path)
+
+
+# --------------------------------------------------------------------------- #
+# Suggestion
+# --------------------------------------------------------------------------- #
+DEFAULT_THRESHOLDS = {
+    "block_malicious": 3,       # >= N engines say malicious      -> BLOCK
+    "review_malicious": 1,      # >= N engines malicious          -> REVIEW (or BLOCK if high volume)
+    "review_suspicious": 2,     # >= N engines suspicious         -> REVIEW
+    "high_volume_count": 1000,  # WAF attack events in time range -> treat as strong signal
+}
+
+
+def suggest(vt, attack_count=0, protected=False, thresholds=None):
+    """
+    Return (suggestion, reason). suggestion is one of:
+      BLOCK          strong evidence - block it
+      REVIEW         some evidence - analyst should decide
+      MONITOR        VT clean and moderate volume - do not block yet
+      DO_NOT_BLOCK   private / protected / reserved address
+    """
+    t = dict(DEFAULT_THRESHOLDS)
+    t.update(thresholds or {})
+    ip = vt.get("ip")
+    try:
+        if ip and not ipaddress.ip_address(ip).is_global:
+            return "DO_NOT_BLOCK", "non-public address"
+    except ValueError:
+        return "DO_NOT_BLOCK", "invalid IP"
+    if protected:
+        return "DO_NOT_BLOCK", "in protected_networks"
+
+    count = int(attack_count or 0)
+    high_volume = count >= t["high_volume_count"]
+    status = vt.get("vt_status", "ok")
+    if status != "ok":
+        if high_volume:
+            return "BLOCK", "VT %s, but very high attack volume (%d events)" % (status, count)
+        return "REVIEW", "VT %s - verify manually" % status
+
+    mal = int(vt.get("vt_malicious", 0))
+    sus = int(vt.get("vt_suspicious", 0))
+    rep = int(vt.get("vt_reputation", 0))
+
+    if mal >= t["block_malicious"]:
+        return "BLOCK", "%d VT engines flag malicious" % mal
+    if mal >= t["review_malicious"] or sus >= t["review_suspicious"] or rep < 0:
+        if high_volume:
+            return "BLOCK", "VT mal=%d sus=%d rep=%d + high attack volume (%d)" % (mal, sus, rep, count)
+        return "REVIEW", "VT mal=%d sus=%d rep=%d" % (mal, sus, rep)
+    if high_volume:
+        return "REVIEW", "VT clean but very high attack volume (%d events)" % count
+    return "MONITOR", "VT clean (0 malicious), moderate volume (%d events)" % count
+
+
+# --------------------------------------------------------------------------- #
+# Batch lookup with rate limiting - shared by the Splunk command (direct mode)
+# and the SOAR playbook (vt via SOAR).
+# --------------------------------------------------------------------------- #
+def _is_public(ip):
+    try:
+        return ipaddress.ip_address(ip).is_global
+    except ValueError:
+        return False
+
+
+def lookup_many(client, ips, rpm=4, max_lookups=10, _sleep=time.sleep, _now=time.time):
+    """
+    Look up each IP once, at most `max_lookups` API calls, spaced 60/rpm seconds.
+    Returns {ip: info}; info["vt_status"] is ok | not_found | private_ip | error |
+    rate_limited | not_checked (max_lookups_per_run).
+    Stops calling the API after the first HTTP 429.
+    """
+    out, calls, last, limited = {}, 0, None, False
+    gap = 60.0 / max(1, int(rpm))
+    for ip in ips:
+        if ip in out:
+            continue
+        base = {"vt_link": VT_GUI + ip}
+        if not _is_public(ip):
+            out[ip] = dict(base, vt_status="private_ip")
+            continue
+        if limited:
+            out[ip] = dict(base, vt_status="rate_limited")
+            continue
+        if calls >= max_lookups:
+            out[ip] = dict(base, vt_status="not_checked (max_lookups_per_run)")
+            continue
+        if last is not None:
+            wait = gap - (_now() - last)
+            if wait > 0:
+                _sleep(wait)
+        last = _now()
+        calls += 1
+        try:
+            out[ip] = client.lookup_ip(ip)
+        except VTRateLimited:
+            limited = True
+            out[ip] = dict(base, vt_status="rate_limited")
+        except VTError as e:
+            out[ip] = dict(base, vt_status="error", vt_error=str(e))
+    return out
+
+
+# ==========================================================================
 # SOAR handler
 # ==========================================================================
 """
@@ -501,10 +730,14 @@ Settings come from SOAR environment variables
   IMPERVA_MAX_IPS                        optional, default 50
   IMPERVA_API_BASE                       optional, default https://api.imperva.com
   IMPERVA_CAID                           optional, sub-account id
+  VT_API_KEY                             required for VirusTotal lookups (action vtcheck)
+  VT_REQUESTS_PER_MINUTE                 optional, default 4 (public API); raise for premium
+  VT_MAX_LOOKUPS                         optional, default 10 per request
+  VT_API_BASE                            optional, default https://www.virustotal.com/api/v3
   HTTPS_PROXY                            optional, honoured automatically
 
 Do not edit soar/imperva_ioc_block_global_code.py by hand - it is generated
-by soar/build_global_code.py from this file + TA-imperva-ioc-block/bin/imperva_lib.py
+by soar/build_global_code.py from this file + TA-imperva-ioc-block/bin/imperva_lib.py + vt_lib.py
 """
 import json
 import os
@@ -513,7 +746,22 @@ REQUEST_NAME = "imperva_request"
 RESULT_NAME = "imperva_result"
 
 
-def process_request(cef, env=None, client_factory=None):
+def process_vtcheck(cef, env, vt_client_factory=None):
+    """VirusTotal lookups for Splunk's vtcheck command. Returns rows {ip, vt_status, ...}."""
+    if vt_client_factory is None:
+        key = env.get("VT_API_KEY")
+        if not key:
+            raise ImpervaError("VT_API_KEY is not set on SOAR")
+        client = VTClient(key, base_url=env.get("VT_API_BASE") or VT_BASE)
+    else:
+        client = vt_client_factory()
+    ips = parse_ip_list(cef.get("ips", ""))
+    res = lookup_many(client, ips, rpm=int(env.get("VT_REQUESTS_PER_MINUTE") or 4),
+                      max_lookups=int(env.get("VT_MAX_LOOKUPS") or 10))
+    return [dict(info, ip=ip) for ip, info in res.items()]
+
+
+def process_request(cef, env=None, client_factory=None, vt_client_factory=None):
     """
     Pure function: request cef dict -> result cef dict
       {request_id, status: ok|error, error, result_json}
@@ -522,6 +770,9 @@ def process_request(cef, env=None, client_factory=None):
     rid = cef.get("request_id", "")
     try:
         action = (cef.get("action") or "").strip().lower()
+        if action == "vtcheck":  # read-only, no Imperva policy involved
+            rows = process_vtcheck(cef, env, vt_client_factory)
+            return {"request_id": rid, "status": "ok", "error": "", "result_json": json.dumps(rows)}
         if action not in ("block", "unblock", "list"):
             raise ImpervaError("unknown action %r" % action)
 
@@ -563,6 +814,38 @@ def process_request(cef, env=None, client_factory=None):
         return {"request_id": rid, "status": "error", "error": str(e), "result_json": "[]"}
 
 
+def request_from_artifact(a):
+    """
+    Turn an artifact into a request cef, or None if it is not a request.
+      * "imperva_request" artifacts created by the Splunk app (impervablock / impervalist / vtcheck)
+      * artifacts created by `| sendalert sendtophantom` or the "Send to SOAR" adaptive response
+        of a detection rule: cef needs imperva_action (or action) = block|unblock and
+        ips / ip / src / src_ip with the address(es)
+    """
+    cef = dict(a.get("cef") or {})
+    if a.get("name") == REQUEST_NAME:
+        return cef
+    if a.get("name") == RESULT_NAME:
+        return None
+    act = str(cef.get("imperva_action") or cef.get("action") or "").strip().lower()
+    ips = cef.get("ips") or cef.get("ip") or cef.get("src") or cef.get("src_ip") or cef.get("sourceAddress")
+    if act not in ("block", "unblock") or not ips:
+        return None
+    return {
+        "request_id": cef.get("request_id") or "artifact-%s" % a.get("id"),
+        "action": act,
+        "ips": ",".join(ips) if isinstance(ips, list) else str(ips),
+        "policy_ids": cef.get("policy_ids", ""),            # empty -> all allowed policies
+        "dry_run": cef.get("dry_run", "false"),
+        "threat_actor": cef.get("threat_actor", ""),
+        "incident_no": cef.get("incident_no", ""),
+        "comment": cef.get("comment", ""),
+        "reason": cef.get("reason", ""),
+        "requested_by": cef.get("requested_by") or "splunk-sendalert",
+        "requested_from": "sendalert",
+    }
+
+
 def imperva_soar_handle(container, phantom):
     """
     Entry point called from the playbook's custom code block:
@@ -575,10 +858,12 @@ def imperva_soar_handle(container, phantom):
     answered = {(a.get("cef") or {}).get("request_id") for a in artifacts if a.get("name") == RESULT_NAME}
     handled = 0
     for a in artifacts:
-        cef = a.get("cef") or {}
-        if a.get("name") != REQUEST_NAME or cef.get("request_id") in answered:
+        cef = request_from_artifact(a)
+        if cef is None or cef.get("request_id") in answered:
             continue
+        answered.add(cef.get("request_id"))
         result = process_request(cef)
+        result["requested_from"] = cef.get("requested_from", "splunk")
         phantom.debug("imperva %s request %s -> %s %s" % (
             cef.get("action"), cef.get("request_id"), result["status"], result["error"]))
         phantom.add_artifact(container=container, raw_data={}, cef_data=result,

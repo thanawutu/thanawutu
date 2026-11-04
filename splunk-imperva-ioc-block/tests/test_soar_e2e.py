@@ -130,24 +130,56 @@ class FakeSoar(BaseHTTPRequestHandler):
         self._send(200, {"success": True})
 
 
+class FakeVirusTotal(BaseHTTPRequestHandler):
+    """GET /api/v3/ip_addresses/{ip} with header x-apikey."""
+    calls = []
+
+    def log_message(self, *a):
+        pass
+
+    def do_GET(self):
+        ip = self.path.rstrip("/").split("/")[-1]
+        FakeVirusTotal.calls.append(ip)
+        if self.headers.get("x-apikey") != "vtkey":
+            code, body = 401, {"error": {"code": "WrongCredentialsError"}}
+        elif ip == "4.4.4.4":
+            code, body = 429, {"error": {"code": "QuotaExceededError"}}
+        else:
+            mal = 12 if ip.startswith("185.") else 0
+            code, body = 200, {"data": {"attributes": {
+                "last_analysis_stats": {"malicious": mal, "suspicious": 0, "harmless": 60, "undetected": 22},
+                "reputation": -20 if mal else 0, "country": "DE", "asn": 208294, "as_owner": "Sample AS",
+                "network": ip.rsplit(".", 1)[0] + ".0/24"}}}
+        b = json.dumps(body).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(b)
+
+
 class TestSoarE2E(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         os.environ["no_proxy"] = os.environ["NO_PROXY"] = "127.0.0.1,localhost"
         cls.imp, cls.imp_base = _serve(FakeImperva)
         cls.soar, cls.soar_base = _serve(FakeSoar, threading_server=True)
+        cls.vt, cls.vt_base = _serve(FakeVirusTotal)
 
     @classmethod
     def tearDownClass(cls):
         cls.imp.shutdown()
         cls.soar.shutdown()
+        cls.vt.shutdown()
 
     def setUp(self):
         FakeImperva.store = {"1777": copy.deepcopy(POLICY)}
         FakeImperva.puts = []
         FakeSoar.store.update(containers={}, fail_playbook=False, run_playbook=True)
         self.env = {"IMPERVA_API_ID": "id1", "IMPERVA_API_KEY": "key1", "IMPERVA_POLICY_IDS": "1777",
-                    "IMPERVA_API_BASE": self.imp_base, "IMPERVA_PROTECTED_NETWORKS": "45.33.32.0/24"}
+                    "IMPERVA_API_BASE": self.imp_base, "IMPERVA_PROTECTED_NETWORKS": "45.33.32.0/24",
+                    "VT_API_KEY": "vtkey", "VT_API_BASE": self.vt_base + "/api/v3",
+                    "VT_REQUESTS_PER_MINUTE": "6000"}
+        FakeVirusTotal.calls = []
         self._old = {k: os.environ.get(k) for k in self.env}
         os.environ.update(self.env)
         self.bridge = sb.SoarBridge(self.soar_base, "tok", wait_seconds=10, poll_interval=0.05)
@@ -210,6 +242,47 @@ class TestSoarE2E(unittest.TestCase):
         with self.assertRaises(sb.SoarError) as cm:
             self.bridge.execute("block", ["8.8.4.4"], ["1777"], False, {}, "a")
         self.assertIn("boom", str(cm.exception))
+
+    def test_virustotal_via_soar(self):
+        rows = {r["ip"]: r for r in self.bridge.vt_lookup(["185.220.101.47", "20.115.62.14", "10.0.0.1"])}
+        self.assertEqual(rows["185.220.101.47"]["vt_malicious"], 12)
+        self.assertEqual(rows["185.220.101.47"]["vt_country"], "DE")
+        self.assertEqual(rows["20.115.62.14"]["vt_malicious"], 0)
+        self.assertEqual(rows["10.0.0.1"]["vt_status"], "private_ip")
+        self.assertEqual(FakeVirusTotal.calls, ["185.220.101.47", "20.115.62.14"])  # private IP never sent
+        self.assertEqual(FakeSoar.store["containers"], {})                         # read-only: cleaned up
+
+    def test_virustotal_quota_via_soar(self):
+        rows = {r["ip"]: r for r in self.bridge.vt_lookup(["4.4.4.4", "8.8.4.4"])}
+        self.assertEqual(rows["4.4.4.4"]["vt_status"], "rate_limited")
+        self.assertEqual(rows["8.8.4.4"]["vt_status"], "rate_limited")
+        self.assertEqual(FakeVirusTotal.calls, ["4.4.4.4"])
+
+    def test_virustotal_key_missing_on_soar(self):
+        os.environ.pop("VT_API_KEY")
+        with self.assertRaises(sb.SoarError) as cm:
+            self.bridge.vt_lookup(["8.8.4.4"])
+        self.assertIn("VT_API_KEY", str(cm.exception))
+
+    def test_sendalert_style_artifact_is_processed(self):
+        """Container created by `| sendalert sendtophantom` / Send to SOAR adaptive response."""
+        st = FakeSoar.store
+        cid = 999
+        st["containers"][cid] = {"id": cid, "label": "imperva_ioc_block", "status": "new", "artifacts": [
+            {"id": 1, "name": "Field Values", "cef": {"imperva_action": "block", "src": "8.8.4.4",
+                                                      "incident_no": "INC-77", "threat_actor": "APT-Y"}},
+            {"id": 2, "name": "Field Values", "cef": {"action": "allowed", "src": "1.2.3.4"}},  # not a request
+        ]}
+        phantom = FakePhantom(self.soar_base, st)
+        handled = SOAR_NS["imperva_soar_handle"]({"id": cid, "label": "imperva_ioc_block"}, phantom)
+        self.assertEqual(handled, 1)
+        res = [a for a in st["containers"][cid]["artifacts"] if a["name"] == "imperva_result"][0]["cef"]
+        rows = json.loads(res["result_json"])
+        self.assertEqual((rows[0]["ip"], rows[0]["status"], rows[0]["verified_in_waf"]), ("8.8.4.4", "blocked", "yes"))
+        self.assertEqual(res["requested_from"], "sendalert")
+        self.assertEqual(st["containers"][cid]["status"], "closed")
+        # re-running the playbook on the same container does not block twice
+        self.assertEqual(SOAR_NS["imperva_soar_handle"]({"id": cid, "label": "imperva_ioc_block"}, phantom), 0)
 
     def test_bad_token(self):
         bad = sb.SoarBridge(self.soar_base, "wrong", wait_seconds=1)

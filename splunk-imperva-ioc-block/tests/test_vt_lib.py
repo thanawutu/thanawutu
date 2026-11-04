@@ -74,5 +74,51 @@ class TestCache(unittest.TestCase):
         self.assertIsNone(c2.get("1.2.3.4", now=1200))
 
 
+class FakeVT(object):
+    def __init__(self, limit_after=None):
+        self.calls, self.limit_after = [], limit_after
+
+    def lookup_ip(self, ip):
+        self.calls.append(ip)
+        if self.limit_after is not None and len(self.calls) > self.limit_after:
+            raise vt.VTRateLimited("429")
+        if ip == "9.9.9.9":
+            raise vt.VTError("boom")
+        return {"vt_status": "ok", "vt_malicious": 1}
+
+
+class TestLookupMany(unittest.TestCase):
+    def setUp(self):
+        self.t, self.sleeps = [0.0], []
+
+    def sleep(self, s):
+        self.sleeps.append(s)
+        self.t[0] += s
+
+    def run_(self, client, ips, **kw):
+        return vt.lookup_many(client, ips, _sleep=self.sleep, _now=lambda: self.t[0], **kw)
+
+    def test_rate_spacing_and_private(self):
+        c = FakeVT()
+        out = self.run_(c, ["8.8.8.8", "10.0.0.1", "1.1.1.1", "8.8.8.8"], rpm=4)
+        self.assertEqual(c.calls, ["8.8.8.8", "1.1.1.1"])
+        self.assertEqual(self.sleeps, [15.0])
+        self.assertEqual(out["10.0.0.1"]["vt_status"], "private_ip")
+
+    def test_max_lookups(self):
+        out = self.run_(FakeVT(), ["1.1.1.1", "8.8.8.8", "8.8.4.4"], rpm=600, max_lookups=2)
+        self.assertEqual(out["8.8.4.4"]["vt_status"], "not_checked (max_lookups_per_run)")
+
+    def test_429_stops_calls(self):
+        c = FakeVT(limit_after=1)
+        out = self.run_(c, ["1.1.1.1", "8.8.8.8", "8.8.4.4"], rpm=600)
+        self.assertEqual(c.calls, ["1.1.1.1", "8.8.8.8"])
+        self.assertEqual([out[i]["vt_status"] for i in ("8.8.8.8", "8.8.4.4")], ["rate_limited"] * 2)
+
+    def test_error_kept_per_ip(self):
+        out = self.run_(FakeVT(), ["9.9.9.9", "1.1.1.1"], rpm=600)
+        self.assertEqual((out["9.9.9.9"]["vt_status"], out["1.1.1.1"]["vt_status"]), ("error", "ok"))
+
+
 if __name__ == "__main__":
     unittest.main()

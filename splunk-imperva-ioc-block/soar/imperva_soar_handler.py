@@ -17,10 +17,14 @@ Settings come from SOAR environment variables
   IMPERVA_MAX_IPS                        optional, default 50
   IMPERVA_API_BASE                       optional, default https://api.imperva.com
   IMPERVA_CAID                           optional, sub-account id
+  VT_API_KEY                             required for VirusTotal lookups (action vtcheck)
+  VT_REQUESTS_PER_MINUTE                 optional, default 4 (public API); raise for premium
+  VT_MAX_LOOKUPS                         optional, default 10 per request
+  VT_API_BASE                            optional, default https://www.virustotal.com/api/v3
   HTTPS_PROXY                            optional, honoured automatically
 
 Do not edit soar/imperva_ioc_block_global_code.py by hand - it is generated
-by soar/build_global_code.py from this file + TA-imperva-ioc-block/bin/imperva_lib.py
+by soar/build_global_code.py from this file + TA-imperva-ioc-block/bin/imperva_lib.py + vt_lib.py
 """
 # --- BEGIN LIB IMPORT (removed in the generated SOAR file, where the library is inlined) ---
 import json
@@ -28,13 +32,29 @@ import os
 
 from imperva_lib import (DEFAULT_V2_BASE_URL, ImpervaError, ImpervaPolicyClient,  # noqa: F401
                          list_targets, parse_ip_list, run_action, validate_ips)
+from vt_lib import VT_BASE, VTClient, lookup_many  # noqa: F401
 # --- END LIB IMPORT ---
 
 REQUEST_NAME = "imperva_request"
 RESULT_NAME = "imperva_result"
 
 
-def process_request(cef, env=None, client_factory=None):
+def process_vtcheck(cef, env, vt_client_factory=None):
+    """VirusTotal lookups for Splunk's vtcheck command. Returns rows {ip, vt_status, ...}."""
+    if vt_client_factory is None:
+        key = env.get("VT_API_KEY")
+        if not key:
+            raise ImpervaError("VT_API_KEY is not set on SOAR")
+        client = VTClient(key, base_url=env.get("VT_API_BASE") or VT_BASE)
+    else:
+        client = vt_client_factory()
+    ips = parse_ip_list(cef.get("ips", ""))
+    res = lookup_many(client, ips, rpm=int(env.get("VT_REQUESTS_PER_MINUTE") or 4),
+                      max_lookups=int(env.get("VT_MAX_LOOKUPS") or 10))
+    return [dict(info, ip=ip) for ip, info in res.items()]
+
+
+def process_request(cef, env=None, client_factory=None, vt_client_factory=None):
     """
     Pure function: request cef dict -> result cef dict
       {request_id, status: ok|error, error, result_json}
@@ -43,6 +63,9 @@ def process_request(cef, env=None, client_factory=None):
     rid = cef.get("request_id", "")
     try:
         action = (cef.get("action") or "").strip().lower()
+        if action == "vtcheck":  # read-only, no Imperva policy involved
+            rows = process_vtcheck(cef, env, vt_client_factory)
+            return {"request_id": rid, "status": "ok", "error": "", "result_json": json.dumps(rows)}
         if action not in ("block", "unblock", "list"):
             raise ImpervaError("unknown action %r" % action)
 
@@ -84,6 +107,38 @@ def process_request(cef, env=None, client_factory=None):
         return {"request_id": rid, "status": "error", "error": str(e), "result_json": "[]"}
 
 
+def request_from_artifact(a):
+    """
+    Turn an artifact into a request cef, or None if it is not a request.
+      * "imperva_request" artifacts created by the Splunk app (impervablock / impervalist / vtcheck)
+      * artifacts created by `| sendalert sendtophantom` or the "Send to SOAR" adaptive response
+        of a detection rule: cef needs imperva_action (or action) = block|unblock and
+        ips / ip / src / src_ip with the address(es)
+    """
+    cef = dict(a.get("cef") or {})
+    if a.get("name") == REQUEST_NAME:
+        return cef
+    if a.get("name") == RESULT_NAME:
+        return None
+    act = str(cef.get("imperva_action") or cef.get("action") or "").strip().lower()
+    ips = cef.get("ips") or cef.get("ip") or cef.get("src") or cef.get("src_ip") or cef.get("sourceAddress")
+    if act not in ("block", "unblock") or not ips:
+        return None
+    return {
+        "request_id": cef.get("request_id") or "artifact-%s" % a.get("id"),
+        "action": act,
+        "ips": ",".join(ips) if isinstance(ips, list) else str(ips),
+        "policy_ids": cef.get("policy_ids", ""),            # empty -> all allowed policies
+        "dry_run": cef.get("dry_run", "false"),
+        "threat_actor": cef.get("threat_actor", ""),
+        "incident_no": cef.get("incident_no", ""),
+        "comment": cef.get("comment", ""),
+        "reason": cef.get("reason", ""),
+        "requested_by": cef.get("requested_by") or "splunk-sendalert",
+        "requested_from": "sendalert",
+    }
+
+
 def imperva_soar_handle(container, phantom):
     """
     Entry point called from the playbook's custom code block:
@@ -96,10 +151,12 @@ def imperva_soar_handle(container, phantom):
     answered = {(a.get("cef") or {}).get("request_id") for a in artifacts if a.get("name") == RESULT_NAME}
     handled = 0
     for a in artifacts:
-        cef = a.get("cef") or {}
-        if a.get("name") != REQUEST_NAME or cef.get("request_id") in answered:
+        cef = request_from_artifact(a)
+        if cef is None or cef.get("request_id") in answered:
             continue
+        answered.add(cef.get("request_id"))
         result = process_request(cef)
+        result["requested_from"] = cef.get("requested_from", "splunk")
         phantom.debug("imperva %s request %s -> %s %s" % (
             cef.get("action"), cef.get("request_id"), result["status"], result["error"]))
         phantom.add_artifact(container=container, raw_data={}, cef_data=result,
