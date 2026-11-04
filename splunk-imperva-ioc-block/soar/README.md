@@ -49,13 +49,15 @@ containers created by the live list are deleted after they are read (`soar_delet
 5. **Playbook**: Playbooks → **+ Playbook** → Automation.
    1. Name it `imperva_ioc_block`. Set *Operates on* to label `imperva_ioc_block`, and use Python 3.
    2. Add one **Code** block, wired `start → code → end`.
-   3. **SOAR 8.x** (no Global Custom Code section in the editor): open *Python editor*, find
-      `def code_1(` and paste the whole of **`imperva_ioc_block_code_block.py`** between
-      `## Custom Code Start` and `## Custom Code End`. It is already indented and ends with the call
-      `imperva_soar_handle(container, phantom)`.
+   3. **SOAR 8.x** (no Global Custom Code section in the editor). Pick the easier option:
+      - **Whole file**: in *Python editor* select all (Ctrl+A) and paste
+        **`imperva_ioc_block_playbook.py`**. It is the complete playbook with code_1 already filled in.
+      - **Code block only**: paste **`imperva_ioc_block_code_block.py`** between `## Custom Code Start`
+        and `## Custom Code End` of `code_1`. The library sits inside a raw string that is compiled with
+        `exec()`, so the indentation of the pasted library lines does not matter.
    4. **Editors that have Global Custom Code**: paste `imperva_ioc_block_global_code.py` there instead,
       and put only `imperva_soar_handle(container, phantom)` in the code block.
-   5. Both files are generated, so don't edit them. Rebuild with `python3 soar/build_global_code.py`.
+   5. These files are generated, so don't edit them. Rebuild with `python3 soar/build_global_code.py`.
    5. Save, and set the playbook **Active**.
 6. **Check it on SOAR**: in the debug output of a test run you should see
    `imperva block request ... -> ok`. If the environment variables do not reach the playbook on your

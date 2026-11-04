@@ -347,7 +347,71 @@ class TestCodeBlockVariant(TestSoarE2E):
         pass  # covered by the parent class with direct access to the handler's return value
 
 
+class TestPasteRobustness(TestSoarE2E):
+    """Editor re-indents every pasted line inside the string by 8 spaces -> still works (dedent)."""
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        block = build_global_code.build_code_block()
+        head, rest = block.split("r'''\n", 1)
+        lib, tail = rest.rsplit("\n'''", 1)
+        messy = head + "r'''\n" + "\n".join(("        " + ln) if ln else ln for ln in lib.split("\n")) \
+            + "\n'''" + tail
+        ns = {"__name__": "messy"}
+        exec(compile("def code_1(container=None, phantom=None, **kw):\n" + messy, "messy", "exec"), ns)
+        cls._old = SOAR_NS["imperva_soar_handle"]
+        SOAR_NS["imperva_soar_handle"] = lambda c, p: ns["code_1"](container=c, phantom=p)
+
+    @classmethod
+    def tearDownClass(cls):
+        SOAR_NS["imperva_soar_handle"] = cls._old
+        super().tearDownClass()
+
+    def test_sendalert_style_artifact_is_processed(self):
+        pass
+
+
+class TestFullPlaybookFile(TestSoarE2E):
+    """The complete SOAR 8.x playbook file (imperva_ioc_block_playbook.py) runs end to end."""
+    def test_full_playbook_list(self):
+        import types
+        st = FakeSoar.store
+        fake = FakePhantom(self.soar_base, st)
+        mod = types.ModuleType("phantom.rules")
+        mod.playbook_block = lambda *a, **k: (lambda f: f)
+        for n in ("debug", "add_artifact", "set_status", "build_phantom_rest_url"):
+            setattr(mod, n, getattr(fake, n))
+        mod.requests = fake.requests
+        mod.save_block_result = lambda **kw: None
+        pkg = types.ModuleType("phantom")
+        pkg.rules = mod
+        old = {k: sys.modules.get(k) for k in ("phantom", "phantom.rules")}
+        sys.modules["phantom"], sys.modules["phantom.rules"] = pkg, mod
+        try:
+            ns = {"__name__": "playbook"}
+            exec(compile(build_global_code.build_playbook(), "imperva_ioc_block_playbook.py", "exec"), ns)
+            st["containers"][555] = {"id": 555, "label": "imperva_ioc_block", "status": "new", "artifacts": [
+                {"id": 1, "name": "imperva_request",
+                 "cef": {"request_id": "test-001", "action": "list", "policy_ids": "1777"}}]}
+            ns["on_start"]({"id": 555, "label": "imperva_ioc_block"})
+        finally:
+            for k, v in old.items():
+                if v is None:
+                    sys.modules.pop(k, None)
+                else:
+                    sys.modules[k] = v
+        res = [a for a in st["containers"][555]["artifacts"] if a["name"] == "imperva_result"][0]["cef"]
+        self.assertEqual(res["status"], "ok", res)
+        self.assertEqual(json.loads(res["result_json"])[0]["ip"], "1.1.1.1")
+        self.assertEqual(st["containers"][555]["status"], "closed")
+
+
 class TestGeneratedCodeInSync(unittest.TestCase):
+    def test_committed_playbook_matches_build(self):
+        path = os.path.join(HERE, "..", "soar", "imperva_ioc_block_playbook.py")
+        self.assertEqual(open(path).read(), build_global_code.build_playbook(),
+                         "run: python3 soar/build_global_code.py")
+
     def test_committed_code_block_matches_build(self):
         path = os.path.join(HERE, "..", "soar", "imperva_ioc_block_code_block.py")
         self.assertEqual(open(path).read(), build_global_code.build_code_block(),
