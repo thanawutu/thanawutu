@@ -48,3 +48,6 @@ export = system
 
 [macros/imperva_ioc_notables]
 access = read : [ admin, imperva_blocker ], write : [ admin ]
+
+[macros/imperva_ioc_fields]
+access = read : [ admin, imperva_blocker ], write : [ admin ]

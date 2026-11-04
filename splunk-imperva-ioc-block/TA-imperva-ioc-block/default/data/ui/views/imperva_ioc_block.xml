@@ -56,7 +56,7 @@
 
   <row>
     <panel>
-      <title>Detected IOCs from ES notables ($ioc_range_label$) + VirusTotal verdict - click "⛔ Block" to block that IP</title>
+      <title>IPs detected by WAF attack rules (ES notables / incidents, $ioc_range_label$) + VirusTotal - click "⛔ Block" to block that IP</title>
       <input type="dropdown" token="ioc_range" searchWhenChanged="true">
         <label>Notables from</label>
         <choice value="-24h@h">Last 24 hours</choice>
@@ -78,14 +78,17 @@
 | mvexpand ioc_ip
 | where isnotnull(ioc_ip) AND match(ioc_ip, "^[0-9A-Fa-f:.]+$") AND (match(ioc_ip, "^\d{1,3}(\.\d{1,3}){3}$") OR match(ioc_ip, ":"))
 | where NOT (cidrmatch("10.0.0.0/8", ioc_ip) OR cidrmatch("172.16.0.0/12", ioc_ip) OR cidrmatch("192.168.0.0/16", ioc_ip) OR cidrmatch("127.0.0.0/8", ioc_ip) OR cidrmatch("169.254.0.0/16", ioc_ip) OR cidrmatch("100.64.0.0/10", ioc_ip) OR cidrmatch("0.0.0.0/8", ioc_ip) OR cidrmatch("224.0.0.0/3", ioc_ip))
-| eval rule=coalesce(rule_name, search_name, source)
-| stats count AS notable_count values(rule) AS rule_name values(urgency) AS urgency values(status_label) AS status values(threat_collection) AS threat_collection values(threat_key) AS threat_key values(dest) AS dest min(_time) AS first_seen max(_time) AS last_seen BY ioc_ip
+| `imperva_ioc_fields`
+| eval _sev_rank=case(lower(ioc_severity)="critical",5, lower(ioc_severity)="high",4, lower(ioc_severity)="medium",3, lower(ioc_severity)="low",2, in(lower(ioc_severity), "informational", "info"),1, true(),0)
+| stats count AS notable_count values(ioc_rule) AS rule_name values(ioc_incident) AS incident_no max(_sev_rank) AS _sev_rank values(status_label) AS status values(threat_collection) AS threat_collection values(dest) AS dest min(_time) AS first_seen max(_time) AS last_seen BY ioc_ip
 | rename ioc_ip AS src
 | eval count=notable_count
 | where NOT ([| impervaexclude | append [| makeresults | eval cidr="255.255.255.255/32"] | eval q="cidrmatch(\"".cidr."\", src)" | stats values(q) AS q | eval search=mvjoin(q, " OR ") | fields search])
 | eval _ex_refresh=$ex_refresh|s$
-| eval last_seen_time=strftime(last_seen, "%Y-%m-%d %H:%M")
-| eval msg="Notable IOC=".src.", Rules=".mvjoin(rule_name, "; ").", Urgency=".coalesce(mvjoin(urgency, ","), "-").", Threat=".coalesce(mvjoin(threat_collection, ","), "-")]]></query>
+| eval severity=case(_sev_rank=5,"critical", _sev_rank=4,"high", _sev_rank=3,"medium", _sev_rank=2,"low", _sev_rank=1,"informational", true(),"-")
+| eval first_detected=strftime(first_seen, "%Y-%m-%d %H:%M"), last_detected=strftime(last_seen, "%Y-%m-%d %H:%M")
+| eval rule_name=mvjoin(rule_name, "; "), incident_no=coalesce(mvjoin(incident_no, ", "), "-"), status=coalesce(mvjoin(status, ", "), "-")
+| eval msg="Detected by: ".rule_name." | Incident: ".incident_no." | Severity: ".severity." | Last detected: ".last_detected]]></query>
         <earliest>$ioc_range$</earliest>
         <latest>now</latest>
       </search>
@@ -100,14 +103,17 @@
 | eval Block=case(suggestion="ALREADY_BLOCKED","✔ Blocked", suggestion="DO_NOT_BLOCK","— Do not block", true(),"⛔ Block")
 | eval VirusTotal="🔗 Open"
 | eval prio=case(suggestion="BLOCK",1, suggestion="REVIEW",2, suggestion="MONITOR",3, suggestion="ALREADY_BLOCKED",4, true(),5)
-| sort prio - count
-| table Block src suggestion suggestion_reason vt_score vt_reputation location asn notable_count rule_name urgency status threat_collection last_seen_time VirusTotal msg]]></query>
+| sort prio - _sev_rank - last_seen
+| table Block src rule_name incident_no severity first_detected last_detected notable_count status suggestion suggestion_reason vt_score location asn VirusTotal msg]]></query>
         </search>
         <option name="count">15</option>
         <option name="wrap">true</option>
         <option name="drilldown">cell</option>
         <format type="color" field="suggestion">
           <colorPalette type="map">{"BLOCK":#DC4E41,"REVIEW":#F8BE34,"MONITOR":#5A9BD5,"ALREADY_BLOCKED":#708794,"DO_NOT_BLOCK":#53A051}</colorPalette>
+        </format>
+        <format type="color" field="severity">
+          <colorPalette type="map">{"critical":#B6488E,"high":#DC4E41,"medium":#F8BE34,"low":#5A9BD5,"informational":#708794}</colorPalette>
         </format>
         <format type="color" field="Block">
           <colorPalette type="map">{"⛔ Block":#DC4E41,"✔ Blocked":#708794,"— Do not block":#53A051}</colorPalette>
@@ -122,10 +128,10 @@
             <set token="pending_reason">Per-IP block | VT $row.vt_score$ | $row.suggestion$ | $row.msg$</set>
             <set token="form.pb_actor">Unknown</set>
             <set token="pb_actor">Unknown</set>
-            <set token="form.pb_incident">N/A</set>
-            <set token="pb_incident">N/A</set>
-            <set token="form.pb_comment">-</set>
-            <set token="pb_comment">-</set>
+            <set token="form.pb_incident">$row.incident_no$</set>
+            <set token="pb_incident">$row.incident_no$</set>
+            <set token="form.pb_comment">Detected by $row.rule_name$ ($row.severity$, last $row.last_detected$)</set>
+            <set token="pb_comment">Detected by $row.rule_name$ ($row.severity$, last $row.last_detected$)</set>
           </condition>
           <condition field="VirusTotal">
             <link target="_blank">https://www.virustotal.com/gui/ip-address/$row.src|n$</link>
