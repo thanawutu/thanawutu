@@ -15,3 +15,7 @@ access = read : [ admin, imperva_blocker ], write : [ admin ]
 
 [imperva]
 access = read : [ admin, imperva_blocker ], write : [ admin ]
+
+[commands/vtcheck]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = system

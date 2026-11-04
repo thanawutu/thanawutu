@@ -20,57 +20,17 @@ username = <Imperva API ID>, password = <Imperva API Key>).
 """
 
 import datetime
-import json
-import logging
-import logging.handlers
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import splunk.Intersplunk as si  # noqa: E402
-import splunk.rest as rest       # noqa: E402
 
 import imperva_lib as il         # noqa: E402
+from splunk_helpers import get_logger, is_true, load_conf_stanza, load_credential  # noqa: E402
 
-APP = "TA-imperva-ioc-block"
 REALM = "imperva_waf"
-CONF = "imperva"
-TRUE = ("1", "t", "true", "y", "yes")
-
-
-def get_logger():
-    log = logging.getLogger("imperva_ioc_block")
-    if not log.handlers:
-        home = os.environ.get("SPLUNK_HOME", "/opt/splunk")
-        path = os.path.join(home, "var", "log", "splunk", "imperva_ioc_block.log")
-        h = logging.handlers.RotatingFileHandler(path, maxBytes=10 * 1024 * 1024, backupCount=5)
-        h.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
-        log.addHandler(h)
-        log.setLevel(logging.INFO)
-    return log
-
-
-def rest_json(path, session_key):
-    sep = "&" if "?" in path else "?"
-    resp, content = rest.simpleRequest(path + sep + "output_mode=json&count=0",
-                                       sessionKey=session_key, method="GET", raiseAllErrors=True)
-    return json.loads(content)
-
-
-def load_settings(session_key):
-    js = rest_json("/servicesNS/nobody/%s/configs/conf-%s/settings" % (APP, CONF), session_key)
-    return js["entry"][0]["content"]
-
-
-def load_credentials(session_key):
-    js = rest_json("/servicesNS/nobody/%s/storage/passwords" % APP, session_key)
-    for e in js.get("entry", []):
-        c = e.get("content", {})
-        if c.get("realm") == REALM:
-            return c.get("username"), c.get("clear_password")
-    raise il.ImpervaError("No credential with realm '%s' in storage/passwords "
-                          "(user needs list_storage_passwords capability)" % REALM)
 
 
 def main():
@@ -78,10 +38,10 @@ def main():
     _kw, opts = si.getKeywordsAndOptions()
     session_key = settings.get("sessionKey")
     user = settings.get("owner", "unknown")
-    log = get_logger()
+    log = get_logger("imperva_ioc_block", "imperva_ioc_block.log")
 
     action = opts.get("action", "block").lower()
-    dry_run = str(opts.get("dry_run", "false")).lower() in TRUE
+    dry_run = is_true(opts.get("dry_run", "false"))
     reason = opts.get("reason", "")
 
     if not session_key:
@@ -89,8 +49,8 @@ def main():
         return
 
     try:
-        conf = load_settings(session_key)
-        api_id, api_key = load_credentials(session_key)
+        conf = load_conf_stanza(session_key, "imperva", "settings")
+        api_id, api_key = load_credential(session_key, REALM)
 
         # ---- collect candidate IPs ------------------------------------------------
         candidates = il.parse_ip_list(opts.get("ip"))
@@ -125,7 +85,7 @@ def main():
             base_url=conf.get("api_base_url", il.DEFAULT_BASE_URL),
             timeout=int(conf.get("timeout", 30)),
             proxy=conf.get("proxy") or None,
-            verify_ssl=str(conf.get("verify_ssl", "true")).lower() in TRUE)
+            verify_ssl=is_true(conf.get("verify_ssl", "true")))
 
         now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
         out = []

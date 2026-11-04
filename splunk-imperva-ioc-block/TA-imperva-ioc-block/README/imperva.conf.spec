@@ -8,3 +8,16 @@ protected_networks = <comma separated list of IP/CIDR>
 proxy = <url>
 verify_ssl = <boolean>
 timeout = <integer>
+
+[virustotal]
+api_base_url = <string>
+requests_per_minute = <integer>
+max_lookups_per_run = <integer>
+cache_ttl_hours = <number>
+timeout = <integer>
+verify_ssl = <boolean>
+proxy = <url>
+block_malicious = <integer>
+review_malicious = <integer>
+review_suspicious = <integer>
+high_volume_count = <integer>

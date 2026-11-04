@@ -1,6 +1,6 @@
 <form version="1.1" theme="dark" hideFilters="false">
   <label>Imperva WAF - Block Malicious IP IOCs</label>
-  <description>1) Click an IOC row (or type IPs)  2) Choose action / mode  3) Tick "I confirm"  4) Press Submit. Default mode is Dry-run (preview only).</description>
+  <description>Per IP: click "⛔ Block" in the table, then "✅ CONFIRM BLOCK". Bulk / dry-run / unblock: click any other cell (or type IPs), choose action and mode, tick "I confirm", press Submit.</description>
 
   <!-- Searches only run when the Submit button is pressed -->
   <fieldset submitButton="true" autoRun="false">
@@ -32,7 +32,7 @@
 
   <row>
     <panel>
-      <title>Attacking IPs from Imperva WAF logs (last 24h, count &gt; 300) - click a row to select the IP</title>
+      <title>Attacking IPs (last 24h, count &gt; 300) + VirusTotal verdict - click "⛔ Block" to block that IP</title>
       <!-- Base search: Imperva attack events grouped by source IP -->
       <search id="attack_ips">
         <query><![CDATA[index=imperva sourcetype="incapsula:cef" category!=normal act!=allowed
@@ -46,19 +46,106 @@
       </search>
       <table>
         <search base="attack_ips">
-          <query>| table src count country act category clapp http_method dest_name dest_port msg
-| sort - count</query>
+          <query><![CDATA[| sort - count | head 50
+| vtcheck field=src count_field=count
+| iplocation src
+| eval location=trim(if(isnotnull(City) AND City!="", City.", ", "").if(isnotnull(Region) AND Region!="", Region.", ", "").coalesce(nullif(Country,""), mvjoin(country,", "), "-"))." [VT: ".coalesce(vt_country,"-")."]"
+| eval asn=if(isnull(vt_asn) OR vt_asn="-", "-", "AS".vt_asn." ".vt_as_owner)
+| eval vt_score=if(vt_status="ok", vt_malicious."/".vt_engines." malicious, ".vt_suspicious." suspicious", vt_status)
+| eval Block=case(suggestion="ALREADY_BLOCKED","✔ Blocked", suggestion="DO_NOT_BLOCK","— Do not block", true(),"⛔ Block")
+| eval VirusTotal="🔗 Open"
+| eval prio=case(suggestion="BLOCK",1, suggestion="REVIEW",2, suggestion="MONITOR",3, suggestion="ALREADY_BLOCKED",4, true(),5)
+| sort prio - count
+| table Block src suggestion suggestion_reason vt_score vt_reputation location asn vt_network count category act dest_name VirusTotal msg]]></query>
         </search>
-        <option name="count">10</option>
-        <option name="drilldown">row</option>
+        <option name="count">15</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">cell</option>
+        <format type="color" field="suggestion">
+          <colorPalette type="map">{"BLOCK":#DC4E41,"REVIEW":#F8BE34,"MONITOR":#5A9BD5,"ALREADY_BLOCKED":#708794,"DO_NOT_BLOCK":#53A051}</colorPalette>
+        </format>
+        <format type="color" field="Block">
+          <colorPalette type="map">{"⛔ Block":#DC4E41,"✔ Blocked":#708794,"— Do not block":#53A051}</colorPalette>
+        </format>
         <drilldown>
-          <!-- Puts the IP in the text box. The user still has to tick "I confirm" and press Submit -->
-          <set token="form.ip_list">$row.src$</set>
-          <set token="form.reason">Imperva attack: $row.msg$</set>
-          <unset token="form.confirm"></unset>
+          <!-- Per-row button: opens the confirmation panel below -->
+          <condition field="Block">
+            <set token="pending_ip">$row.src$</set>
+            <set token="pending_sug">$row.suggestion$ - $row.suggestion_reason$</set>
+            <set token="pending_loc">$row.location$ / $row.asn$</set>
+            <set token="pending_vt">$row.vt_score$ (reputation $row.vt_reputation$)</set>
+            <set token="pending_reason">Per-IP block | VT $row.vt_score$ | $row.suggestion$ | $row.msg$</set>
+          </condition>
+          <condition field="VirusTotal">
+            <link target="_blank">https://www.virustotal.com/gui/ip-address/$row.src|n$</link>
+          </condition>
+          <condition>
+            <!-- Any other cell: fill the manual form (bulk / dry-run / unblock) -->
+            <set token="form.ip_list">$row.src$</set>
+            <set token="form.reason">Imperva attack: $row.msg$</set>
+            <unset token="form.confirm"></unset>
+          </condition>
         </drilldown>
       </table>
     </panel>
+  </row>
+
+  <row>
+    <panel depends="$pending_ip$">
+      <title>Confirm block of $pending_ip$ on Imperva WAF</title>
+      <table>
+        <search>
+          <query>| makeresults
+| eval Confirm="✅ CONFIRM BLOCK", Cancel="✖ Cancel", ip=$pending_ip|s$, suggestion=$pending_sug|s$, virustotal=$pending_vt|s$, location=$pending_loc|s$, reason=$pending_reason|s$
+| table Confirm Cancel ip suggestion virustotal location reason</query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">1</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">cell</option>
+        <format type="color" field="Confirm">
+          <colorPalette type="map">{"✅ CONFIRM BLOCK":#DC4E41}</colorPalette>
+        </format>
+        <drilldown>
+          <condition field="Confirm">
+            <set token="exec_ip">$row.ip$</set>
+            <set token="exec_reason">$row.reason$</set>
+            <unset token="pending_ip"></unset>
+          </condition>
+          <condition field="Cancel">
+            <unset token="pending_ip"></unset>
+          </condition>
+          <condition></condition>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel depends="$exec_ip$">
+      <title>Per-IP block result: $exec_ip$</title>
+      <table>
+        <search>
+          <query>| makeresults
+| impervablock action=block ip=$exec_ip|s$ dry_run=false reason=$exec_reason|s$
+| table _time ip site_id action status detail user reason</query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">20</option>
+        <option name="drilldown">cell</option>
+        <format type="color" field="status">
+          <colorPalette type="map">{"blocked":#DC4E41,"no_change":#708794,"rejected":#AF575A,"error":#B6488E}</colorPalette>
+        </format>
+        <drilldown>
+          <unset token="exec_ip"></unset>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <row>
     <panel>
       <title>Select ALL attacking IPs (click)</title>
       <table>
