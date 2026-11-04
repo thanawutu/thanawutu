@@ -1,6 +1,6 @@
 <form version="1.1" theme="dark" hideFilters="false">
   <label>Imperva WAF - Block Malicious IP IOCs</label>
-  <description>Per IP: click "⛔ Block" in the table, then "✅ CONFIRM BLOCK". Bulk / dry-run / unblock: click any other cell (or type IPs), choose action and mode, tick "I confirm", press Submit.</description>
+  <description>Per IP: click "⛔ Block" in the table, then "✅ CONFIRM BLOCK". Not block: click "✖ Not block". Manual block / unblock: click any other cell (or type IPs), choose action, tick "I confirm", press Submit.</description>
 
   <init>
     <set token="waf_refresh">init</set>
@@ -29,12 +29,6 @@
       <choice value="block">Block</choice>
       <choice value="unblock">Unblock</choice>
       <default>block</default>
-    </input>
-    <input type="radio" token="dry_run" searchWhenChanged="false">
-      <label>Mode</label>
-      <choice value="true">Dry-run (preview)</choice>
-      <choice value="false">Apply to Imperva</choice>
-      <default>true</default>
     </input>
     <input type="text" token="reason" searchWhenChanged="false">
       <label>Reason / Ticket</label>
@@ -159,7 +153,7 @@
             <link target="_blank">https://www.virustotal.com/gui/ip-address/$row.src|n$</link>
           </condition>
           <condition>
-            <!-- Any other cell: fill the manual form (bulk / dry-run / unblock) -->
+            <!-- Any other cell: fill the manual form (block / unblock) -->
             <set token="form.ip_list">$row.src$</set>
             <set token="form.reason">Notable IOC: $row.msg$</set>
             <unset token="form.confirm"></unset>
@@ -447,14 +441,14 @@
 
   <row>
     <panel depends="$confirm$">
-      <title>Result: $action$ $ip_list$ (dry_run=$dry_run$)</title>
+      <title>Result: $action$ $ip_list$</title>
       <table>
         <search>
           <!-- $confirm$ is referenced so this search is NOT dispatched until "I confirm" is ticked -->
           <query>| makeresults
 | eval confirmed=$confirm|s$
-| impervablock action=$action|s$ ip=$ip_list|s$ dry_run=$dry_run|s$ reason=$reason|s$ threat_actor=$threat_actor|s$ incident_no=$incident_no|s$ comment=$comment|s$
-| table _time ip site_id action status verified_in_waf threat_actor incident_no comment detail dry_run user reason</query>
+| impervablock action=$action|s$ ip=$ip_list|s$ dry_run=false reason=$reason|s$ threat_actor=$threat_actor|s$ incident_no=$incident_no|s$ comment=$comment|s$
+| table _time ip site_id action status verified_in_waf threat_actor incident_no comment detail user reason</query>
           <earliest>-1m</earliest>
           <latest>now</latest>
           <done>
@@ -466,7 +460,7 @@
         <option name="count">50</option>
         <option name="drilldown">none</option>
         <format type="color" field="status">
-          <colorPalette type="map">{"blocked":#DC4E41,"unblocked":#53A051,"would_be_blocked":#F8BE34,"would_be_unblocked":#F8BE34,"no_change":#708794,"rejected":#AF575A,"error":#B6488E}</colorPalette>
+          <colorPalette type="map">{"blocked":#DC4E41,"unblocked":#53A051,"no_change":#708794,"rejected":#AF575A,"error":#B6488E}</colorPalette>
         </format>
       </table>
     </panel>
@@ -801,7 +795,7 @@
       <table>
         <search>
           <query>index=_internal source=*imperva_ioc_block.log
-| table _time user action ip site_id status verified_in_waf backend soar_container threat_actor incident_no comment dry_run reason detail
+| table _time user action ip site_id status verified_in_waf backend soar_container threat_actor incident_no comment reason detail
 | sort - _time</query>
           <earliest>-7d@d</earliest>
           <latest>now</latest>
