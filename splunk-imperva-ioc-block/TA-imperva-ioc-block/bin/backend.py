@@ -44,6 +44,18 @@ class SoarBackend(object):
         return self.bridge.list_blocked(self.targets)
 
 
+def _ca_path(value):
+    """soar_ca_file may be absolute or relative to the app directory (e.g. local/soar_ca.pem)."""
+    import os
+    value = (value or "").strip()
+    if not value:
+        return None
+    if os.path.isabs(value):
+        return value
+    app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(app_dir, value)
+
+
 def get_soar_bridge(conf, load_credential, session_key):
     """SoarBridge from imperva.conf [settings] + token in storage/passwords realm splunk_soar."""
     _user, token = load_credential(session_key, SOAR_REALM)
@@ -54,7 +66,8 @@ def get_soar_bridge(conf, load_credential, session_key):
         proxy=conf.get("soar_proxy") or None,
         timeout=int(conf.get("timeout", 30)),
         wait_seconds=int(conf.get("soar_wait_seconds", 90)),
-        delete_list_containers=_true(conf.get("soar_delete_list_containers", "true")))
+        delete_list_containers=_true(conf.get("soar_delete_list_containers", "true")),
+        ca_file=_ca_path(conf.get("soar_ca_file")))
 
 
 def get_backend(conf, load_credential, session_key, override_ids=None):

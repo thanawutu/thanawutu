@@ -3,6 +3,7 @@ api_mode = v2_policy|v1_site|soar
 soar_url = <url>
 soar_label = <string>
 soar_verify_ssl = <boolean>
+soar_ca_file = <path to PEM CA bundle; absolute or relative to the app dir>
 soar_proxy = <url>
 soar_wait_seconds = <integer>
 soar_delete_list_containers = <boolean>

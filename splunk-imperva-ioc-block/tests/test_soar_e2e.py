@@ -294,6 +294,29 @@ class TestSoarE2E(unittest.TestCase):
             bad.execute("block", ["8.8.4.4"], ["1777"], False, {}, "a")
 
 
+class TestSoarCaFile(unittest.TestCase):
+    """soar_ca_file is passed to the TLS context (internal CA) and resolved relative to the app."""
+    def test_ca_file_used_and_resolved(self):
+        import ssl as _ssl
+        import backend
+        seen = {}
+        real = _ssl.create_default_context
+
+        def rec(*a, **kw):
+            seen["cafile"] = kw.get("cafile")
+            return real()
+        _ssl.create_default_context = rec
+        try:
+            conf = {"api_mode": "soar", "soar_url": "https://soar", "policy_ids": "1",
+                    "soar_ca_file": "local/soar_ca.pem"}
+            backend.get_backend(conf, lambda k, r: ("u", "tok"), "sk")
+        finally:
+            _ssl.create_default_context = real
+        self.assertTrue(seen["cafile"].endswith(os.path.join("TA-imperva-ioc-block", "local", "soar_ca.pem")))
+        self.assertIsNone(backend._ca_path(""))
+        self.assertEqual(backend._ca_path("/etc/pki/ca.pem"), "/etc/pki/ca.pem")
+
+
 class TestPlaybookProxy(unittest.TestCase):
     """IMPERVA_PROXY / VT_PROXY are passed to the clients (no global HTTPS_PROXY needed)."""
     def test_proxy_env_is_used(self):

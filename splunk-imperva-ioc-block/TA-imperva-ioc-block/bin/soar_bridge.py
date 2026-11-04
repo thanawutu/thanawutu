@@ -35,7 +35,7 @@ class SoarError(Exception):
 class SoarBridge(object):
     def __init__(self, base_url, token, label="imperva_ioc_block", verify_ssl=True, proxy=None,
                  timeout=30, wait_seconds=90, poll_interval=2.0, delete_list_containers=True,
-                 _sleep=time.sleep, _now=time.time):
+                 ca_file=None, _sleep=time.sleep, _now=time.time):
         if not base_url or not token:
             raise SoarError("SOAR URL / automation token not configured")
         self.base_url = base_url.rstrip("/")
@@ -49,7 +49,8 @@ class SoarBridge(object):
         handlers = []
         if proxy:
             handlers.append(urllib.request.ProxyHandler({"http": proxy, "https": proxy}))
-        ctx = ssl.create_default_context()
+        # ca_file: PEM bundle of the internal CA that signed the SOAR certificate
+        ctx = ssl.create_default_context(cafile=ca_file or None)
         if not verify_ssl:
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
