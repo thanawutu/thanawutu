@@ -66,7 +66,7 @@
           <colorPalette type="expression">if(like(value, "＋%"), "#53A051", "#3C444D")</colorPalette>
         </format>
         <drilldown>
-          <condition match="'click.name2'==&quot;Add&quot; AND 'row.pattern'!=&quot;-&quot; AND 'row.pattern'!=&quot;&quot;">
+          <condition field="Add">
             <set token="r_exec_pat">$row.pattern$</set>
             <set token="r_exec_mode">$row.mode$</set>
             <set token="r_exec_note">$row.note$</set>
@@ -106,13 +106,13 @@
 
   <row>
     <panel>
-      <title>Detection rules (KV store imperva_ioc_rules) – click ⏸ / ▶ to disable / enable, 🗑 to remove</title>
+      <title>Detection rules (KV store imperva_ioc_rules) – click ⏸ Disable / ▶ Enable / 🗑 Remove, 🗑 to remove</title>
       <table>
         <search>
           <query>| impervarules action=list
 | eval _r=$r_refresh|s$
-| eval Toggle=if(enabled="on", "⏸ Disable", "▶ Enable"), Remove="🗑 Remove", updated=strftime(tonumber(updated_at), "%Y-%m-%d %H:%M")
-| table enabled Toggle Remove pattern mode note updated_by updated key</query>
+| eval Disable=if(enabled="on", "⏸ Disable", "-"), Enable=if(enabled="on", "-", "▶ Enable"), Remove="🗑 Remove", updated=strftime(tonumber(updated_at), "%Y-%m-%d %H:%M")
+| table enabled Disable Enable Remove pattern mode note updated_by updated key</query>
           <earliest>-1m</earliest>
           <latest>now</latest>
         </search>
@@ -126,15 +126,15 @@
           <colorPalette type="map">{"include":#53A051,"exclude":#DC4E41}</colorPalette>
         </format>
         <drilldown>
-          <condition match="'click.name2'==&quot;Toggle&quot; AND 'row.enabled'==&quot;on&quot;">
+          <condition field="Disable">
             <set token="r_exec_key">$row.key$</set>
             <set token="r_op">disable</set>
           </condition>
-          <condition match="'click.name2'==&quot;Toggle&quot;">
+          <condition field="Enable">
             <set token="r_exec_key">$row.key$</set>
             <set token="r_op">enable</set>
           </condition>
-          <condition match="'click.name2'==&quot;Remove&quot;">
+          <condition field="Remove">
             <set token="r_exec_key">$row.key$</set>
             <set token="r_op">remove</set>
           </condition>

@@ -118,7 +118,13 @@
       <table>
         <search>
           <query>| makeresults
-| eval ips=trim($b_sel|s$, ","), n=if(ips="", 0, mvcount(split(ips, ",")))
+| eval ip=split(trim($b_sel|s$, ","), ",")
+| mvexpand ip
+| where ip!="" AND ip!="-"
+| stats count BY ip
+| where count%2=1
+| stats values(ip) AS ip
+| eval ips=coalesce(mvjoin(ip, ","), ""), n=if(ips="", 0, mvcount(split(ips, ",")))
 | eval Action=if(n=0, "Click rows below to select IPs", "🔓 UNBLOCK ".n." IP".if(n=1, "", "s")), Clear=if(n=0, "-", "✖ Clear selection")
 | eval selected_ips=if(n=0, "-", replace(ips, ",", ", ")), ticket=$b_tk|s$, description=$b_desc|s$
 | table Action Clear selected_ips ticket description</query>
@@ -136,7 +142,7 @@
         </format>
         <drilldown>
           <!-- one click = do it (no second confirm) -->
-          <condition match="'click.name2'==&quot;Action&quot; AND 'row.selected_ips'!=&quot;-&quot;">
+          <condition field="Action">
             <set token="b_exec_ips">$row.selected_ips$</set>
             <set token="b_exec_tk">$row.ticket$</set>
             <set token="b_exec_desc">$row.description$</set>
@@ -144,7 +150,7 @@
             <set token="form.b_tk">-</set>
             <set token="form.b_desc">-</set>
           </condition>
-          <condition match="'click.name2'==&quot;Clear&quot;">
+          <condition field="Clear">
             <set token="b_sel">,</set>
           </condition>
           <condition></condition>
@@ -207,9 +213,8 @@
           <condition field="Events">
             <link target="_blank">search?q=search%20index%3Dimperva%20sourcetype%3D%22incapsula%3Acef%22%20src%3D$row.ip|u$&amp;earliest=-7d%40d&amp;latest=now</link>
           </condition>
-          <condition match="'row.ip'==&quot;-&quot;"></condition>
           <condition>
-            <eval token="b_sel">if(like('b_sel', "%,".'row.ip'.",%"), replace('b_sel', ",".'row.ip'.",", ","), 'b_sel'.'row.ip'.",")</eval>
+            <set token="b_sel">$b_sel$,$row.ip$,</set>
             <eval token="form.b_tk">if(isnull('form.b_tk') OR 'form.b_tk'=="-" OR 'form.b_tk'=="", 'row.ticket', 'form.b_tk')</eval>
           </condition>
         </drilldown>
