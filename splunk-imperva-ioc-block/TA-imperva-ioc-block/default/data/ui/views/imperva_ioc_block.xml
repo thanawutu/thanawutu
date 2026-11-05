@@ -139,6 +139,10 @@
         <label>🔎 Search IP / Ticket / Incident no. / Rule (* = all)</label>
         <default>*</default>
       </input>
+      <input type="text" token="d_add" searchWhenChanged="true">
+        <label>Add IPs manually – other sources, comma separated ("-" if none)</label>
+        <default>-</default>
+      </input>
       <input type="text" token="d_tk" searchWhenChanged="true">
         <label>Ticket / Incident no. ("-" if none)</label>
         <default>-</default>
@@ -151,7 +155,10 @@
         <search>
           <query>| makeresults
 | eval ips=trim($d_sel|s$, ","), n=if(ips="", 0, mvcount(split(ips, ",")))
-| eval Action=if(n=0, "Click rows below to select IPs", "⛔ BLOCK ".n." IP".if(n=1, "", "s")), Clear=if(n=0, "-", "✖ Clear selection")
+| eval _add=trim(replace(replace($d_add|s$, "[\s;]+", ","), "^-$", ""), ",")
+| eval ips=trim(ips.",".replace(_add, ",+", ","), ","), ips=mvjoin(mvdedup(split(ips, ",")), ",")
+| eval ips=if(ips=",", "", ips), n=if(ips="", 0, mvcount(split(ips, ",")))
+| eval Action=if(n=0, "Click rows below or add IPs manually", "⛔ BLOCK ".n." IP".if(n=1, "", "s")), Clear=if(n=0, "-", "✖ Clear selection")
 | eval selected_ips=if(n=0, "-", replace(ips, ",", ", ")), ticket=$d_tk|s$, description=$d_desc|s$
 | table Action Clear selected_ips ticket description</query>
           <earliest>-1m</earliest>
@@ -169,13 +176,14 @@
             <set token="d_exec_ips">$row.selected_ips$</set>
             <set token="d_exec_tk">$row.ticket$</set>
             <set token="d_exec_desc">$row.description$</set>
-            <eval token="d_exec_id">now()</eval>
             <set token="d_sel">,</set>
             <set token="form.d_tk">-</set>
             <set token="form.d_desc">-</set>
+            <set token="form.d_add">-</set>
           </condition>
           <condition match="&quot;$click.name2$&quot;==&quot;Clear&quot;">
             <set token="d_sel">,</set>
+            <set token="form.d_add">-</set>
           </condition>
           <condition></condition>
         </drilldown>
@@ -192,7 +200,6 @@
       <table>
         <search>
           <query>| makeresults
-| eval _run=$d_exec_id|s$
 | impervablock action=block ip=$d_exec_ips|s$ incident_no=$d_exec_tk|s$ description=$d_exec_desc|s$
 | `imperva_audit_write`
 | table time ip action status verified ticket description backend soar_container detail</query>
@@ -223,7 +230,8 @@
       <title>IPs detected by WAF rules – last 7 days (click a row to select / unselect it)</title>
       <table>
         <search base="det">
-          <query>| `imperva_ioc_search($d_q|s$)`
+          <query>| eval _q=lower(trim(replace($d_q|s$, "[*]", "")))
+| where _q="" OR like(lower(src." ".incident_no." ".rule_name), "%"._q."%")
 | `imperva_ioc_enrich`</query>
         </search>
         <option name="count">20</option>

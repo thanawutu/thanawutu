@@ -71,7 +71,6 @@
             <set token="r_exec_mode">$row.mode$</set>
             <set token="r_exec_note">$row.note$</set>
             <set token="r_exec_key">-</set>
-            <eval token="r_exec_id">now()</eval>
             <set token="r_op">add</set>
             <set token="form.r_pat">-</set>
             <set token="form.r_note">-</set>
@@ -88,7 +87,6 @@
       <table>
         <search>
           <query>| impervarules action=$r_op|s$ key=$r_exec_key|s$ pattern=$r_exec_pat|s$ mode=$r_exec_mode|s$ note=$r_exec_note|s$
-| eval _run=$r_exec_id|s$
 | `imperva_audit_write`
 | table time action description status detail</query>
           <earliest>-1m</earliest>
@@ -130,17 +128,14 @@
         <drilldown>
           <condition match="&quot;$click.name2$&quot;==&quot;Toggle&quot; AND &quot;$row.enabled$&quot;==&quot;on&quot;">
             <set token="r_exec_key">$row.key$</set>
-            <eval token="r_exec_id">now()</eval>
             <set token="r_op">disable</set>
           </condition>
           <condition match="&quot;$click.name2$&quot;==&quot;Toggle&quot;">
             <set token="r_exec_key">$row.key$</set>
-            <eval token="r_exec_id">now()</eval>
             <set token="r_op">enable</set>
           </condition>
           <condition match="&quot;$click.name2$&quot;==&quot;Remove&quot;">
             <set token="r_exec_key">$row.key$</set>
-            <eval token="r_exec_id">now()</eval>
             <set token="r_op">remove</set>
           </condition>
           <condition></condition>
