@@ -112,7 +112,7 @@
 | where ip!="" AND ip!="-"
 | stats count BY ip
 | where count%2=1
-| stats values(ip) AS ip
+| stats count AS _c values(ip) AS ip
 | eval ips=coalesce(mvjoin(ip, ","), ""), n=if(ips="", 0, mvcount(split(ips, ",")))
 | eval _add=trim(replace($h_add|s$, "[\s;]+", ","), ","), _add=if(_add="-", "", _add)
 | eval ips=trim(ips.",".replace(_add, ",+", ","), ","), ips=mvjoin(mvdedup(split(ips, ",")), ",")

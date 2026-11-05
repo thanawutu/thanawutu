@@ -123,7 +123,7 @@
 | where ip!="" AND ip!="-"
 | stats count BY ip
 | where count%2=1
-| stats values(ip) AS ip
+| stats count AS _c values(ip) AS ip
 | eval ips=coalesce(mvjoin(ip, ","), ""), n=if(ips="", 0, mvcount(split(ips, ",")))
 | eval Action=if(n=0, "Click rows below to select IPs", "🔓 UNBLOCK ".n." IP".if(n=1, "", "s")), Clear=if(n=0, "-", "✖ Clear selection")
 | eval selected_ips=if(n=0, "-", replace(ips, ",", ", ")), ticket=$b_tk|s$, description=$b_desc|s$
