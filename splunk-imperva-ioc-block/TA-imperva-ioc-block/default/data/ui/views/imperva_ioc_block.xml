@@ -161,7 +161,7 @@
 | where count%2=1
 | stats values(ip) AS ip
 | eval ips=coalesce(mvjoin(ip, ","), ""), n=if(ips="", 0, mvcount(split(ips, ",")))
-| eval _add=trim(replace(replace($d_add|s$, "[\s;]+", ","), "^-$", ""), ",")
+| eval _add=trim(replace($d_add|s$, "[\s;]+", ","), ","), _add=if(_add="-", "", _add)
 | eval ips=trim(ips.",".replace(_add, ",+", ","), ","), ips=mvjoin(mvdedup(split(ips, ",")), ",")
 | eval ips=if(ips=",", "", ips), n=if(ips="", 0, mvcount(split(ips, ",")))
 | eval ip=if(n=0, "", split(ips, ","))
@@ -169,8 +169,8 @@
 | impervapolicycheck field=ip
 | lookup imperva_block_registry ip OUTPUT status AS _reg
 | eval chk=case(ip="", null(),
-    NOT match(ip, "^[0-9A-Fa-f:.]+(/\d+)?$"), ip." is not an IP / CIDR",
-    isnotnull(mvfind(_reg, "^blocked$")), ip." already blocked from Splunk",
+    match(ip, "[^0-9A-Fa-f:./]"), ip." is not an IP / CIDR",
+    isnotnull(mvfind(_reg, "^blocked\z")), ip." already blocked from Splunk",
     waf_policy_verdict="ALLOWLISTED", ip." is ALLOWED: ".waf_policies,
     waf_policy_verdict="BLOCKED_ELSEWHERE" OR waf_policy_verdict="BLOCKED_HERE", ip." already BLOCKED: ".waf_policies,
     waf_policy_verdict="UNKNOWN", ip." WAF check unavailable",
