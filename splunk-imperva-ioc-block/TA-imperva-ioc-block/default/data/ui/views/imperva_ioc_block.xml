@@ -158,9 +158,22 @@
 | eval _add=trim(replace(replace($d_add|s$, "[\s;]+", ","), "^-$", ""), ",")
 | eval ips=trim(ips.",".replace(_add, ",+", ","), ","), ips=mvjoin(mvdedup(split(ips, ",")), ",")
 | eval ips=if(ips=",", "", ips), n=if(ips="", 0, mvcount(split(ips, ",")))
+| eval ip=if(n=0, "", split(ips, ","))
+| mvexpand ip
+| impervapolicycheck field=ip
+| lookup imperva_block_registry ip OUTPUT status AS _reg
+| eval chk=case(ip="", null(),
+    NOT match(ip, "^[0-9A-Fa-f:.]+(/\d+)?$"), ip." is not an IP / CIDR",
+    isnotnull(mvfind(_reg, "^blocked$")), ip." already blocked from Splunk",
+    waf_policy_verdict="ALLOWLISTED", ip." is ALLOWED: ".waf_policies,
+    waf_policy_verdict="BLOCKED_ELSEWHERE" OR waf_policy_verdict="BLOCKED_HERE", ip." already BLOCKED: ".waf_policies,
+    waf_policy_verdict="UNKNOWN", ip." WAF check unavailable",
+    true(), null())
+| stats first(ips) AS ips first(n) AS n values(chk) AS waf_check
+| eval waf_check=coalesce(mvjoin(waf_check, " | "), if(n=0, "-", "✔ none blocked / allowed on WAF"))
 | eval Action=if(n=0, "Click rows below or add IPs manually", "⛔ BLOCK ".n." IP".if(n=1, "", "s")), Clear=if(n=0, "-", "✖ Clear selection")
 | eval selected_ips=if(n=0, "-", replace(ips, ",", ", ")), ticket=$d_tk|s$, description=$d_desc|s$
-| table Action Clear selected_ips ticket description</query>
+| table Action Clear selected_ips waf_check ticket description</query>
           <earliest>-1m</earliest>
           <latest>now</latest>
         </search>
@@ -169,6 +182,9 @@
         <option name="drilldown">cell</option>
         <format type="color" field="Action">
           <colorPalette type="expression">if(like(value, "⛔%"), "#DC4E41", "#3C444D")</colorPalette>
+        </format>
+        <format type="color" field="waf_check">
+          <colorPalette type="expression">if(like(value, "✔%") OR value=="-", "#3C444D", "#B26B00")</colorPalette>
         </format>
         <drilldown>
           <!-- one click = do it (no second confirm) -->

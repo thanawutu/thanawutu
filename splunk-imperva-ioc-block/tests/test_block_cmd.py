@@ -28,7 +28,6 @@ class TestBlockCommand(unittest.TestCase):
         c.load_credential = lambda *a: ("u", "p")
         c.kv_get = lambda k, key: self.reg.get(key)
         c.kv_upsert = lambda k, docs: [self.reg.__setitem__(d["_key"], d) for d in docs]
-        c.drop_policy_cache = lambda: self.dropped.append(1)
         c.si.getOrganizedResults = lambda: ([], None, {"sessionKey": "k", "owner": "alice"})
         c.si.outputResults = lambda r: self.out.__setitem__("rows", r)
         c.si.generateErrorResults = lambda m: self.out.__setitem__("err", m)
@@ -52,7 +51,6 @@ class TestBlockCommand(unittest.TestCase):
         doc = self.reg["2169031_8.8.4.4"]
         self.assertEqual((doc["status"], doc["incident_no"], doc["comment"], doc["blocked_by"]),
                          ("blocked", "ITHM 1234567", "credential stuffing", "alice"))
-        self.assertEqual(self.dropped, [1])
         self.assertIn('incident_no="ITHM 1234567" comment="credential stuffing"', self.logs[0])
         self.assertNotIn("threat", str(self.backend.calls[0][2].get("threat_actor")))
 
@@ -63,9 +61,9 @@ class TestBlockCommand(unittest.TestCase):
         self.assertEqual((doc["status"], doc["unblock_reason"], doc["unblock_incident_no"]),
                          ("unblocked", "false positive", "ITHM-2"))
 
-    def test_no_change_keeps_policy_cache(self):
-        self.run_("no_change", "action=block", "ip=8.8.4.4")
-        self.assertEqual(self.dropped, [])
+    def test_no_change_status(self):
+        rows = self.run_("no_change", "action=block", "ip=8.8.4.4")["rows"]
+        self.assertEqual(rows[0]["status"], "no_change")
 
 
 if __name__ == "__main__":

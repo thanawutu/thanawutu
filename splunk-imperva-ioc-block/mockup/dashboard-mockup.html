@@ -68,6 +68,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .run.u{background:var(--ok)}
 .selbox{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:36px;border:1px dashed var(--line);border-radius:5px;padding:4px 8px;background:var(--panel-2)}
 .tag{display:inline-flex;align-items:center;gap:4px;font-family:var(--font-data);font-size:12px;background:var(--sel);border:1px solid var(--accent);border-radius:4px;padding:1px 4px 1px 8px}
+.tag.man{border-style:dashed;background:var(--warn-bg)} .tag.bad{border-color:var(--crit);background:var(--crit-bg);color:var(--crit)}
 .tag button{border:0;background:transparent;padding:0 4px;font-size:14px;line-height:1;color:var(--muted)}
 .result{font-size:12.5px;border-radius:5px;padding:7px 10px}
 .result.ok{background:var(--ok-bg);color:var(--ok)} .result.running{background:var(--warn-bg);color:var(--warn)}
@@ -100,7 +101,7 @@ tr.off td:not(:first-child){opacity:.45}
   <div class="in">
     <div><span class="label">Apps › Imperva IOC Block</span><h1 id="pageTitle">Imperva WAF – IOC Block</h1></div>
     <div class="chips">
-      <span class="chip sim">Mockup v3 · simulated data</span>
+      <span class="chip sim">Mockup v3.2 · simulated data</span>
       <span class="chip">Policy 2169031 · via SOAR</span>
     </div>
   </div>
@@ -115,7 +116,7 @@ tr.off td:not(:first-child){opacity:.45}
 
 <!-- ============ Page 1: dashboard (7 days, search + Block) ============ -->
 <main class="wrap" id="v-dash">
-  <div class="review"><b>Mockup v3:</b> แยกเป็น 5 หน้า (แท็บด้านบน) · หน้านี้แสดงเฉพาะ IP ที่ detect ใน <b>7 วันล่าสุด</b> และทำได้แค่ <b>Search + Block</b> · IP ที่เก่ากว่า 7 วันอยู่หน้า <b>Older detections</b> · ตาราง IP ที่ block อยู่บน WAF ย้ายไปหน้า <b>Blocked IPs / Unblock</b> (Search + Unblock)</div>
+  <div class="review"><b>Mockup v3.2:</b> ตารางแสดงเฉพาะ IP ที่<b>ยังไม่เคยถูก block / allow</b> ใน WAF policy ที่เปิดใช้งาน (ไม่แสดง ALREADY_BLOCKED / DO_NOT_BLOCK, policy ที่ disabled ไม่นับ) · ช่อง <b>➕ Add IPs manually</b> และ IP ที่เลือก จะแสดง <b>⚠ WAF check</b> ว่า IP ไหน block แล้ว / ถูก allow · แยกเป็น 5 หน้า (แท็บด้านบน) · หน้านี้แสดงเฉพาะ IP ที่ detect ใน <b>7 วันล่าสุด</b> และทำได้แค่ <b>Search + Block</b> · IP ที่เก่ากว่า 7 วันอยู่หน้า <b>Older detections</b> · ตาราง IP ที่ block อยู่บน WAF ย้ายไปหน้า <b>Blocked IPs / Unblock</b> (Search + Unblock)</div>
   <section class="kpis" aria-label="Summary">
     <div class="kpi k-warn"><span class="label">Detected WAF IPs</span><span class="v" id="kDet">0</span><span class="s" id="kDetSub">last 7 days</span></div>
     <div class="kpi k-info"><span class="label">Blocked on WAF now</span><span class="v" id="kWaf">0</span><span class="s">policy 2169031 (live)</span></div>
@@ -130,6 +131,7 @@ tr.off td:not(:first-child){opacity:.45}
   <section class="control" aria-label="Search and block">
     <div class="crow">
       <div class="field" style="flex:1 1 300px"><label for="d_q">🔎 Search IP / Ticket / Incident no. / Rule</label><input type="text" id="d_q" placeholder="เช่น 54.245 หรือ ITHM 1000101"></div>
+      <div class="field" style="flex:1 1 300px"><label for="d_add">➕ Add IPs manually – other sources, comma separated</label><input type="text" id="d_add" placeholder="เช่น 203.0.113.10, 198.51.100.7"></div>
     </div>
     <div class="crow">
       <div class="field" style="flex:1 1 340px"><span class="flabel">Selected IPs — คลิกแถวในตารางด้านล่าง</span><div class="selbox" id="d_sel"></div></div>
@@ -137,6 +139,7 @@ tr.off td:not(:first-child){opacity:.45}
       <div class="field" style="flex:1 1 240px"><label for="d_desc">Description</label><input type="text" id="d_desc" placeholder="เหตุผล / รายละเอียด"></div>
       <button class="run" id="d_run" type="button" disabled>⛔ Block 0 IPs</button>
     </div>
+    <div class="result running" id="d_chk" hidden></div>
     <div class="result" id="d_res" hidden></div>
   </section>
   <section class="panel">
@@ -145,7 +148,7 @@ tr.off td:not(:first-child){opacity:.45}
       <p>คลิกแถวเพื่อเลือก · Ticket/Incident no. เติมจาก ITHM ใน finding note · IP ที่ block แล้วจะย้ายไปหน้า Blocked IPs</p>
     </div>
     <div class="tbl-wrap"><table>
-      <thead><tr><th></th><th>IP</th><th>Rule</th><th>Incident no.</th><th>Severity</th><th>Last detected</th><th style="text-align:right">Findings</th><th>Suggestion</th><th>Other WAF policies</th><th>VirusTotal</th><th>Location</th></tr></thead>
+      <thead><tr><th></th><th>IP</th><th>Rule</th><th>Incident no.</th><th>Severity</th><th>Last detected</th><th style="text-align:right">Findings</th><th>Suggestion</th><th>VirusTotal</th><th>Location</th></tr></thead>
       <tbody id="d_tbl"></tbody></table></div>
   </section>
 </main>
@@ -159,6 +162,7 @@ tr.off td:not(:first-child){opacity:.45}
   <section class="control" aria-label="Search and block older detections">
     <div class="crow">
       <div class="field" style="flex:1 1 300px"><label for="h_q">🔎 Search IP / Ticket / Incident no. / Rule</label><input type="text" id="h_q" placeholder="เช่น 45.95 หรือ ITHM 1000060"></div>
+      <div class="field" style="flex:1 1 300px"><label for="h_add">➕ Add IPs manually – other sources, comma separated</label><input type="text" id="h_add" placeholder="เช่น 203.0.113.10, 198.51.100.7"></div>
       <div class="field" style="flex:0 0 210px"><label for="h_rng">Detected</label><select id="h_rng"><option value="30">8 – 30 days ago</option><option value="90">31 – 90 days ago</option><option value="all">older than 7 days (all)</option></select></div>
     </div>
     <div class="crow">
@@ -167,12 +171,13 @@ tr.off td:not(:first-child){opacity:.45}
       <div class="field" style="flex:1 1 240px"><label for="h_desc">Description</label><input type="text" id="h_desc" placeholder="เหตุผล / รายละเอียด"></div>
       <button class="run" id="h_run" type="button" disabled>⛔ Block 0 IPs</button>
     </div>
+    <div class="result running" id="h_chk" hidden></div>
     <div class="result" id="h_res" hidden></div>
   </section>
   <section class="panel">
     <div class="panel-head"><h2 id="h_title">IPs detected by WAF rules – 8 to 30 days ago</h2><p>ยังไม่ได้ block · คลิกแถวเพื่อเลือก</p></div>
     <div class="tbl-wrap"><table>
-      <thead><tr><th></th><th>IP</th><th>Rule</th><th>Incident no.</th><th>Severity</th><th>Last detected</th><th style="text-align:right">Findings</th><th>Suggestion</th><th>Other WAF policies</th><th>VirusTotal</th><th>Location</th></tr></thead>
+      <thead><tr><th></th><th>IP</th><th>Rule</th><th>Incident no.</th><th>Severity</th><th>Last detected</th><th style="text-align:right">Findings</th><th>Suggestion</th><th>VirusTotal</th><th>Location</th></tr></thead>
       <tbody id="h_tbl"></tbody></table></div>
   </section>
 </main>
@@ -298,7 +303,11 @@ const sugPill={BLOCK:"p-block",REVIEW:"p-review",MONITOR:"p-monitor",ALREADY_BLO
 const onWaf=ip=>blocked.some(b=>b.ip===ip);
 const has=(q,...xs)=>!q||xs.join(" ").toLowerCase().includes(q);
 const age=d=>now0-d.last;
-const pendingDetected=()=>detected.filter(d=>!onWaf(d.ip)&&ruleUsed(d.rule).use);
+// only IPs that no ENABLED WAF policy blocks or allows yet (disabled policies are ignored)
+const pendingDetected=()=>detected.filter(d=>!onWaf(d.ip)&&ruleUsed(d.rule).use&&d.sug!=="ALREADY_BLOCKED"&&d.sug!=="DO_NOT_BLOCK");
+const WAF_POLICY={"185.220.101.47":"BLOCK in 1000001 Block DDoS policy","35.165.106.69":"BLOCK in 1000003 Block IOC attack","20.20.20.20":"ALLOW in 1000002 Allow partner DC"};
+function wafCheck(ip){ if(!isIP(ip)) return ip+" is not an IP / CIDR"; if(onWaf(ip)) return ip+" already blocked from Splunk";
+  const p=WAF_POLICY[ip]; if(!p) return null; return p.startsWith("ALLOW")? ip+" is ALLOWED: "+p : ip+" already BLOCKED: "+p; }
 const win={dash:d=>age(d)<=7*DAY,
   history:d=>{const r=$("h_rng").value,a=age(d); return r==="30"?a>7*DAY&&a<=30*DAY : r==="90"?a>30*DAY&&a<=90*DAY : a>7*DAY;}};
 
@@ -314,9 +323,9 @@ function renderDet(page){
     return `<tr data-ip="${d.ip}" class="${pg.sel.has(d.ip)?"selected":""}">
     <td>${ok?'<span class="box"></span>':''}</td><td class="ip">${d.ip}</td><td class="small">${esc(d.rule)}</td>
     <td class="mono nw">${esc(d.inc)}</td><td><span class="pill sev-${d.sev}">${d.sev}</span></td><td class="mono nw">${fmt(d.last)}</td>
-    <td class="num">${d.n}</td><td><span class="pill ${sugPill[d.sug]}">${d.sug}</span></td><td class="small">${esc(d.pol)}</td>
+    <td class="num">${d.n}</td><td><span class="pill ${sugPill[d.sug]}">${d.sug}</span></td>
     <td class="mono">${d.vt}/94</td><td class="nw">${esc(d.loc)}</td></tr>`;}).join("")
-    ||`<tr><td colspan="11" class="note">${q?`ไม่พบ IP ที่ตรงกับ “${esc(q)}”`:"ไม่มี IP ที่รอ block ในช่วงเวลานี้"}</td></tr>`;
+    ||`<tr><td colspan="10" class="note">${q?`ไม่พบ IP ที่ตรงกับ “${esc(q)}”`:"ไม่มี IP ที่รอ block ในช่วงเวลานี้"}</td></tr>`;
 }
 function renderBlocked(){
   const pg=P.blocked, q=$("b_q").value.trim().toLowerCase();
@@ -327,11 +336,18 @@ function renderBlocked(){
     ||`<tr><td colspan="8" class="note">${q?`ไม่พบ IP ที่ตรงกับ “${esc(q)}”`:"ไม่มี IP ที่ถูก block"}</td></tr>`;
   $("bWaf").textContent=blocked.length; $("bRead").textContent=fmt(Date.now()).slice(11);
 }
+const isIP=x=>/^(\d{1,3})(\.\d{1,3}){3}(\/\d{1,2})?$/.test(x)&&x.split("/")[0].split(".").every(o=>+o<=255) || /^[0-9a-f:]+:[0-9a-f:]*(\/\d{1,3})?$/i.test(x);
+function manual(page){ if(page==="blocked") return []; const v=$(P[page].p+"_add").value; return [...new Set(v.split(/[\s,;]+/).map(x=>x.trim()).filter(Boolean))]; }
+function allIPs(page){ const m=manual(page).filter(isIP); return [...new Set([...P[page].sel, ...m])]; }
 function renderCtl(page){
-  const pg=P[page], n=pg.sel.size;
+  const pg=P[page], all=allIPs(page), n=all.length, man=manual(page);
   $(pg.p+"_run").textContent=`${pg.act==="block"?"⛔ Block":"🔓 Unblock"} ${n} IP${n===1?"":"s"}`;
   $(pg.p+"_run").disabled=!n||pg.busy;
-  $(pg.p+"_sel").innerHTML=[...pg.sel].map(ip=>`<span class="tag">${ip}<button type="button" data-rm="${ip}" aria-label="remove ${ip}">×</button></span>`).join("")||'<span class="note">ยังไม่ได้เลือก IP</span>';
+  if(page!=="blocked"){ const msgs=[...all, ...man.filter(x=>!isIP(x))].map(wafCheck).filter(Boolean), c=$(pg.p+"_chk");
+    c.hidden=!n&&!msgs.length; c.className="result "+(msgs.length?"running":"ok");
+    c.textContent=msgs.length?"⚠ WAF check: "+msgs.join(" | "):"✔ WAF check: none of the selected IPs is blocked / allowed on the WAF"; }
+  $(pg.p+"_sel").innerHTML=([...pg.sel].map(ip=>`<span class="tag">${ip}<button type="button" data-rm="${ip}" aria-label="remove ${ip}">×</button></span>`)
+    .concat(man.filter(x=>!pg.sel.has(x)).map(x=>isIP(x)?`<span class="tag man" title="added manually">✍ ${esc(x)}</span>`:`<span class="tag bad" title="not an IP / CIDR - ignored">✖ ${esc(x)}</span>`))).join("")||'<span class="note">ยังไม่ได้เลือก IP</span>';
 }
 function chart(el,days){
   const data=daily.slice(-days), n=data.length, W=days>7?1300:1000, H=days>7?230:200, L=34,R=8,T=28,B=34, cw=(W-L-R)/n, bw=days>7?.6:.4;
@@ -378,28 +394,33 @@ Object.keys(P).forEach(page=>{const p=P[page].p;
   $(p+"_tbl").addEventListener("click",e=>{const tr=e.target.closest("tr[data-ip]"); if(tr) pick(page,tr.dataset.ip);});
   $(p+"_sel").addEventListener("click",e=>{const b=e.target.closest("[data-rm]"); if(b){P[page].sel.delete(b.dataset.rm); renderAll();}});
   $(p+"_q").addEventListener("input",()=>{page==="blocked"?renderBlocked():renderDet(page);});
+  if(page!=="blocked") $(p+"_add").addEventListener("input",()=>renderCtl(page));
   $(p+"_run").addEventListener("click",()=>run(page));
 });
 $("h_rng").addEventListener("change",()=>{P.history.sel.clear(); renderAll();});
 
 async function run(page){
-  const pg=P[page]; if(!pg.sel.size||pg.busy) return;
-  const ips=[...pg.sel], tk=$(pg.p+"_tk").value.trim()||"-", desc=$(pg.p+"_desc").value.trim()||"-", cont=soarSeq++, r=$(pg.p+"_res");
+  const pg=P[page]; const ips=allIPs(page); if(!ips.length||pg.busy) return;
+  const tk=$(pg.p+"_tk").value.trim()||"-", desc=$(pg.p+"_desc").value.trim()||"-", cont=soarSeq++, r=$(pg.p+"_res");
   pg.busy=true; renderCtl(page);
   r.hidden=false; r.className="result running";
   r.textContent=`ส่ง ${ips.length} IP ไป SOAR (container ${cont}) → Imperva policy 2169031 → อ่านกลับเพื่อ verify…`;
   await sleep(1600);
   const t=Date.now(), td=daily[daily.length-1];
   if(pg.act==="block"){
-    ips.forEach(ip=>{const d=detected.find(x=>x.ip===ip); blocked.push({ip,t,tk,desc,by:USER,rule:d?d.rule:"-"}); td.b++;
+    const why=ip=>(WAF_POLICY[ip]||"").startsWith("ALLOW")?"allowed by WAF policy: "+WAF_POLICY[ip]:/^(10\.|127\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(ip)?"private IP":/^18\.143\.202\./.test(ip)?"overlaps protected network 18.143.202.0/24":blocked.some(b=>b.ip===ip)?"already blocked":null;
+    const ok=[], rej=[];
+    ips.forEach(ip=>{const w=why(ip); if(w){rej.push(ip+" ("+w+")"); audit.push({t,user:USER,action:"block",ip,tk,desc,status:"rejected",ver:"-",cont:"-"}); return;}
+      const d=detected.find(x=>x.ip===ip); ok.push(ip); blocked.push({ip,t,tk,desc,by:USER,rule:d?d.rule:"manual entry"}); td.b++;
       audit.push({t,user:USER,action:"block",ip,tk,desc,status:"blocked",ver:"yes",cont});});
-    r.className="result ok"; r.textContent=`✔ Block ${ips.length} IP บน policy 2169031 และ verify บน WAF แล้ว · ${tk} · ย้ายไปหน้า Blocked IPs · บันทึกลง imperva_audit.csv`;
+    r.className=ok.length?"result ok":"result running";
+    r.textContent=`${ok.length?`✔ Block ${ok.length} IP บน policy 2169031 และ verify บน WAF แล้ว · ${tk} · ย้ายไปหน้า Blocked IPs`:"ไม่มี IP ที่ block ได้"}${rej.length?` · ✖ rejected: ${rej.join(", ")}`:""} · บันทึกลง imperva_audit.csv`;
   } else {
     ips.forEach(ip=>{const i=blocked.findIndex(b=>b.ip===ip); if(i>=0) blocked.splice(i,1); td.u++;
       audit.push({t,user:USER,action:"unblock",ip,tk,desc,status:"unblocked",ver:"removed",cont});});
     r.className="result ok"; r.textContent=`✔ Unblock ${ips.length} IP แล้ว — หายจากตารางและ verify บน WAF แล้ว · บันทึกลง imperva_audit.csv`;
   }
-  pg.sel.clear(); $(pg.p+"_tk").value=""; $(pg.p+"_desc").value=""; pg.busy=false;
+  pg.sel.clear(); $(pg.p+"_tk").value=""; $(pg.p+"_desc").value=""; if(page!=="blocked") $(pg.p+"_add").value=""; pg.busy=false;
   renderAll();
   document.querySelectorAll(`#v-${page} .kpi`).forEach(el=>{el.classList.remove("flash");void el.offsetWidth;el.classList.add("flash");});
 }
@@ -426,7 +447,7 @@ $("rules").addEventListener("click",e=>{const tg=e.target.closest("[data-tg]"), 
   if(tg||del){renderRules(); renderAll();}});
 
 function renderAudit(){
-  const aq=$("aq").value.trim().toLowerCase(), act=$("aact").value, cls={blocked:"p-block",unblocked:"p-safe",rule:"p-monitor"};
+  const aq=$("aq").value.trim().toLowerCase(), act=$("aact").value, cls={blocked:"p-block",unblocked:"p-safe",rule:"p-monitor",rejected:"p-review"};
   $("audit").innerHTML=audit.slice().sort((a,b)=>b.t-a.t).filter(e=>(!act||e.action===act)&&has(aq,e.ip,e.tk,e.user,e.desc))
    .map(e=>`<tr><td class="mono nw">${fmt(e.t)}</td><td>${esc(e.user)}</td><td>${e.action}</td><td class="ip">${e.ip}</td><td class="mono nw">${esc(e.tk)}</td><td class="small">${esc(e.desc)}</td>
    <td><span class="pill ${cls[e.status]||"p-done"}">${e.status}</span></td><td>${e.ver}</td><td class="mono">${e.cont}</td></tr>`).join("")||'<tr><td colspan="9" class="note">No audit rows.</td></tr>';

@@ -102,5 +102,30 @@ class TestPolicyCacheShared(Base):
         self.assertEqual(len(self.calls), 2)
 
 
+class TestPolicyCheckCommand(Base):
+    def run_(self, rows):
+        import impervapolicycheck as c
+        c.load_conf_stanza = lambda *a: {}
+        c.load_entries = lambda *a, **k: ([
+            {"policy_id": "9", "policy_name": "Off", "action": "BLOCK", "cidr": "0.0.0.0/0", "kind": "rule",
+             "enabled": False},
+            {"policy_id": "1667692", "policy_name": "Block IOC", "action": "BLOCK", "cidr": "35.165.106.69",
+             "kind": "rule", "enabled": True}], ["2169031"], "cache")
+        c.si.getOrganizedResults = lambda: ([dict(r) for r in rows], None, {"sessionKey": "k"})
+        c.si.outputResults = lambda r: self.out.__setitem__("rows", r)
+        sys.argv = ["impervapolicycheck.py", "field=ip"]
+        c.main()
+        return self.out["rows"]
+
+    def test_disabled_policies_hidden_and_empty_ip_row_kept(self):
+        rows = self.run_([{"ip": "35.165.106.69"}, {"ip": "18.236.104.225"}, {"ip": ""}])
+        self.assertEqual([r.get("waf_policy_verdict") for r in rows], ["BLOCKED_ELSEWHERE", "NONE", None])
+        self.assertEqual(rows[0]["waf_policies"], "BLOCK in 1667692 Block IOC (35.165.106.69)")
+        self.assertEqual(rows[1]["waf_policies"], "-")              # disabled 0.0.0.0/0 not shown
+
+    def test_summary_without_ip_field(self):
+        self.assertEqual(self.run_([{"_time": "1"}]), [{"policies_ip_rules": 2, "read_via": "cache"}])
+
+
 if __name__ == "__main__":
     unittest.main()

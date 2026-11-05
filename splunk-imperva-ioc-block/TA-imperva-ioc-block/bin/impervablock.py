@@ -37,7 +37,7 @@ import splunk.Intersplunk as si  # noqa: E402
 import imperva_lib as il         # noqa: E402
 from backend import get_backend   # noqa: E402
 from soar_bridge import SoarError  # noqa: E402
-from splunk_helpers import (CACHE, drop_policy_cache, get_logger, is_true, kv_delete, kv_get,  # noqa: E402
+from splunk_helpers import (get_logger, is_true, kv_get,  # noqa: E402
                             kv_upsert, load_conf_stanza, load_credential, parse_options,
                             protected_networks, registry_key)
 
@@ -127,12 +127,9 @@ def main():
                     row(ip, "-", "error", str(e), "unknown")
 
         # ---- registry (description / threat actor / incident) in KV store ------------
-        if not dry_run and any(r["status"] in ("blocked", "unblocked") for r in out):
-            drop_policy_cache()  # the WAF changed: the next policy check must read it again
-            try:
-                kv_delete(session_key, "policies", CACHE)
-            except Exception:  # noqa: BLE001 - already gone / best effort
-                pass
+        # The WAF-policy cache is NOT dropped here: IPs blocked from Splunk are filtered by the
+        # registry, and "Imperva - WAF policy cache refresh" re-reads every policy every 5 min,
+        # so the dashboards never have to wait for SOAR after a block.
         if not dry_run:
             docs = []
             for r in out:

@@ -131,6 +131,9 @@
         <format type="color" field="Action">
           <colorPalette type="expression">if(like(value, "🔓%"), "#53A051", "#3C444D")</colorPalette>
         </format>
+        <format type="color" field="waf_check">
+          <colorPalette type="expression">if(like(value, "✔%") OR value=="-", "#3C444D", "#B26B00")</colorPalette>
+        </format>
         <drilldown>
           <!-- one click = do it (no second confirm) -->
           <condition match="'click.name2'==&quot;Action&quot; AND 'row.selected_ips'!=&quot;-&quot;">

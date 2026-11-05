@@ -12,6 +12,7 @@ Usage:
 Added fields:
     waf_policy_verdict  ALLOWLISTED | BLOCKED_ELSEWHERE | BLOCKED_HERE | NONE | UNKNOWN
     waf_policies        "BLOCK in 1364280 Block DDOS Attack 2025 (1.2.3.0/24); ALLOW in ..."
+                        (enabled policies only)
 
 The policy list is read directly or through SOAR (api_mode) and cached for
 [settings] policy_cache_minutes (default 10) in
@@ -97,7 +98,7 @@ def main():
                 r["waf_policy_verdict"], r["waf_policies"] = "UNKNOWN", "cannot read WAF policies: %s" % e
             si.outputResults(results)
             return
-        if not any((r.get(field) or "").strip() for r in results):  # no IPs: show a summary
+        if not any(field in r for r in results):  # no IP field at all: show a summary
             results = [{"policies_ip_rules": len(entries), "read_via": via}]
         for r in results:
             ip = (r.get(field) or "").strip()
@@ -105,6 +106,8 @@ def main():
                 continue
             verdict, texts = il.policy_verdict(il.match_policies(ip, entries), targets)
             r["waf_policy_verdict"] = verdict
+            # disabled policies do not block / allow anything: not shown (e.g. a disabled 0.0.0.0/0 rule)
+            texts = [t for t in texts if "[disabled]" not in t]
             r["waf_policies"] = "; ".join(texts) if texts else "-"
         si.outputResults(results)
     except Exception as e:  # noqa: BLE001
