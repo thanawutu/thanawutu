@@ -159,7 +159,7 @@
 | head 50
 | stats count AS shown_n values(src) AS shown
 | eval SelectAll=if(shown_n>0, "☑ Select all ".shown_n." shown: ".mvjoin(shown, ","), "-")
-| eval ip=mvappend("", split(replace(trim($d_sel|s$, ","), "☑ Select all \d+ shown: ", ""), ","))
+| eval ip=split(",".replace(trim($d_sel|s$, ","), "☑ Select all \d+ shown: ", ""), ",")
 | mvexpand ip
 | eventstats count AS _c BY ip
 | eval ip=if(ip!="" AND ip!="-" AND _c%2=1, ip, null())
