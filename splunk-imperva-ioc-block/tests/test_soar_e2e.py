@@ -133,6 +133,7 @@ class FakeSoar(BaseHTTPRequestHandler):
 class FakeVirusTotal(BaseHTTPRequestHandler):
     """GET /api/v3/ip_addresses/{ip} with header x-apikey."""
     calls = []
+    quota_429 = 0          # answer HTTP 429 this many times first (quota window)
 
     def log_message(self, *a):
         pass
@@ -142,7 +143,8 @@ class FakeVirusTotal(BaseHTTPRequestHandler):
         FakeVirusTotal.calls.append(ip)
         if self.headers.get("x-apikey") != "vtkey":
             code, body = 401, {"error": {"code": "WrongCredentialsError"}}
-        elif ip == "4.4.4.4":
+        elif ip == "4.4.4.4" or FakeVirusTotal.quota_429 > 0:
+            FakeVirusTotal.quota_429 = max(0, FakeVirusTotal.quota_429 - 1)
             code, body = 429, {"error": {"code": "QuotaExceededError"}}
         else:
             mal = 12 if ip.startswith("185.") else 0
@@ -180,6 +182,7 @@ class TestSoarE2E(unittest.TestCase):
                     "VT_API_KEY": "vtkey", "VT_API_BASE": self.vt_base + "/api/v3",
                     "VT_REQUESTS_PER_MINUTE": "6000"}
         FakeVirusTotal.calls = []
+        FakeVirusTotal.quota_429 = 0
         self._old = {k: os.environ.get(k) for k in self.env}
         os.environ.update(self.env)
         self.bridge = sb.SoarBridge(self.soar_base, "tok", wait_seconds=10, poll_interval=0.05)
@@ -261,6 +264,13 @@ class TestSoarE2E(unittest.TestCase):
         self.assertEqual(rows["4.4.4.4"]["vt_status"], "rate_limited")
         self.assertEqual(rows["8.8.4.4"]["vt_status"], "rate_limited")
         self.assertEqual(FakeVirusTotal.calls, ["4.4.4.4"])
+
+    def test_virustotal_429_retried_via_soar_until_all_done(self):
+        FakeVirusTotal.quota_429 = 2
+        rows = {r["ip"]: r for r in self.bridge.vt_lookup(["185.220.101.47", "20.115.62.14"],
+                                                          max_lookups=0, max_wait=5, retry_wait=1)}
+        self.assertEqual([rows[i]["vt_status"] for i in ("185.220.101.47", "20.115.62.14")], ["ok", "ok"])
+        self.assertEqual(FakeVirusTotal.calls, ["185.220.101.47"] * 3 + ["20.115.62.14"])
 
     def test_virustotal_key_missing_on_soar(self):
         os.environ.pop("VT_API_KEY")

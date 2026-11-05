@@ -19,6 +19,19 @@ def splunk_home():
     return os.environ.get("SPLUNK_HOME", "/opt/splunk")
 
 
+def policy_cache_path():
+    """Cache of the IP rules of every WAF policy (written by impervapolicycheck)."""
+    return os.path.join(splunk_home(), "var", "run", "splunk", "ta_imperva_policies_cache.json")
+
+
+def drop_policy_cache():
+    """Called after a block / unblock so the next policy check reads the WAF again."""
+    try:
+        os.remove(policy_cache_path())
+    except OSError:
+        pass
+
+
 def get_logger(name, filename):
     log = logging.getLogger(name)
     if not log.handlers:

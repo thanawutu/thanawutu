@@ -115,6 +115,38 @@ class TestLookupMany(unittest.TestCase):
         self.assertEqual(c.calls, ["1.1.1.1", "8.8.8.8"])
         self.assertEqual([out[i]["vt_status"] for i in ("8.8.8.8", "8.8.4.4")], ["rate_limited"] * 2)
 
+    def test_429_waits_and_retries_until_all_ips_done(self):
+        class Quota(FakeVT):          # 2 calls per "minute", then HTTP 429 until 60 s passed
+            def __init__(self, clock):
+                FakeVT.__init__(self)
+                self.clock, self.window, self.used = clock, 0.0, 0
+
+            def lookup_ip(self, ip):
+                if self.clock[0] - self.window >= 60:
+                    self.window, self.used = self.clock[0], 0
+                self.calls.append(ip)
+                if self.used >= 2:
+                    raise vt.VTRateLimited("429")
+                self.used += 1
+                return {"vt_status": "ok", "vt_malicious": 0}
+        ips = ["8.8.8.8", "8.8.4.4", "1.1.1.1", "1.0.0.1", "9.9.9.10", "208.67.222.222"]
+        c = Quota(self.t)
+        out = self.run_(c, ips, rpm=600, max_lookups=0, retry_wait=60, max_wait=600)
+        self.assertEqual([out[i]["vt_status"] for i in ips], ["ok"] * 6)
+        self.assertEqual(self.sleeps.count(60), 2)          # waited twice for the quota window
+
+    def test_429_wait_budget_then_rate_limited(self):
+        c = FakeVT(limit_after=1)                            # quota never comes back
+        out = self.run_(c, ["1.1.1.1", "8.8.8.8", "8.8.4.4"], rpm=600, retry_wait=60, max_wait=120)
+        self.assertEqual(self.sleeps.count(60), 2)
+        self.assertEqual([out[i]["vt_status"] for i in ("1.1.1.1", "8.8.8.8", "8.8.4.4")],
+                         ["ok", "rate_limited", "rate_limited"])
+
+    def test_no_limit_when_max_lookups_zero(self):
+        ips = ["8.8.8.8", "8.8.4.4", "1.1.1.1"]
+        out = self.run_(FakeVT(), ips, rpm=600, max_lookups=0)
+        self.assertEqual([out[i]["vt_status"] for i in ips], ["ok"] * 3)
+
     def test_error_kept_per_ip(self):
         out = self.run_(FakeVT(), ["9.9.9.9", "1.1.1.1"], rpm=600)
         self.assertEqual((out["9.9.9.9"]["vt_status"], out["1.1.1.1"]["vt_status"]), ("error", "ok"))

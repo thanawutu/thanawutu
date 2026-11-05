@@ -59,7 +59,7 @@ def in_networks(ip, networks):
 
 def main():
     results, _dummy, settings = si.getOrganizedResults()
-    opts = parse_options(sys.argv[1:], ("field", "count_field", "check_waf"))
+    opts = parse_options(sys.argv[1:], ("field", "count_field", "check_waf", "max_lookups", "max_wait"))
     session_key = settings.get("sessionKey")
     log = get_logger("imperva_vtcheck", "imperva_vtcheck.log")
     field = opts.get("field", "src")
@@ -76,7 +76,11 @@ def main():
         cache = vt.VTCache(os.path.join(splunk_home(), "var", "run", "splunk", "ta_imperva_vt_cache.json"),
                            ttl_seconds=int(float(vconf.get("cache_ttl_hours", 24)) * 3600))
         rpm = max(1, int(vconf.get("requests_per_minute", 4)))
-        max_lookups = int(vconf.get("max_lookups_per_run", 10))
+        # max_lookups=0 / max_wait=<s> options: used by the background warm-up search,
+        # which keeps calling VirusTotal (waiting on HTTP 429) until every IP is checked
+        max_lookups = int(opts.get("max_lookups") or vconf.get("max_lookups_per_run", 10))
+        retry_wait = int(vconf.get("rate_limit_retry_seconds", 60))
+        max_wait = int(opts.get("max_wait") or vconf.get("rate_limit_max_wait_seconds", 120))
         thresholds = {k: int(vconf[k]) for k in vt.DEFAULT_THRESHOLDS if vconf.get(k)}
         protected = protected_networks(iconf)
 
@@ -107,8 +111,10 @@ def main():
             try:
                 if vt_via == "soar":
                     bridge = get_soar_bridge(iconf, load_credential, session_key)
-                    wait = max(bridge.wait_seconds, int(min(len(todo), max_lookups) * 60.0 / rpm) + 45)
-                    for row in bridge.vt_lookup(todo, wait_seconds=wait):
+                    n = min(len(todo), max_lookups) if max_lookups > 0 else len(todo)
+                    wait = max(bridge.wait_seconds, int(n * 60.0 / rpm) + max_wait + 45)
+                    for row in bridge.vt_lookup(todo, wait_seconds=wait, max_lookups=max_lookups,
+                                                max_wait=max_wait, retry_wait=retry_wait):
                         ip = row.pop("ip", None)
                         row.pop("soar_container", None)
                         if ip:
@@ -119,7 +125,8 @@ def main():
                                          timeout=int(vconf.get("timeout", 30)),
                                          proxy=vconf.get("proxy") or iconf.get("proxy") or None,
                                          verify_ssl=is_true(vconf.get("verify_ssl", "true")))
-                    fresh = vt.lookup_many(client, todo, rpm=rpm, max_lookups=max_lookups)
+                    fresh = vt.lookup_many(client, todo, rpm=rpm, max_lookups=max_lookups,
+                                           retry_wait=retry_wait, max_wait=max_wait)
             except Exception as e:  # noqa: BLE001 - show the error per row, keep the table
                 log.warning("VirusTotal lookup via %s failed: %s", vt_via, e)
                 fresh = {ip: {"vt_status": "error", "vt_error": str(e), "vt_link": vt.VT_GUI + ip}

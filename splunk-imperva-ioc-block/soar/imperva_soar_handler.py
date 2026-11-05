@@ -21,6 +21,9 @@ SOAR environment variables of the same names:
   VT_API_KEY                             required for VirusTotal lookups (action vtcheck)
   VT_REQUESTS_PER_MINUTE                 optional, default 4 (public API); raise for premium
   VT_MAX_LOOKUPS                         optional, default 10 per request
+  VT_RETRY_WAIT_SECONDS                  optional, default 60: wait after VirusTotal HTTP 429, then retry
+  VT_MAX_WAIT_SECONDS                    optional, default 0: total wait budget for 429 retries
+                                         (Splunk's vtcheck sends its own values with each request)
   VT_API_BASE                            optional, default https://www.virustotal.com/api/v3
   IMPERVA_PROXY                          optional, proxy used ONLY by this playbook for Imperva
                                          and VirusTotal, e.g. http://10.12.30.100:8080
@@ -57,8 +60,15 @@ def process_vtcheck(cef, env, vt_client_factory=None):
     else:
         client = vt_client_factory()
     ips = parse_ip_list(cef.get("ips", ""))
+    def num(cef_key, env_key, default):
+        v = cef.get(cef_key)
+        return int(v if v not in (None, "") else (env.get(env_key) or default))
+
+    # HTTP 429: wait and call again until all IPs are done or the wait budget is used up
     res = lookup_many(client, ips, rpm=int(env.get("VT_REQUESTS_PER_MINUTE") or 4),
-                      max_lookups=int(env.get("VT_MAX_LOOKUPS") or 10))
+                      max_lookups=num("vt_max_lookups", "VT_MAX_LOOKUPS", 10),
+                      retry_wait=num("vt_retry_wait", "VT_RETRY_WAIT_SECONDS", 60),
+                      max_wait=num("vt_max_wait", "VT_MAX_WAIT_SECONDS", 0))
     return [dict(info, ip=ip) for ip, info in res.items()]
 
 

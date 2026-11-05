@@ -14,6 +14,7 @@ read -> merge -> write, never write only the new IPs.
 import ipaddress
 import json
 import ssl
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -113,6 +114,39 @@ def merge_blacklist(current, to_add=(), to_remove=()):
 # --------------------------------------------------------------------------- #
 # Imperva API client
 # --------------------------------------------------------------------------- #
+class ImpervaRateLimited(ImpervaError):
+    def __init__(self, msg, retry_after=None):
+        ImpervaError.__init__(self, msg)
+        self.retry_after = retry_after
+
+
+def _raise_http(e, what):
+    body = e.read()[:300]
+    if e.code in (429, 503):
+        try:
+            ra = float(e.headers.get("Retry-After")) if e.headers else None
+        except (TypeError, ValueError):
+            ra = None
+        raise ImpervaRateLimited("%s (rate limited / busy): %s" % (what, body), ra)
+    raise ImpervaError("%s: %s" % (what, body))
+
+
+# Imperva API rate limit (HTTP 429) or busy (503): wait and call again.
+# The writes are idempotent (full ACL / full policy body), so retrying is safe.
+RETRY_WAITS = (5, 15, 30, 60)
+
+
+def _with_retry(fn, waits=None, _sleep=time.sleep):
+    waits = RETRY_WAITS if waits is None else waits
+    for i in range(len(waits) + 1):
+        try:
+            return fn()
+        except ImpervaRateLimited as e:
+            if i >= len(waits):
+                raise
+            _sleep(min(max(e.retry_after or waits[i], 1), 120))
+
+
 class ImpervaClient(object):
     def __init__(self, api_id, api_key, base_url=DEFAULT_BASE_URL, timeout=30,
                  proxy=None, verify_ssl=True):
@@ -133,6 +167,9 @@ class ImpervaClient(object):
         self._opener = urllib.request.build_opener(*handlers)
 
     def _post(self, path, params):
+        return _with_retry(lambda: self._post_once(path, params))
+
+    def _post_once(self, path, params):
         url = self.base_url + path
         data = urllib.parse.urlencode(params).encode("utf-8")
         req = urllib.request.Request(url, data=data, method="POST")
@@ -144,7 +181,7 @@ class ImpervaClient(object):
             with self._opener.open(req, timeout=self.timeout) as resp:
                 body = resp.read().decode("utf-8")
         except urllib.error.HTTPError as e:
-            raise ImpervaError("HTTP %s from %s: %s" % (e.code, path, e.read()[:300]))
+            _raise_http(e, "HTTP %s from %s" % (e.code, path))
         except urllib.error.URLError as e:
             raise ImpervaError("Cannot reach Imperva API (%s): %s" % (path, e.reason))
         try:
@@ -244,6 +281,9 @@ class ImpervaPolicyClient(object):
         self._opener = urllib.request.build_opener(*handlers)
 
     def _request(self, method, path, query=None, body=None):
+        return _with_retry(lambda: self._request_once(method, path, query, body))
+
+    def _request_once(self, method, path, query=None, body=None):
         q = dict(query or {})
         if self.caid:
             q["caid"] = self.caid
@@ -259,7 +299,7 @@ class ImpervaPolicyClient(object):
             with self._opener.open(req, timeout=self.timeout) as resp:
                 raw = resp.read().decode("utf-8")
         except urllib.error.HTTPError as e:
-            raise ImpervaError("HTTP %s %s %s: %s" % (e.code, method, path, e.read()[:300]))
+            _raise_http(e, "HTTP %s %s %s" % (e.code, method, path))
         except urllib.error.URLError as e:
             raise ImpervaError("Cannot reach Imperva API (%s): %s" % (path, e.reason))
         try:
@@ -411,6 +451,8 @@ def build_registry_doc(existing, key, site_id, ip, action, status, user, now, me
                "source": "already in WAF - registered from splunk"}
         doc.update(meta)
         return doc
+    if action == "unblock" and status == "no_change" and existing and existing.get("status") == "blocked":
+        status = "unblocked"  # removed outside Splunk: close the registry entry too
     if action == "unblock" and status == "unblocked":
         doc = dict(existing or {"_key": key, "site_id": site_id, "ip": ip})
         doc.pop("_user", None)

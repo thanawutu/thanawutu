@@ -43,6 +43,7 @@ read -> merge -> write, never write only the new IPs.
 import ipaddress
 import json
 import ssl
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -142,6 +143,39 @@ def merge_blacklist(current, to_add=(), to_remove=()):
 # --------------------------------------------------------------------------- #
 # Imperva API client
 # --------------------------------------------------------------------------- #
+class ImpervaRateLimited(ImpervaError):
+    def __init__(self, msg, retry_after=None):
+        ImpervaError.__init__(self, msg)
+        self.retry_after = retry_after
+
+
+def _raise_http(e, what):
+    body = e.read()[:300]
+    if e.code in (429, 503):
+        try:
+            ra = float(e.headers.get("Retry-After")) if e.headers else None
+        except (TypeError, ValueError):
+            ra = None
+        raise ImpervaRateLimited("%s (rate limited / busy): %s" % (what, body), ra)
+    raise ImpervaError("%s: %s" % (what, body))
+
+
+# Imperva API rate limit (HTTP 429) or busy (503): wait and call again.
+# The writes are idempotent (full ACL / full policy body), so retrying is safe.
+RETRY_WAITS = (5, 15, 30, 60)
+
+
+def _with_retry(fn, waits=None, _sleep=time.sleep):
+    waits = RETRY_WAITS if waits is None else waits
+    for i in range(len(waits) + 1):
+        try:
+            return fn()
+        except ImpervaRateLimited as e:
+            if i >= len(waits):
+                raise
+            _sleep(min(max(e.retry_after or waits[i], 1), 120))
+
+
 class ImpervaClient(object):
     def __init__(self, api_id, api_key, base_url=DEFAULT_BASE_URL, timeout=30,
                  proxy=None, verify_ssl=True):
@@ -162,6 +196,9 @@ class ImpervaClient(object):
         self._opener = urllib.request.build_opener(*handlers)
 
     def _post(self, path, params):
+        return _with_retry(lambda: self._post_once(path, params))
+
+    def _post_once(self, path, params):
         url = self.base_url + path
         data = urllib.parse.urlencode(params).encode("utf-8")
         req = urllib.request.Request(url, data=data, method="POST")
@@ -173,7 +210,7 @@ class ImpervaClient(object):
             with self._opener.open(req, timeout=self.timeout) as resp:
                 body = resp.read().decode("utf-8")
         except urllib.error.HTTPError as e:
-            raise ImpervaError("HTTP %s from %s: %s" % (e.code, path, e.read()[:300]))
+            _raise_http(e, "HTTP %s from %s" % (e.code, path))
         except urllib.error.URLError as e:
             raise ImpervaError("Cannot reach Imperva API (%s): %s" % (path, e.reason))
         try:
@@ -273,6 +310,9 @@ class ImpervaPolicyClient(object):
         self._opener = urllib.request.build_opener(*handlers)
 
     def _request(self, method, path, query=None, body=None):
+        return _with_retry(lambda: self._request_once(method, path, query, body))
+
+    def _request_once(self, method, path, query=None, body=None):
         q = dict(query or {})
         if self.caid:
             q["caid"] = self.caid
@@ -288,7 +328,7 @@ class ImpervaPolicyClient(object):
             with self._opener.open(req, timeout=self.timeout) as resp:
                 raw = resp.read().decode("utf-8")
         except urllib.error.HTTPError as e:
-            raise ImpervaError("HTTP %s %s %s: %s" % (e.code, method, path, e.read()[:300]))
+            _raise_http(e, "HTTP %s %s %s" % (e.code, method, path))
         except urllib.error.URLError as e:
             raise ImpervaError("Cannot reach Imperva API (%s): %s" % (path, e.reason))
         try:
@@ -440,6 +480,8 @@ def build_registry_doc(existing, key, site_id, ip, action, status, user, now, me
                "source": "already in WAF - registered from splunk"}
         doc.update(meta)
         return doc
+    if action == "unblock" and status == "no_change" and existing and existing.get("status") == "blocked":
+        status = "unblocked"  # removed outside Splunk: close the registry entry too
     if action == "unblock" and status == "unblocked":
         doc = dict(existing or {"_key": key, "site_id": site_id, "ip": ip})
         doc.pop("_user", None)
@@ -794,15 +836,21 @@ def _is_public(ip):
         return False
 
 
-def lookup_many(client, ips, rpm=4, max_lookups=10, _sleep=time.sleep, _now=time.time):
+def lookup_many(client, ips, rpm=4, max_lookups=10, retry_wait=60, max_wait=0,
+                _sleep=time.sleep, _now=time.time):
     """
-    Look up each IP once, at most `max_lookups` API calls, spaced 60/rpm seconds.
+    Look up each IP once, at most `max_lookups` API calls (0 = no limit), spaced 60/rpm seconds.
     Returns {ip: info}; info["vt_status"] is ok | not_found | private_ip | error |
     rate_limited | not_checked (max_lookups_per_run).
-    Stops calling the API after the first HTTP 429.
+
+    HTTP 429 (quota): wait `retry_wait` seconds and call again for the same IP, until every
+    IP is done or `max_wait` seconds were spent waiting on the quota (0 = do not wait).
+    Then the remaining IPs are "rate_limited" - they are not cached, so the next run
+    (dashboard refresh / background warm-up search) tries them again.
     """
-    out, calls, last, limited = {}, 0, None, False
+    out, calls, last, limited, waited = {}, 0, None, False, 0.0
     gap = 60.0 / max(1, int(rpm))
+    max_lookups = int(max_lookups or 0)
     for ip in ips:
         if ip in out:
             continue
@@ -813,22 +861,29 @@ def lookup_many(client, ips, rpm=4, max_lookups=10, _sleep=time.sleep, _now=time
         if limited:
             out[ip] = dict(base, vt_status="rate_limited")
             continue
-        if calls >= max_lookups:
+        if max_lookups > 0 and calls >= max_lookups:
             out[ip] = dict(base, vt_status="not_checked (max_lookups_per_run)")
             continue
-        if last is not None:
-            wait = gap - (_now() - last)
-            if wait > 0:
-                _sleep(wait)
-        last = _now()
-        calls += 1
-        try:
-            out[ip] = client.lookup_ip(ip)
-        except VTRateLimited:
-            limited = True
-            out[ip] = dict(base, vt_status="rate_limited")
-        except VTError as e:
-            out[ip] = dict(base, vt_status="error", vt_error=str(e))
+        while True:
+            if last is not None:
+                wait = gap - (_now() - last)
+                if wait > 0:
+                    _sleep(wait)
+            last = _now()
+            calls += 1
+            try:
+                out[ip] = client.lookup_ip(ip)
+            except VTRateLimited:
+                if waited + retry_wait <= max_wait:
+                    _sleep(retry_wait)      # quota window: wait, then call again for this IP
+                    waited += retry_wait
+                    last = _now()
+                    continue
+                limited = True
+                out[ip] = dict(base, vt_status="rate_limited")
+            except VTError as e:
+                out[ip] = dict(base, vt_status="error", vt_error=str(e))
+            break
     return out
 
 
@@ -858,6 +913,9 @@ SOAR environment variables of the same names:
   VT_API_KEY                             required for VirusTotal lookups (action vtcheck)
   VT_REQUESTS_PER_MINUTE                 optional, default 4 (public API); raise for premium
   VT_MAX_LOOKUPS                         optional, default 10 per request
+  VT_RETRY_WAIT_SECONDS                  optional, default 60: wait after VirusTotal HTTP 429, then retry
+  VT_MAX_WAIT_SECONDS                    optional, default 0: total wait budget for 429 retries
+                                         (Splunk's vtcheck sends its own values with each request)
   VT_API_BASE                            optional, default https://www.virustotal.com/api/v3
   IMPERVA_PROXY                          optional, proxy used ONLY by this playbook for Imperva
                                          and VirusTotal, e.g. http://10.12.30.100:8080
@@ -887,8 +945,15 @@ def process_vtcheck(cef, env, vt_client_factory=None):
     else:
         client = vt_client_factory()
     ips = parse_ip_list(cef.get("ips", ""))
+    def num(cef_key, env_key, default):
+        v = cef.get(cef_key)
+        return int(v if v not in (None, "") else (env.get(env_key) or default))
+
+    # HTTP 429: wait and call again until all IPs are done or the wait budget is used up
     res = lookup_many(client, ips, rpm=int(env.get("VT_REQUESTS_PER_MINUTE") or 4),
-                      max_lookups=int(env.get("VT_MAX_LOOKUPS") or 10))
+                      max_lookups=num("vt_max_lookups", "VT_MAX_LOOKUPS", 10),
+                      retry_wait=num("vt_retry_wait", "VT_RETRY_WAIT_SECONDS", 60),
+                      max_wait=num("vt_max_wait", "VT_MAX_WAIT_SECONDS", 0))
     return [dict(info, ip=ip) for ip, info in res.items()]
 
 

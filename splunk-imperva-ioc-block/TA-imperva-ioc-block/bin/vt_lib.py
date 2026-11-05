@@ -186,15 +186,21 @@ def _is_public(ip):
         return False
 
 
-def lookup_many(client, ips, rpm=4, max_lookups=10, _sleep=time.sleep, _now=time.time):
+def lookup_many(client, ips, rpm=4, max_lookups=10, retry_wait=60, max_wait=0,
+                _sleep=time.sleep, _now=time.time):
     """
-    Look up each IP once, at most `max_lookups` API calls, spaced 60/rpm seconds.
+    Look up each IP once, at most `max_lookups` API calls (0 = no limit), spaced 60/rpm seconds.
     Returns {ip: info}; info["vt_status"] is ok | not_found | private_ip | error |
     rate_limited | not_checked (max_lookups_per_run).
-    Stops calling the API after the first HTTP 429.
+
+    HTTP 429 (quota): wait `retry_wait` seconds and call again for the same IP, until every
+    IP is done or `max_wait` seconds were spent waiting on the quota (0 = do not wait).
+    Then the remaining IPs are "rate_limited" - they are not cached, so the next run
+    (dashboard refresh / background warm-up search) tries them again.
     """
-    out, calls, last, limited = {}, 0, None, False
+    out, calls, last, limited, waited = {}, 0, None, False, 0.0
     gap = 60.0 / max(1, int(rpm))
+    max_lookups = int(max_lookups or 0)
     for ip in ips:
         if ip in out:
             continue
@@ -205,20 +211,27 @@ def lookup_many(client, ips, rpm=4, max_lookups=10, _sleep=time.sleep, _now=time
         if limited:
             out[ip] = dict(base, vt_status="rate_limited")
             continue
-        if calls >= max_lookups:
+        if max_lookups > 0 and calls >= max_lookups:
             out[ip] = dict(base, vt_status="not_checked (max_lookups_per_run)")
             continue
-        if last is not None:
-            wait = gap - (_now() - last)
-            if wait > 0:
-                _sleep(wait)
-        last = _now()
-        calls += 1
-        try:
-            out[ip] = client.lookup_ip(ip)
-        except VTRateLimited:
-            limited = True
-            out[ip] = dict(base, vt_status="rate_limited")
-        except VTError as e:
-            out[ip] = dict(base, vt_status="error", vt_error=str(e))
+        while True:
+            if last is not None:
+                wait = gap - (_now() - last)
+                if wait > 0:
+                    _sleep(wait)
+            last = _now()
+            calls += 1
+            try:
+                out[ip] = client.lookup_ip(ip)
+            except VTRateLimited:
+                if waited + retry_wait <= max_wait:
+                    _sleep(retry_wait)      # quota window: wait, then call again for this IP
+                    waited += retry_wait
+                    last = _now()
+                    continue
+                limited = True
+                out[ip] = dict(base, vt_status="rate_limited")
+            except VTError as e:
+                out[ip] = dict(base, vt_status="error", vt_error=str(e))
+            break
     return out

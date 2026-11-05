@@ -7,7 +7,8 @@ export = none
 access = read : [ admin, imperva_blocker ], write : [ admin ]
 export = system
 
-[views/imperva_ioc_block]
+# All five dashboards (Block 7 days, Older detections, Blocked IPs, Detection rules, Audit log)
+[views]
 access = read : [ admin, imperva_blocker ], write : [ admin ]
 
 [passwords]
@@ -40,17 +41,37 @@ access = read : [ admin, imperva_blocker ], write : [ admin ]
 [macros/imperva_ioc_fields]
 access = read : [ admin, imperva_blocker ], write : [ admin ]
 
-[commands/impervadismiss]
+[commands/impervarules]
 access = read : [ admin, imperva_blocker ], write : [ admin ]
 export = system
 
-[collections/imperva_ioc_dismissed]
+[commands/impervarulecheck]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = system
+
+# Detection rules: changed from the "Detection rules" dashboard by admin / imperva_blocker
+[collections/imperva_ioc_rules]
 access = read : [ admin, imperva_blocker ], write : [ admin, imperva_blocker ]
 export = system
 
-[transforms/imperva_ioc_dismissed]
+[transforms/imperva_ioc_rules]
 access = read : [ admin, imperva_blocker ], write : [ admin, imperva_blocker ]
 export = system
+
+# Audit CSV: the dashboards append to it (outputlookup) as the logged-in analyst
+[transforms/imperva_audit]
+access = read : [ admin, imperva_blocker ], write : [ admin, imperva_blocker ]
+export = system
+
+[lookups/imperva_audit.csv]
+access = read : [ admin, imperva_blocker ], write : [ admin, imperva_blocker ]
+export = system
+
+[macros]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+
+[savedsearches]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
 
 [commands/impervapolicycheck]
 access = read : [ admin, imperva_blocker ], write : [ admin ]

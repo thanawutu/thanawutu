@@ -150,7 +150,7 @@ class SoarBridge(object):
 
     # ------------------------------------------------------------------ API
     def call(self, action, ips=(), policy_ids=(), dry_run=False, meta=None, requested_by="-",
-             wait_seconds=None, protected=()):
+             wait_seconds=None, protected=(), extra=None):
         # `meta` (threat actor / incident no. / comment / reason) is deliberately NOT sent:
         # the WAF has no field for it. It is kept only in Splunk (KV store registry,
         # audit log, dashboard). SOAR receives just what it needs to act.
@@ -163,6 +163,8 @@ class SoarBridge(object):
             "requested_by": requested_by,
             "requested_from": "splunk",
         }
+        for k, v in (extra or {}).items():
+            req[k] = str(v)
         if protected:
             # Splunk's protected_networks (CIDRs only). SOAR unions it with its own
             # IMPERVA_PROTECTED_NETWORKS, so Splunk can only make SOAR stricter, never looser.
@@ -188,6 +190,9 @@ class SoarBridge(object):
         """IP rules of every WAF policy in the account (read by SOAR)."""
         return self.call("policy_entries")
 
-    def vt_lookup(self, ips, wait_seconds=None):
-        """VirusTotal lookups done by SOAR. Returns rows {ip, vt_status, vt_malicious, ...}."""
-        return self.call("vtcheck", ips, wait_seconds=wait_seconds)
+    def vt_lookup(self, ips, wait_seconds=None, max_lookups=None, max_wait=None, retry_wait=None):
+        """VirusTotal lookups done by SOAR. Returns rows {ip, vt_status, vt_malicious, ...}.
+        max_lookups / max_wait / retry_wait override SOAR's VT_* env (rate-limit retry)."""
+        extra = dict((k, v) for k, v in (("vt_max_lookups", max_lookups), ("vt_max_wait", max_wait),
+                                         ("vt_retry_wait", retry_wait)) if v is not None)
+        return self.call("vtcheck", ips, wait_seconds=wait_seconds, extra=extra)

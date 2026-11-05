@@ -124,5 +124,35 @@ class TestRegistry(unittest.TestCase):
         self.assertIsNone(il.build_registry_doc(None, "k", "1", "8.8.8.8", "block", "error", "b", 1, {}))
 
 
+class TestImpervaRetry(unittest.TestCase):
+    def test_retries_on_429_then_succeeds(self):
+        import imperva_lib as il
+        calls, sleeps = [], []
+
+        def fn():
+            calls.append(1)
+            if len(calls) < 3:
+                raise il.ImpervaRateLimited("429", retry_after=7 if len(calls) == 1 else None)
+            return {"ok": True}
+        self.assertEqual(il._with_retry(fn, waits=(5, 15, 30), _sleep=sleeps.append), {"ok": True})
+        self.assertEqual(sleeps, [7, 15])
+
+    def test_gives_up_and_other_errors_not_retried(self):
+        import imperva_lib as il
+
+        def limited():
+            raise il.ImpervaRateLimited("429")
+        with self.assertRaises(il.ImpervaRateLimited):
+            il._with_retry(limited, waits=(1, 1), _sleep=lambda s: None)
+        n = []
+
+        def bad():
+            n.append(1)
+            raise il.ImpervaError("400")
+        with self.assertRaises(il.ImpervaError):
+            il._with_retry(bad, waits=(1, 1), _sleep=lambda s: None)
+        self.assertEqual(n, [1])
+
+
 if __name__ == "__main__":
     unittest.main()

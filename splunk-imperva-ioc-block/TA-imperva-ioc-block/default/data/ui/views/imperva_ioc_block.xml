@@ -1,491 +1,45 @@
-<form version="1.1" theme="dark" hideFilters="false">
-  <label>Imperva WAF - Block Malicious IP IOCs</label>
-  <description>Per IP: click "⛔ Block" in the table, then "✅ CONFIRM BLOCK". Not block: click "✖ Not block". Manual block / unblock: click any other cell (or type IPs), choose action, tick "I confirm", press Submit.</description>
-
+<form version="1.1" theme="dark" hideFilters="true">
+  <label>Imperva IOC Block – last 7 days</label>
+  <description>IPs detected by the WAF detection rules in the last 7 days that are not blocked yet. Click rows to select IPs, fill Ticket / Incident no. and Description, then click ⛔ BLOCK (one click, no second confirm). Older detections, Blocked IPs / Unblock, Detection rules and the Audit log are on the other pages.</description>
   <init>
-    <set token="waf_refresh">init</set>
-    <set token="waf_q">*</set>
-    <set token="form.waf_q">*</set>
-    <set token="ex_refresh">init</set>
-    <set token="ioc_range">-24h@h</set>
-    <set token="form.ioc_range">-24h@h</set>
-    <set token="ioc_range_label">Last 24 hours</set>
-    <set token="dis_reason">Reviewed - not blocking</set>
-    <set token="form.dis_reason">Reviewed - not blocking</set>
-    <set token="bulk_actor">Unknown</set>
-    <set token="form.bulk_actor">Unknown</set>
-    <set token="bulk_comment">Bulk block from detected IOCs</set>
-    <set token="form.bulk_comment">Bulk block from detected IOCs</set>
+    <set token="d_sel">,</set>
+    <set token="d_refresh">init</set>
   </init>
 
-  <!-- Searches only run when the Submit button is pressed -->
-  <fieldset submitButton="true" autoRun="false">
-    <input type="text" token="ip_list" searchWhenChanged="false">
-      <label>IP / CIDR (comma separated)</label>
-      <default></default>
-    </input>
-    <input type="dropdown" token="action" searchWhenChanged="false">
-      <label>Action</label>
-      <choice value="block">Block</choice>
-      <choice value="unblock">Unblock</choice>
-      <default>block</default>
-    </input>
-    <input type="text" token="reason" searchWhenChanged="false">
-      <label>Reason / Ticket</label>
-      <default>Manual IOC block from Splunk</default>
-    </input>
-    <input type="text" token="threat_actor" searchWhenChanged="false">
-      <label>Threat actor name</label>
-      <default>Unknown</default>
-    </input>
-    <input type="text" token="incident_no" searchWhenChanged="false">
-      <label>Incident no.</label>
-      <default>N/A</default>
-    </input>
-    <input type="text" token="comment" searchWhenChanged="false">
-      <label>Comment</label>
-      <default>-</default>
-    </input>
-    <input type="checkbox" token="confirm" searchWhenChanged="false">
-      <label>Confirmation</label>
-      <choice value="yes">I confirm</choice>
-    </input>
-  </fieldset>
-
   <row>
     <panel>
-      <title>IPs detected by WAF attack rules (ES notables / incidents, $ioc_range_label$) + VirusTotal - click "⛔ Block" to block that IP</title>
-      <input type="dropdown" token="ioc_range" searchWhenChanged="true">
-        <label>Notables from</label>
-        <choice value="-24h@h">Last 24 hours</choice>
-        <choice value="-7d@d">Last 7 days</choice>
-        <choice value="-30d@d">Last 30 days</choice>
-        <default>-24h@h</default>
-        <change>
-          <set token="ioc_range_label">$label$</set>
-        </change>
-      </input>
-      <!-- Base search: IOC IPs from ES notable events.
-           Which notables: macro `imperva_ioc_notables` (Settings > Advanced search > Search macros).
-           IP = threat_match_value when the threat match is on an IP field (Threat Activity
-           correlation searches), plus src. Private ranges and the Exclude list are removed. -->
-      <search id="attack_ips">
-        <query><![CDATA[`imperva_ioc_notables`
-| eval _finding_guid=lower(coalesce(source_guid, mvindex(split(source_event_id, "@@"), 0)))
-| join type=left max=1 _finding_guid [| impervanotes | rename finding_guid AS _finding_guid | fields _finding_guid ithm]
-| eval _tm_ip=if(match(lower(coalesce(threat_match_field, "")), "ip|src|dest|addr"), threat_match_value, null())
-| eval ioc_ip=mvdedup(mvappend(_tm_ip, coalesce(src, src_ip)))
-| mvexpand ioc_ip
-| where isnotnull(ioc_ip) AND match(ioc_ip, "^[0-9A-Fa-f:.]+$") AND (match(ioc_ip, "^\d{1,3}(\.\d{1,3}){3}$") OR match(ioc_ip, ":"))
-| where NOT (cidrmatch("10.0.0.0/8", ioc_ip) OR cidrmatch("172.16.0.0/12", ioc_ip) OR cidrmatch("192.168.0.0/16", ioc_ip) OR cidrmatch("127.0.0.0/8", ioc_ip) OR cidrmatch("169.254.0.0/16", ioc_ip) OR cidrmatch("100.64.0.0/10", ioc_ip) OR cidrmatch("0.0.0.0/8", ioc_ip) OR cidrmatch("224.0.0.0/3", ioc_ip))
-| `imperva_ioc_fields`
-| eval _sev_rank=case(lower(ioc_severity)="critical",5, lower(ioc_severity)="high",4, lower(ioc_severity)="medium",3, lower(ioc_severity)="low",2, in(lower(ioc_severity), "informational", "info"),1, true(),0)
-| stats count AS notable_count values(ioc_rule) AS rule_name values(ioc_incident) AS incident_no max(_sev_rank) AS _sev_rank values(status_label) AS status values(threat_collection) AS threat_collection values(dest) AS dest min(_time) AS first_seen max(_time) AS last_seen BY ioc_ip
-| rename ioc_ip AS src
-| eval count=notable_count
-| eval _ex_refresh=$ex_refresh|s$
-| lookup imperva_ioc_dismissed ip AS src OUTPUT dismissed_at
-| where isnull(dismissed_at) OR last_seen > tonumber(dismissed_at)
-| eval severity=case(_sev_rank=5,"critical", _sev_rank=4,"high", _sev_rank=3,"medium", _sev_rank=2,"low", _sev_rank=1,"informational", true(),"-")
-| eval first_detected=strftime(first_seen, "%Y-%m-%d %H:%M"), last_detected=strftime(last_seen, "%Y-%m-%d %H:%M")
-| eval rule_name=mvjoin(rule_name, "; "), incident_no=coalesce(mvjoin(incident_no, ", "), "-"), status=coalesce(mvjoin(status, ", "), "-")
-| eval msg="Detected by: ".rule_name." | Incident: ".incident_no." | Severity: ".severity." | Last detected: ".last_detected]]></query>
-        <earliest>$ioc_range$</earliest>
-        <latest>now</latest>
-      </search>
-      <table>
-        <search base="attack_ips">
-          <query><![CDATA[| sort - count | head 50
-| vtcheck field=src count_field=count
-| iplocation src
-| eval location=trim(if(isnotnull(City) AND City!="", City.", ", "").if(isnotnull(Region) AND Region!="", Region.", ", "").coalesce(nullif(Country,""), "-"))." [VT: ".coalesce(vt_country,"-")."]"
-| eval asn=if(isnull(vt_asn) OR vt_asn="-", "-", "AS".vt_asn." ".vt_as_owner)
-| eval vt_score=if(vt_status="ok", vt_malicious."/".vt_engines." malicious, ".vt_suspicious." suspicious", vt_status)
-| impervapolicycheck field=src
-| eval suggestion_reason=case(waf_policy_verdict="ALLOWLISTED", "allowed by a WAF policy: ".waf_policies, waf_policy_verdict="BLOCKED_ELSEWHERE", "already blocked by another WAF policy: ".waf_policies, true(), suggestion_reason)
-| eval suggestion=case(waf_policy_verdict="ALLOWLISTED", "DO_NOT_BLOCK", waf_policy_verdict="BLOCKED_ELSEWHERE" OR waf_policy_verdict="BLOCKED_HERE", "ALREADY_BLOCKED", true(), suggestion)
-| eval Block=case(suggestion="ALREADY_BLOCKED","✔ Blocked", suggestion="DO_NOT_BLOCK","— Do not block", true(),"⛔ Block")
-| eval Dismiss="✖ Not block"
-| eval VirusTotal="🔗 Open"
-| eval prio=case(suggestion="BLOCK",1, suggestion="REVIEW",2, suggestion="MONITOR",3, suggestion="ALREADY_BLOCKED",4, true(),5)
-| sort prio - _sev_rank - last_seen
-| table Block Dismiss src rule_name incident_no severity first_detected last_detected notable_count status suggestion suggestion_reason waf_policies vt_score location asn VirusTotal msg]]></query>
-        </search>
-        <option name="count">15</option>
-        <option name="wrap">true</option>
-        <option name="drilldown">cell</option>
-        <format type="color" field="suggestion">
-          <colorPalette type="map">{"BLOCK":#DC4E41,"REVIEW":#F8BE34,"MONITOR":#5A9BD5,"ALREADY_BLOCKED":#708794,"DO_NOT_BLOCK":#53A051}</colorPalette>
-        </format>
-        <format type="color" field="severity">
-          <colorPalette type="map">{"critical":#B6488E,"high":#DC4E41,"medium":#F8BE34,"low":#5A9BD5,"informational":#708794}</colorPalette>
-        </format>
-        <format type="color" field="Block">
-          <colorPalette type="map">{"⛔ Block":#DC4E41,"✔ Blocked":#708794,"— Do not block":#53A051}</colorPalette>
-        </format>
-        <format type="color" field="Dismiss">
-          <colorPalette type="map">{"✖ Not block":#708794}</colorPalette>
-        </format>
-        <drilldown>
-          <!-- Per-row button: opens the confirmation panel below -->
-          <condition field="Dismiss">
-            <!-- "Not block": confirm, then hide the IP until it is detected again -->
-            <set token="dis_ip">$row.src$</set>
-            <set token="dis_incident">$row.incident_no$</set>
-            <set token="dis_rule">$row.rule_name$</set>
-            <set token="form.dis_reason">Reviewed - not blocking</set>
-            <set token="dis_reason">Reviewed - not blocking</set>
-          </condition>
-          <condition field="Block">
-            <set token="pending_ip">$row.src$</set>
-            <set token="pending_sug">$row.suggestion$ - $row.suggestion_reason$</set>
-            <set token="pending_loc">$row.location$ / $row.asn$</set>
-            <set token="pending_vt">$row.vt_score$ (reputation $row.vt_reputation$)</set>
-            <set token="pending_reason">Per-IP block | VT $row.vt_score$ | $row.suggestion$ | $row.msg$</set>
-            <set token="form.pb_actor">Unknown</set>
-            <set token="pb_actor">Unknown</set>
-            <set token="form.pb_incident">$row.incident_no$</set>
-            <set token="pb_incident">$row.incident_no$</set>
-            <set token="form.pb_comment">Detected by $row.rule_name$ ($row.severity$, last $row.last_detected$)</set>
-            <set token="pb_comment">Detected by $row.rule_name$ ($row.severity$, last $row.last_detected$)</set>
-          </condition>
-          <condition field="VirusTotal">
-            <link target="_blank">https://www.virustotal.com/gui/ip-address/$row.src|n$</link>
-          </condition>
-          <condition>
-            <!-- Any other cell: fill the manual form (block / unblock) -->
-            <set token="form.ip_list">$row.src$</set>
-            <set token="form.reason">Notable IOC: $row.msg$</set>
-            <unset token="form.confirm"></unset>
-          </condition>
-        </drilldown>
-      </table>
+      <html>
+        <div><a href="imperva_ioc_block" style="display:inline-block;padding:6px 14px;border:1px solid #3c444d;border-radius:4px;text-decoration:none;font-weight:600;margin:0 6px 4px 0;background:#1F6F8B;color:#fff;border-color:#1F6F8B">⛔ Block – last 7 days</a>
+        <a href="imperva_ioc_history" style="display:inline-block;padding:6px 14px;border:1px solid #3c444d;border-radius:4px;text-decoration:none;font-weight:600;margin:0 6px 4px 0;color:#c3cbd4">🗂 Older detections</a>
+        <a href="imperva_ioc_blocked" style="display:inline-block;padding:6px 14px;border:1px solid #3c444d;border-radius:4px;text-decoration:none;font-weight:600;margin:0 6px 4px 0;color:#c3cbd4">🔓 Blocked IPs / Unblock</a>
+        <a href="imperva_ioc_rules" style="display:inline-block;padding:6px 14px;border:1px solid #3c444d;border-radius:4px;text-decoration:none;font-weight:600;margin:0 6px 4px 0;color:#c3cbd4">⚙ Detection rules</a>
+        <a href="imperva_ioc_audit" style="display:inline-block;padding:6px 14px;border:1px solid #3c444d;border-radius:4px;text-decoration:none;font-weight:600;margin:0 6px 4px 0;color:#c3cbd4">📄 Audit log</a></div>
+      </html>
     </panel>
   </row>
 
-  <row>
-    <panel depends="$dis_ip$">
-      <title>Not block $dis_ip$ - it disappears from the table until it is detected again</title>
-      <input type="text" token="dis_reason" searchWhenChanged="true">
-        <label>Reason (required)</label>
-        <default>Reviewed - not blocking</default>
-      </input>
-      <table>
-        <search>
-          <query>| makeresults
-| eval Confirm="✖ CONFIRM NOT BLOCK", Cancel="↩ Cancel", ip=$dis_ip|s$, incident_no=$dis_incident|s$, rule_name=$dis_rule|s$, reason=$dis_reason|s$
-| table Confirm Cancel ip incident_no rule_name reason</query>
-          <earliest>-1m</earliest>
-          <latest>now</latest>
-        </search>
-        <option name="count">1</option>
-        <option name="wrap">true</option>
-        <option name="drilldown">cell</option>
-        <format type="color" field="Confirm">
-          <colorPalette type="map">{"✖ CONFIRM NOT BLOCK":#708794}</colorPalette>
-        </format>
-        <drilldown>
-          <condition field="Confirm">
-            <set token="dis_exec_ip">$row.ip$</set>
-            <set token="dis_exec_reason">$row.reason$</set>
-            <set token="dis_exec_incident">$row.incident_no$</set>
-            <unset token="dis_ip"></unset>
-          </condition>
-          <condition field="Cancel">
-            <unset token="dis_ip"></unset>
-          </condition>
-          <condition></condition>
-        </drilldown>
-      </table>
-    </panel>
-  </row>
-
-  <row>
-    <panel depends="$dis_exec_ip$">
-      <title>Not block result: $dis_exec_ip$ (click to dismiss)</title>
-      <table>
-        <search>
-          <query>| impervadismiss action=add ip=$dis_exec_ip|s$ reason=$dis_exec_reason|s$ incident_no=$dis_exec_incident|s$
-| table _time ip status detail reason incident_no user</query>
-          <earliest>-1m</earliest>
-          <latest>now</latest>
-          <done>
-            <set token="ex_refresh">$job.sid$</set>
-          </done>
-        </search>
-        <option name="count">1</option>
-        <option name="drilldown">cell</option>
-        <drilldown>
-          <unset token="dis_exec_ip"></unset>
-        </drilldown>
-      </table>
-    </panel>
-  </row>
-
-  <!-- ================= Block many IPs at once: pick IPs or pick incident numbers ================= -->
-  <row>
-    <panel>
-      <title>Block several IPs at once - pick IPs, or pick Incident no. to block all IPs of those incidents</title>
-      <input type="multiselect" token="sel_ips" searchWhenChanged="true">
-        <label>Select IPs</label>
-        <delimiter>,</delimiter>
-        <fieldForLabel>label</fieldForLabel>
-        <fieldForValue>src</fieldForValue>
-        <search base="attack_ips">
-          <query>| sort - last_seen | eval label=src." | ".incident_no." | ".rule_name | table src label</query>
-        </search>
-      </input>
-      <input type="multiselect" token="sel_inc" searchWhenChanged="true">
-        <label>or select Incident no.</label>
-        <delimiter>,</delimiter>
-        <fieldForLabel>label</fieldForLabel>
-        <fieldForValue>incident</fieldForValue>
-        <search base="attack_ips">
-          <query>| eval incident=split(incident_no, ", ") | mvexpand incident | where incident!="-"
-| stats dc(src) AS n values(rule_name) AS rule BY incident
-| eval label=incident." (".n." IPs) ".mvjoin(rule, "; ") | table incident label</query>
-        </search>
-      </input>
-      <input type="text" token="bulk_actor" searchWhenChanged="true">
-        <label>Threat actor</label>
-        <default>Unknown</default>
-      </input>
-      <input type="text" token="bulk_comment" searchWhenChanged="true">
-        <label>Comment</label>
-        <default>Bulk block from detected IOCs</default>
-      </input>
-      <table depends="$sel_ips$">
-        <title>Confirm: block the selected IPs</title>
-        <search base="attack_ips">
-          <query>| where like(",".$sel_ips|s$.",", "%,".src.",%")
-| stats values(src) AS ips values(incident_no) AS incidents values(rule_name) AS rules
-| eval n=mvcount(ips), Confirm="⛔ CONFIRM BLOCK ".n." IPs", Cancel="✖ Cancel", ips=mvjoin(ips, ","), incidents=mvjoin(incidents, ", "), rules=mvjoin(rules, "; ")
-| table Confirm Cancel n ips incidents rules</query>
-        </search>
-        <option name="count">1</option>
-        <option name="wrap">true</option>
-        <option name="drilldown">cell</option>
-        <format type="color" field="Confirm">
-          <colorPalette type="expression">"#DC4E41"</colorPalette>
-        </format>
-        <drilldown>
-          <condition field="Confirm">
-            <set token="bulk_exec_ips">$row.ips$</set>
-            <set token="bulk_exec_inc">$row.incidents$</set>
-            <unset token="form.sel_ips"></unset>
-            <unset token="sel_ips"></unset>
-          </condition>
-          <condition field="Cancel">
-            <unset token="form.sel_ips"></unset>
-            <unset token="sel_ips"></unset>
-          </condition>
-          <condition></condition>
-        </drilldown>
-      </table>
-      <table depends="$sel_inc$">
-        <title>Confirm: block every IP of the selected incidents</title>
-        <search base="attack_ips">
-          <query>| eval _inc=split(incident_no, ", ") | mvexpand _inc
-| where like(",".$sel_inc|s$.",", "%,"._inc.",%")
-| stats values(src) AS ips values(_inc) AS incidents values(rule_name) AS rules
-| eval n=mvcount(ips), Confirm="⛔ CONFIRM BLOCK ".n." IPs", Cancel="✖ Cancel", ips=mvjoin(ips, ","), incidents=mvjoin(incidents, ", "), rules=mvjoin(rules, "; ")
-| table Confirm Cancel n incidents ips rules</query>
-        </search>
-        <option name="count">1</option>
-        <option name="wrap">true</option>
-        <option name="drilldown">cell</option>
-        <format type="color" field="Confirm">
-          <colorPalette type="expression">"#DC4E41"</colorPalette>
-        </format>
-        <drilldown>
-          <condition field="Confirm">
-            <set token="bulk_exec_ips">$row.ips$</set>
-            <set token="bulk_exec_inc">$row.incidents$</set>
-            <unset token="form.sel_inc"></unset>
-            <unset token="sel_inc"></unset>
-          </condition>
-          <condition field="Cancel">
-            <unset token="form.sel_inc"></unset>
-            <unset token="sel_inc"></unset>
-          </condition>
-          <condition></condition>
-        </drilldown>
-      </table>
-      <table depends="$bulk_exec_ips$">
-        <title>Bulk block result (click to dismiss)</title>
-        <search>
-          <query>| makeresults
-| impervablock action=block ip=$bulk_exec_ips|s$ dry_run=false incident_no=$bulk_exec_inc|s$ threat_actor=$bulk_actor|s$ comment=$bulk_comment|s$ reason="Bulk block from detected IOCs"
-| table _time ip site_id status verified_in_waf backend soar_container incident_no threat_actor detail</query>
-          <earliest>-1m</earliest>
-          <latest>now</latest>
-          <done>
-            <set token="waf_refresh">$job.sid$</set>
-            <set token="ex_refresh">$job.sid$</set>
-          </done>
-        </search>
-        <option name="count">50</option>
-        <option name="wrap">true</option>
-        <option name="drilldown">cell</option>
-        <format type="color" field="status">
-          <colorPalette type="map">{"blocked":#DC4E41,"no_change":#708794,"rejected":#AF575A,"error":#B6488E}</colorPalette>
-        </format>
-        <format type="color" field="verified_in_waf">
-          <colorPalette type="map">{"yes":#53A051,"no":#DC4E41,"unknown":#F8BE34}</colorPalette>
-        </format>
-        <drilldown>
-          <unset token="bulk_exec_ips"></unset>
-        </drilldown>
-      </table>
-    </panel>
-  </row>
-
-  <row>
-    <panel depends="$pending_ip$">
-      <title>Confirm block of $pending_ip$ on Imperva WAF - fill in the block description, then click ✅ CONFIRM BLOCK</title>
-      <input type="text" token="pb_actor" searchWhenChanged="true">
-        <label>Threat actor name (required)</label>
-        <default>Unknown</default>
-      </input>
-      <input type="text" token="pb_incident" searchWhenChanged="true">
-        <label>Incident no. (required)</label>
-        <default>N/A</default>
-      </input>
-      <input type="text" token="pb_comment" searchWhenChanged="true">
-        <label>Comment (required, "-" if none)</label>
-        <default>-</default>
-      </input>
-      <table>
-        <search>
-          <query>| makeresults
-| eval Confirm="✅ CONFIRM BLOCK", Cancel="✖ Cancel", ip=$pending_ip|s$, threat_actor=$pb_actor|s$, incident_no=$pb_incident|s$, comment=$pb_comment|s$, suggestion=$pending_sug|s$, virustotal=$pending_vt|s$, location=$pending_loc|s$, reason=$pending_reason|s$
-| table Confirm Cancel ip threat_actor incident_no comment suggestion virustotal location reason</query>
-          <earliest>-1m</earliest>
-          <latest>now</latest>
-        </search>
-        <option name="count">1</option>
-        <option name="wrap">true</option>
-        <option name="drilldown">cell</option>
-        <format type="color" field="Confirm">
-          <colorPalette type="map">{"✅ CONFIRM BLOCK":#DC4E41}</colorPalette>
-        </format>
-        <drilldown>
-          <condition field="Confirm">
-            <set token="exec_ip">$row.ip$</set>
-            <set token="exec_reason">$row.reason$</set>
-            <set token="exec_actor">$row.threat_actor$</set>
-            <set token="exec_incident">$row.incident_no$</set>
-            <set token="exec_comment">$row.comment$</set>
-            <unset token="pending_ip"></unset>
-          </condition>
-          <condition field="Cancel">
-            <unset token="pending_ip"></unset>
-          </condition>
-          <condition></condition>
-        </drilldown>
-      </table>
-    </panel>
-  </row>
-
-  <row>
-    <panel depends="$exec_ip$">
-      <title>Per-IP block result: $exec_ip$</title>
-      <table>
-        <search>
-          <query>| makeresults
-| impervablock action=block ip=$exec_ip|s$ dry_run=false reason=$exec_reason|s$ threat_actor=$exec_actor|s$ incident_no=$exec_incident|s$ comment=$exec_comment|s$
-| table _time ip site_id status verified_in_waf backend soar_container threat_actor incident_no comment detail user reason</query>
-          <earliest>-1m</earliest>
-          <latest>now</latest>
-          <done>
-            <!-- re-read the blacklist from the WAF so the new block shows up below -->
-            <set token="waf_refresh">$job.sid$</set>
-          </done>
-        </search>
-        <option name="count">20</option>
-        <option name="drilldown">cell</option>
-        <format type="color" field="status">
-          <colorPalette type="map">{"blocked":#DC4E41,"no_change":#708794,"rejected":#AF575A,"error":#B6488E}</colorPalette>
-        </format>
-        <format type="color" field="verified_in_waf">
-          <colorPalette type="map">{"yes":#53A051,"no":#DC4E41,"unknown":#F8BE34}</colorPalette>
-        </format>
-        <drilldown>
-          <unset token="exec_ip"></unset>
-        </drilldown>
-      </table>
-    </panel>
-  </row>
-
-  <row>
-    <panel>
-      <title>Select ALL IOC IPs (click)</title>
-      <table>
-        <search base="attack_ips">
-          <query>| where src!="-"
-| stats count AS total_ips values(src) AS ips
-| eval ips=mvjoin(ips, ",")
-| table total_ips ips</query>
-        </search>
-        <option name="count">1</option>
-        <option name="drilldown">row</option>
-        <drilldown>
-          <!-- Puts every IP in the text box (limited by max_ips_per_action in imperva.conf) -->
-          <set token="form.ip_list">$row.ips$</set>
-          <set token="form.reason">Notable IOC IPs (bulk)</set>
-          <unset token="form.confirm"></unset>
-        </drilldown>
-      </table>
-    </panel>
-  </row>
-
-  <row>
-    <panel depends="$confirm$">
-      <title>Result: $action$ $ip_list$</title>
-      <table>
-        <search>
-          <!-- $confirm$ is referenced so this search is NOT dispatched until "I confirm" is ticked -->
-          <query>| makeresults
-| eval confirmed=$confirm|s$
-| impervablock action=$action|s$ ip=$ip_list|s$ dry_run=false reason=$reason|s$ threat_actor=$threat_actor|s$ incident_no=$incident_no|s$ comment=$comment|s$
-| table _time ip site_id action status verified_in_waf threat_actor incident_no comment detail user reason</query>
-          <earliest>-1m</earliest>
-          <latest>now</latest>
-          <done>
-            <set token="waf_refresh">$job.sid$</set>
-            <!-- force re-confirmation for the next click -->
-            <unset token="form.confirm"></unset>
-          </done>
-        </search>
-        <option name="count">50</option>
-        <option name="drilldown">none</option>
-        <format type="color" field="status">
-          <colorPalette type="map">{"blocked":#DC4E41,"unblocked":#53A051,"no_change":#708794,"rejected":#AF575A,"error":#B6488E}</colorPalette>
-        </format>
-      </table>
-    </panel>
-  </row>
-
-  <!-- ================= LIVE blacklist read directly from Imperva WAF ================= -->
-  <search id="waf_list">
-    <!-- $waf_refresh$ changes after every block => list is re-read from the WAF immediately -->
-    <query><![CDATA[| impervalist
-| eval _refresh=$waf_refresh|s$
-| lookup imperva_block_registry site_id ip OUTPUT status AS reg_status blocked_at blocked_by threat_actor incident_no comment reason source
-| append [| inputlookup imperva_block_registry where status="blocked" | eval in_waf="no" | rename status AS reg_status | fields site_id ip in_waf reg_status blocked_at blocked_by threat_actor incident_no comment reason source]
-| stats max(in_waf) AS in_waf values(site_name) AS site_name values(reg_status) AS reg_status max(blocked_at) AS blocked_at values(blocked_by) AS blocked_by values(threat_actor) AS threat_actor values(incident_no) AS incident_no values(comment) AS comment values(reason) AS reason values(source) AS source values(detail) AS detail max(checked_at) AS checked_at BY site_id ip
-| eventstats max(eval(if(in_waf="error",1,0))) AS site_err max(checked_at) AS last_check BY site_id
-| where (ip!="-" AND in_waf!="empty") OR in_waf="error"
-| eval verification=case(in_waf="error", "⚠ Cannot read WAF: ".mvjoin(detail," "),
-                         in_waf="yes" AND reg_status="blocked", "✔ Verified on WAF",
-                         in_waf="yes", "✔ On WAF (blocked outside Splunk - no description)",
-                         site_err=1, "⚠ Unknown (WAF read error)",
-                         true(), "✖ NOT on WAF - removed or failed")
-| eval new=if(isnotnull(blocked_at) AND now()-blocked_at < 3600, "🆕 NEW", "")
-| eval blocked_time=if(isnotnull(blocked_at), strftime(blocked_at, "%Y-%m-%d %H:%M:%S"), "-")
-| eval last_checked_on_waf=strftime(last_check, "%Y-%m-%d %H:%M:%S")
-| fillnull value="-" threat_actor incident_no comment blocked_by reason site_name
-| sort 0 - blocked_at]]></query>
+  <!-- detected IPs, last 7 days, not blocked from Splunk yet (re-read after every block) -->
+  <search id="det">
+    <query>`imperva_ioc_detections`
+| eval _r=$d_refresh|s$</query>
+    <earliest>-7d</earliest>
+    <latest>now</latest>
+    <refresh>300s</refresh>
+    <refreshType>delay</refreshType>
+  </search>
+  <search id="waf_now">
+    <query>| impervalist
+| eval _r=$d_refresh|s$
+| where in_waf="yes"
+| stats dc(ip) AS blocked_on_waf</query>
+    <earliest>-1m</earliest>
+    <latest>now</latest>
+    <refresh>300s</refresh>
+    <refreshType>delay</refreshType>
+  </search>
+  <search id="audit7">
+    <query>| `imperva_audit_daily(7)`
+| eval _r=$d_refresh|s$</query>
     <earliest>-1m</earliest>
     <latest>now</latest>
     <refresh>300s</refresh>
@@ -495,295 +49,170 @@
   <row>
     <panel>
       <single>
-        <title>Total blocked IPs on WAF now (live)</title>
-        <search base="waf_list">
-          <query>| where in_waf="yes" | stats dc(ip) AS total</query>
-        </search>
-        <option name="colorMode">block</option>
-        <option name="rangeColors">["0x708794","0x708794"]</option>
-        <option name="useColors">1</option>
-      </single>
-    </panel>
-    <panel>
-      <single>
-        <title>Blocked from Splunk and verified</title>
-        <search base="waf_list">
-          <query>| where verification="✔ Verified on WAF" | stats count</query>
-        </search>
-        <option name="colorMode">block</option>
-        <option name="rangeColors">["0x53A051","0x53A051"]</option>
-        <option name="useColors">1</option>
-      </single>
-    </panel>
-    <panel>
-      <single>
-        <title>Registered as blocked but NOT on WAF</title>
-        <search base="waf_list">
-          <query>| where like(verification, "✖%") | stats count</query>
-        </search>
-        <option name="colorMode">block</option>
-        <option name="rangeValues">[0]</option>
-        <option name="rangeColors">["0x53A051","0xDC4E41"]</option>
-        <option name="useColors">1</option>
-      </single>
-    </panel>
-    <panel>
-      <single>
-        <title>New blocks (last 1h)</title>
-        <search base="waf_list">
-          <query>| where new!="" AND in_waf="yes" | stats count</query>
+        <title>Detected WAF IPs</title>
+        <search base="det">
+          <query>| stats count AS detected</query>
         </search>
         <option name="colorMode">block</option>
         <option name="rangeColors">["0xF8BE34","0xF8BE34"]</option>
         <option name="useColors">1</option>
+        <option name="underLabel">last 7 days, not blocked yet</option>
       </single>
     </panel>
-  </row>
-
-  <!-- ================= Block statistics (audit log, last 30 days) ================= -->
-  <search id="block_stats">
-    <query>index=_internal source=*imperva_ioc_block.log (status=blocked OR status=unblocked) dry_run=False
-| eval _refresh=$waf_refresh|s$
-| fields _time ip site_id status</query>
-    <earliest>-30d@d</earliest>
-    <latest>now</latest>
-    <refresh>120s</refresh>
-    <refreshType>delay</refreshType>
-  </search>
-
-  <row>
     <panel>
       <single>
-        <title>Total IPs blocked (last 30 days)</title>
-        <search base="block_stats">
-          <query>| where status="blocked" | stats dc(ip) AS total_blocked_ips</query>
+        <title>Blocked on WAF now</title>
+        <search base="waf_now">
+          <query>| fields blocked_on_waf</query>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x5A9BD5","0x5A9BD5"]</option>
+        <option name="useColors">1</option>
+        <option name="underLabel">policy, read live</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Blocked today</title>
+        <search base="audit7">
+          <query>| fields _time "Blocked IPs"</query>
         </search>
         <option name="colorMode">block</option>
         <option name="rangeColors">["0xDC4E41","0xDC4E41"]</option>
         <option name="useColors">1</option>
-      </single>
-    </panel>
-    <panel>
-      <single>
-        <title>IPs blocked today (trend vs yesterday)</title>
-        <search base="block_stats">
-          <query>| where status="blocked" | timechart span=1d dc(ip) AS blocked</query>
-        </search>
-        <option name="showSparkline">1</option>
+        <option name="underLabel">vs yesterday</option>
         <option name="showTrendIndicator">1</option>
         <option name="trendDisplayMode">absolute</option>
-        <option name="colorMode">none</option>
+        <option name="showSparkline">0</option>
       </single>
     </panel>
     <panel>
       <single>
-        <title>Average blocked IPs per day (30 days)</title>
-        <search base="block_stats">
-          <query>| where status="blocked" | timechart span=1d dc(ip) AS blocked | stats avg(blocked) AS avg_per_day | eval avg_per_day=round(avg_per_day,1)</query>
+        <title>Blocked 7 days</title>
+        <search base="audit7">
+          <query>| stats sum("Blocked IPs") AS blocked</query>
         </search>
-        <option name="colorMode">none</option>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0xDC4E41","0xDC4E41"]</option>
+        <option name="useColors">1</option>
+        <option name="underLabel">unique IPs per day, summed</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Unblocked 7 days</title>
+        <search base="audit7">
+          <query>| stats sum("Unblocked IPs") AS unblocked</query>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x53A051","0x53A051"]</option>
+        <option name="useColors">1</option>
+        <option name="underLabel">from the audit log</option>
       </single>
     </panel>
   </row>
 
   <row>
     <panel>
-      <title>Daily block / unblock count - last 30 days</title>
+      <title>Blocked / unblocked IPs per day – last 7 days (30 days: Older detections page)</title>
       <chart>
-        <search base="block_stats">
-          <query>| eval series=if(status="blocked","Blocked IPs","Unblocked IPs")
-| timechart span=1d dc(ip) BY series
-| fillnull value=0</query>
+        <search base="audit7">
+          <query>| fields _time "Blocked IPs" "Unblocked IPs"</query>
         </search>
         <option name="charting.chart">column</option>
+        <option name="charting.chart.stackMode">stacked</option>
         <option name="charting.chart.showDataLabels">all</option>
-        <option name="charting.axisTitleX.text">Day</option>
-        <option name="charting.axisTitleY.text">Unique IPs</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">IPs</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
         <option name="charting.fieldColors">{"Blocked IPs":0xDC4E41,"Unblocked IPs":0x53A051}</option>
-        <option name="charting.legend.placement">bottom</option>
-        <option name="height">260</option>
+        <option name="charting.legend.placement">top</option>
+        <option name="height">240</option>
       </chart>
     </panel>
-    <panel>
-      <title>Daily blocks by Threat actor / Incident - last 30 days</title>
-      <table>
-        <search>
-          <query>index=_internal source=*imperva_ioc_block.log status=blocked dry_run=False
-| eval _refresh=$waf_refresh|s$
-| bin _time span=1d
-| stats dc(ip) AS blocked_ips values(ip) AS ips BY _time threat_actor incident_no
-| eval day=strftime(_time, "%Y-%m-%d")
-| sort 0 - _time
-| table day threat_actor incident_no blocked_ips ips</query>
-          <earliest>-30d@d</earliest>
-          <latest>now</latest>
-          <refresh>120s</refresh>
-          <refreshType>delay</refreshType>
-        </search>
-        <option name="count">10</option>
-        <option name="wrap">true</option>
-        <option name="drilldown">none</option>
-      </table>
-    </panel>
   </row>
 
   <row>
     <panel>
-      <title>Blocked IPs on Imperva WAF - read LIVE from the WAF policy (auto refresh 5 min + after every block/unblock)</title>
-      <input type="text" token="waf_q" searchWhenChanged="true">
-        <label>🔎 Search blocked list (IP, site, threat actor, incident, comment) - * = all</label>
+      <title>Search and Block</title>
+      <input type="text" token="d_q" searchWhenChanged="true">
+        <label>🔎 Search IP / Ticket / Incident no. / Rule (* = all)</label>
         <default>*</default>
       </input>
-      <table>
-        <search base="waf_list">
-          <query><![CDATA[| eval _q=lower(replace($waf_q|s$, "[*]", ""))
-| eval _hay=lower(ip." ".site_id." ".site_name." ".mvjoin(threat_actor," ")." ".mvjoin(incident_no," ")." ".mvjoin(comment," ")." ".mvjoin(blocked_by," "))
-| where _q="" OR like(_hay, "%"._q."%")
-| eval Unblock=if(in_waf="yes", "🔓 Unblock", "-")
-| eval Events="🔍 Search"
-| table Unblock Events new blocked_time ip site_id site_name verification threat_actor incident_no comment blocked_by reason last_checked_on_waf]]></query>
-        </search>
-        <option name="count">20</option>
-        <option name="wrap">true</option>
-        <option name="drilldown">cell</option>
-        <format type="color" field="verification">
-          <colorPalette type="expression">case(like(value,"✔ Verified%"),"#53A051", like(value,"✔%"),"#5A9BD5", like(value,"✖%"),"#DC4E41", true(),"#F8BE34")</colorPalette>
-        </format>
-        <format type="color" field="new">
-          <colorPalette type="map">{"🆕 NEW":#F8BE34}</colorPalette>
-        </format>
-        <format type="color" field="Unblock">
-          <colorPalette type="map">{"🔓 Unblock":#53A051}</colorPalette>
-        </format>
-        <drilldown>
-          <!-- Per-row Unblock: opens the confirmation panel below (only for IPs really on the WAF) -->
-          <condition match="&quot;$click.name2$&quot;==&quot;Unblock&quot; AND &quot;$row.Unblock$&quot;==&quot;🔓 Unblock&quot;">
-            <set token="unb_ip">$row.ip$</set>
-            <set token="unb_site">$row.site_id$</set>
-            <set token="unb_site_name">$row.site_name$</set>
-            <set token="unb_desc">$row.threat_actor$ / $row.incident_no$ / $row.comment$</set>
-            <set token="unb_blocked">$row.blocked_time$ by $row.blocked_by$</set>
-            <set token="form.unb_reason">False positive</set>
-            <set token="unb_reason">False positive</set>
-            <set token="form.unb_incident">N/A</set>
-            <set token="unb_incident">N/A</set>
-          </condition>
-          <!-- Per-row Search: open the Imperva events of this IP in Search (new tab) -->
-          <condition field="Events">
-            <link target="_blank">search?q=search%20index%3Dimperva%20sourcetype%3D%22incapsula%3Acef%22%20src%3D$row.ip|u$&amp;earliest=-7d%40d&amp;latest=now</link>
-          </condition>
-          <condition></condition>
-        </drilldown>
-      </table>
-    </panel>
-  </row>
-
-  <row>
-    <panel depends="$unb_ip$">
-      <title>Confirm UNBLOCK of $unb_ip$ on site $unb_site$ ($unb_site_name$)</title>
-      <input type="text" token="unb_reason" searchWhenChanged="true">
-        <label>Unblock reason (required)</label>
-        <default>False positive</default>
+      <input type="text" token="d_tk" searchWhenChanged="true">
+        <label>Ticket / Incident no. ("-" if none)</label>
+        <default>-</default>
       </input>
-      <input type="text" token="unb_incident" searchWhenChanged="true">
-        <label>Incident / change no. (required)</label>
-        <default>N/A</default>
+      <input type="text" token="d_desc" searchWhenChanged="true">
+        <label>Description ("-" if none)</label>
+        <default>-</default>
       </input>
       <table>
         <search>
           <query>| makeresults
-| eval Confirm="🔓 CONFIRM UNBLOCK", Cancel="✖ Cancel", ip=$unb_ip|s$, site_id=$unb_site|s$, site_name=$unb_site_name|s$, blocked=$unb_blocked|s$, block_description=$unb_desc|s$, unblock_reason=$unb_reason|s$, incident_no=$unb_incident|s$
-| table Confirm Cancel ip site_id site_name blocked block_description unblock_reason incident_no</query>
+| eval ips=trim($d_sel|s$, ","), n=if(ips="", 0, mvcount(split(ips, ",")))
+| eval Action=if(n=0, "Click rows below to select IPs", "⛔ BLOCK ".n." IP".if(n=1, "", "s")), Clear=if(n=0, "-", "✖ Clear selection")
+| eval selected_ips=if(n=0, "-", replace(ips, ",", ", ")), ticket=$d_tk|s$, description=$d_desc|s$
+| table Action Clear selected_ips ticket description</query>
           <earliest>-1m</earliest>
           <latest>now</latest>
         </search>
         <option name="count">1</option>
         <option name="wrap">true</option>
         <option name="drilldown">cell</option>
-        <format type="color" field="Confirm">
-          <colorPalette type="map">{"🔓 CONFIRM UNBLOCK":#53A051}</colorPalette>
+        <format type="color" field="Action">
+          <colorPalette type="expression">if(like(value, "⛔%"), "#DC4E41", "#3C444D")</colorPalette>
         </format>
         <drilldown>
-          <condition field="Confirm">
-            <set token="unb_exec_ip">$row.ip$</set>
-            <set token="unb_exec_site">$row.site_id$</set>
-            <set token="unb_exec_reason">$row.unblock_reason$</set>
-            <set token="unb_exec_incident">$row.incident_no$</set>
-            <unset token="unb_ip"></unset>
+          <!-- one click = do it (no second confirm) -->
+          <condition match="&quot;$click.name2$&quot;==&quot;Action&quot; AND &quot;$row.selected_ips$&quot;!=&quot;-&quot;">
+            <set token="d_exec_ips">$row.selected_ips$</set>
+            <set token="d_exec_tk">$row.ticket$</set>
+            <set token="d_exec_desc">$row.description$</set>
+            <eval token="d_exec_id">now()</eval>
+            <set token="d_sel">,</set>
+            <set token="form.d_tk">-</set>
+            <set token="form.d_desc">-</set>
           </condition>
-          <condition field="Cancel">
-            <unset token="unb_ip"></unset>
+          <condition match="&quot;$click.name2$&quot;==&quot;Clear&quot;">
+            <set token="d_sel">,</set>
           </condition>
           <condition></condition>
         </drilldown>
       </table>
+      <html depends="$d_note$">
+        <div style="color:#F8BE34">$d_note$</div>
+      </html>
     </panel>
   </row>
 
   <row>
-    <panel depends="$unb_exec_ip$">
-      <title>Unblock result: $unb_exec_ip$ (site $unb_exec_site$) - click a row to dismiss</title>
+    <panel depends="$d_exec_ips$">
+      <title>Block result – written to the audit log (click a row to close)</title>
       <table>
         <search>
           <query>| makeresults
-| impervablock action=unblock ip=$unb_exec_ip|s$ site_id=$unb_exec_site|s$ dry_run=false reason=$unb_exec_reason|s$ incident_no=$unb_exec_incident|s$
-| table _time ip site_id action status verified_in_waf detail user reason incident_no</query>
+| eval _run=$d_exec_id|s$
+| impervablock action=block ip=$d_exec_ips|s$ incident_no=$d_exec_tk|s$ description=$d_exec_desc|s$
+| `imperva_audit_write`
+| table time ip action status verified ticket description backend soar_container detail</query>
           <earliest>-1m</earliest>
           <latest>now</latest>
           <done>
-            <set token="waf_refresh">$job.sid$</set>
+            <set token="d_refresh">$job.sid$</set>
           </done>
         </search>
-        <option name="count">10</option>
+        <option name="count">50</option>
+        <option name="wrap">true</option>
         <option name="drilldown">cell</option>
         <format type="color" field="status">
-          <colorPalette type="map">{"unblocked":#53A051,"no_change":#708794,"error":#B6488E}</colorPalette>
+          <colorPalette type="map">{"blocked":#DC4E41,"unblocked":#53A051,"no_change":#708794,"rejected":#AF575A,"error":#B6488E}</colorPalette>
+        </format>
+        <format type="color" field="verified">
+          <colorPalette type="map">{"yes":#53A051,"no":#DC4E41,"unknown":#F8BE34}</colorPalette>
         </format>
         <drilldown>
-          <unset token="unb_exec_ip"></unset>
-        </drilldown>
-      </table>
-    </panel>
-  </row>
-
-  <!-- ================= "Not block" decisions ================= -->
-  <row>
-    <panel>
-      <title>Dismissed IPs (Not block) - hidden until detected again. Click "↩ Restore" to show it again now</title>
-      <table>
-        <search>
-          <query>| impervadismiss
-| eval _r=$ex_refresh|s$
-| eval Restore="↩ Restore", dismissed=if(isnum(dismissed_at), strftime(dismissed_at, "%Y-%m-%d %H:%M:%S"), "-")
-| table Restore ip reason incident_no dismissed_by dismissed</query>
-          <earliest>-1m</earliest>
-          <latest>now</latest>
-        </search>
-        <option name="count">10</option>
-        <option name="wrap">true</option>
-        <option name="drilldown">cell</option>
-        <drilldown>
-          <condition field="Restore">
-            <set token="dis_restore">$row.ip$</set>
-          </condition>
-          <condition></condition>
-        </drilldown>
-      </table>
-      <table depends="$dis_restore$">
-        <title>Restore result: $dis_restore$ (click to dismiss)</title>
-        <search>
-          <query>| impervadismiss action=remove ip=$dis_restore|s$
-| table _time ip status detail user</query>
-          <earliest>-1m</earliest>
-          <latest>now</latest>
-          <done>
-            <set token="ex_refresh">$job.sid$</set>
-          </done>
-        </search>
-        <option name="count">1</option>
-        <option name="drilldown">cell</option>
-        <drilldown>
-          <unset token="dis_restore"></unset>
+          <unset token="d_exec_ips"></unset>
         </drilldown>
       </table>
     </panel>
@@ -791,18 +220,35 @@
 
   <row>
     <panel>
-      <title>Audit log - who blocked what</title>
+      <title>IPs detected by WAF rules – last 7 days (click a row to select / unselect it)</title>
       <table>
-        <search>
-          <query>index=_internal source=*imperva_ioc_block.log
-| table _time user action ip site_id status verified_in_waf backend soar_container threat_actor incident_no comment reason detail
-| sort - _time</query>
-          <earliest>-7d@d</earliest>
-          <latest>now</latest>
-          <refresh>60s</refresh>
+        <search base="det">
+          <query>| `imperva_ioc_search($d_q|s$)`
+| `imperva_ioc_enrich`</query>
         </search>
         <option name="count">20</option>
-        <option name="drilldown">none</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">cell</option>
+        <format type="color" field="suggestion">
+          <colorPalette type="map">{"BLOCK":#DC4E41,"REVIEW":#F8BE34,"MONITOR":#5A9BD5,"ALREADY_BLOCKED":#708794,"DO_NOT_BLOCK":#53A051}</colorPalette>
+        </format>
+        <format type="color" field="severity">
+          <colorPalette type="map">{"critical":#B6488E,"high":#DC4E41,"medium":#F8BE34,"low":#5A9BD5,"informational":#708794}</colorPalette>
+        </format>
+        <drilldown>
+          <condition field="VirusTotal">
+            <link target="_blank">https://www.virustotal.com/gui/ip-address/$row.src|n$</link>
+          </condition>
+          <condition match="&quot;$row.suggestion$&quot;==&quot;DO_NOT_BLOCK&quot; OR &quot;$row.suggestion$&quot;==&quot;ALREADY_BLOCKED&quot;">
+            <set token="d_note">$row.src$ cannot be selected: $row.suggestion_reason$</set>
+          </condition>
+          <condition>
+            <!-- click = select / unselect this IP; Ticket is filled from the finding's ITHM note -->
+            <unset token="d_note"></unset>
+            <eval token="d_sel">if(like("$d_sel$", "%,$row.src$,%"), replace("$d_sel$", ",$row.src$,", ","), "$d_sel$" . "$row.src$,")</eval>
+            <eval token="form.d_tk">if("$d_tk$"=="-" OR "$d_tk$"=="", "$row.incident_no$", "$d_tk$")</eval>
+          </condition>
+        </drilldown>
       </table>
     </panel>
   </row>

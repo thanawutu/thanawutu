@@ -1,0 +1,208 @@
+<form version="1.1" theme="dark" hideFilters="true">
+  <label>Imperva IOC Block – older detections</label>
+  <description>IPs whose last detection is older than 7 days and that are not blocked yet. Same as the Block page: click rows to select, fill Ticket / Incident no. and Description, click ⛔ BLOCK.</description>
+  <init>
+    <set token="h_sel">,</set>
+    <set token="h_refresh">init</set>
+    <set token="h_earliest">-30d@d</set>
+    <set token="h_cut">-7d</set>
+  </init>
+
+  <row>
+    <panel>
+      <html>
+        <div><a href="imperva_ioc_block" style="display:inline-block;padding:6px 14px;border:1px solid #3c444d;border-radius:4px;text-decoration:none;font-weight:600;margin:0 6px 4px 0;color:#c3cbd4">⛔ Block – last 7 days</a>
+        <a href="imperva_ioc_history" style="display:inline-block;padding:6px 14px;border:1px solid #3c444d;border-radius:4px;text-decoration:none;font-weight:600;margin:0 6px 4px 0;background:#1F6F8B;color:#fff;border-color:#1F6F8B">🗂 Older detections</a>
+        <a href="imperva_ioc_blocked" style="display:inline-block;padding:6px 14px;border:1px solid #3c444d;border-radius:4px;text-decoration:none;font-weight:600;margin:0 6px 4px 0;color:#c3cbd4">🔓 Blocked IPs / Unblock</a>
+        <a href="imperva_ioc_rules" style="display:inline-block;padding:6px 14px;border:1px solid #3c444d;border-radius:4px;text-decoration:none;font-weight:600;margin:0 6px 4px 0;color:#c3cbd4">⚙ Detection rules</a>
+        <a href="imperva_ioc_audit" style="display:inline-block;padding:6px 14px;border:1px solid #3c444d;border-radius:4px;text-decoration:none;font-weight:600;margin:0 6px 4px 0;color:#c3cbd4">📄 Audit log</a></div>
+      </html>
+    </panel>
+  </row>
+
+  <search id="det">
+    <query>`imperva_ioc_detections`
+| where last_seen &lt; relative_time(now(), $h_cut|s$)
+| eval _r=$h_refresh|s$</query>
+    <earliest>$h_earliest$</earliest>
+    <latest>now</latest>
+  </search>
+  <search id="audit30">
+    <query>| `imperva_audit_daily(30)`
+| eval _r=$h_refresh|s$</query>
+    <earliest>-1m</earliest>
+    <latest>now</latest>
+    <refresh>300s</refresh>
+    <refreshType>delay</refreshType>
+  </search>
+
+  <row>
+    <panel>
+      <title>Blocked / unblocked IPs per day – last 30 days</title>
+      <chart>
+        <search base="audit30">
+          <query>| fields _time "Blocked IPs" "Unblocked IPs"</query>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.chart.showDataLabels">all</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">IPs</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.fieldColors">{"Blocked IPs":0xDC4E41,"Unblocked IPs":0x53A051}</option>
+        <option name="charting.legend.placement">top</option>
+        <option name="height">280</option>
+      </chart>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <input type="dropdown" token="h_range" searchWhenChanged="true">
+        <label>Last detected</label>
+        <choice value="30">8 – 30 days ago</choice>
+        <choice value="90">31 – 90 days ago</choice>
+        <choice value="all">8 – 90 days ago</choice>
+        <default>30</default>
+        <change>
+          <condition value="30">
+            <set token="h_earliest">-30d@d</set>
+            <set token="h_cut">-7d</set>
+          </condition>
+          <condition value="90">
+            <set token="h_earliest">-90d@d</set>
+            <set token="h_cut">-30d</set>
+          </condition>
+          <condition value="all">
+            <set token="h_earliest">-90d@d</set>
+            <set token="h_cut">-7d</set>
+          </condition>
+        </change>
+      </input>
+      <html>
+        <div style="color:#c3cbd4">IPs detected again in the last 7 days are on the <a href="imperva_ioc_block">Block – last 7 days</a> page.</div>
+      </html>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Search and Block older detections</title>
+      <input type="text" token="h_q" searchWhenChanged="true">
+        <label>🔎 Search IP / Ticket / Incident no. / Rule (* = all)</label>
+        <default>*</default>
+      </input>
+      <input type="text" token="h_tk" searchWhenChanged="true">
+        <label>Ticket / Incident no. ("-" if none)</label>
+        <default>-</default>
+      </input>
+      <input type="text" token="h_desc" searchWhenChanged="true">
+        <label>Description ("-" if none)</label>
+        <default>-</default>
+      </input>
+      <table>
+        <search>
+          <query>| makeresults
+| eval ips=trim($h_sel|s$, ","), n=if(ips="", 0, mvcount(split(ips, ",")))
+| eval Action=if(n=0, "Click rows below to select IPs", "⛔ BLOCK ".n." IP".if(n=1, "", "s")), Clear=if(n=0, "-", "✖ Clear selection")
+| eval selected_ips=if(n=0, "-", replace(ips, ",", ", ")), ticket=$h_tk|s$, description=$h_desc|s$
+| table Action Clear selected_ips ticket description</query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">1</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">cell</option>
+        <format type="color" field="Action">
+          <colorPalette type="expression">if(like(value, "⛔%"), "#DC4E41", "#3C444D")</colorPalette>
+        </format>
+        <drilldown>
+          <!-- one click = do it (no second confirm) -->
+          <condition match="&quot;$click.name2$&quot;==&quot;Action&quot; AND &quot;$row.selected_ips$&quot;!=&quot;-&quot;">
+            <set token="h_exec_ips">$row.selected_ips$</set>
+            <set token="h_exec_tk">$row.ticket$</set>
+            <set token="h_exec_desc">$row.description$</set>
+            <eval token="h_exec_id">now()</eval>
+            <set token="h_sel">,</set>
+            <set token="form.h_tk">-</set>
+            <set token="form.h_desc">-</set>
+          </condition>
+          <condition match="&quot;$click.name2$&quot;==&quot;Clear&quot;">
+            <set token="h_sel">,</set>
+          </condition>
+          <condition></condition>
+        </drilldown>
+      </table>
+      <html depends="$h_note$">
+        <div style="color:#F8BE34">$h_note$</div>
+      </html>
+    </panel>
+  </row>
+
+  <row>
+    <panel depends="$h_exec_ips$">
+      <title>Block result – written to the audit log (click a row to close)</title>
+      <table>
+        <search>
+          <query>| makeresults
+| eval _run=$h_exec_id|s$
+| impervablock action=block ip=$h_exec_ips|s$ incident_no=$h_exec_tk|s$ description=$h_exec_desc|s$
+| `imperva_audit_write`
+| table time ip action status verified ticket description backend soar_container detail</query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+          <done>
+            <set token="h_refresh">$job.sid$</set>
+          </done>
+        </search>
+        <option name="count">50</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">cell</option>
+        <format type="color" field="status">
+          <colorPalette type="map">{"blocked":#DC4E41,"unblocked":#53A051,"no_change":#708794,"rejected":#AF575A,"error":#B6488E}</colorPalette>
+        </format>
+        <format type="color" field="verified">
+          <colorPalette type="map">{"yes":#53A051,"no":#DC4E41,"unknown":#F8BE34}</colorPalette>
+        </format>
+        <drilldown>
+          <unset token="h_exec_ips"></unset>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>IPs detected by WAF rules – older than 7 days, not blocked yet (click a row to select / unselect it)</title>
+      <table>
+        <search base="det">
+          <query>| `imperva_ioc_search($h_q|s$)`
+| `imperva_ioc_enrich`</query>
+        </search>
+        <option name="count">20</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">cell</option>
+        <format type="color" field="suggestion">
+          <colorPalette type="map">{"BLOCK":#DC4E41,"REVIEW":#F8BE34,"MONITOR":#5A9BD5,"ALREADY_BLOCKED":#708794,"DO_NOT_BLOCK":#53A051}</colorPalette>
+        </format>
+        <format type="color" field="severity">
+          <colorPalette type="map">{"critical":#B6488E,"high":#DC4E41,"medium":#F8BE34,"low":#5A9BD5,"informational":#708794}</colorPalette>
+        </format>
+        <drilldown>
+          <condition field="VirusTotal">
+            <link target="_blank">https://www.virustotal.com/gui/ip-address/$row.src|n$</link>
+          </condition>
+          <condition match="&quot;$row.suggestion$&quot;==&quot;DO_NOT_BLOCK&quot; OR &quot;$row.suggestion$&quot;==&quot;ALREADY_BLOCKED&quot;">
+            <set token="h_note">$row.src$ cannot be selected: $row.suggestion_reason$</set>
+          </condition>
+          <condition>
+            <!-- click = select / unselect this IP; Ticket is filled from the finding's ITHM note -->
+            <unset token="h_note"></unset>
+            <eval token="h_sel">if(like("$h_sel$", "%,$row.src$,%"), replace("$h_sel$", ",$row.src$,", ","), "$h_sel$" . "$row.src$,")</eval>
+            <eval token="form.h_tk">if("$h_tk$"=="-" OR "$h_tk$"=="", "$row.incident_no$", "$h_tk$")</eval>
+          </condition>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+</form>

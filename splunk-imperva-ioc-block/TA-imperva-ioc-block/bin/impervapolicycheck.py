@@ -31,11 +31,11 @@ import splunk.Intersplunk as si  # noqa: E402
 import imperva_lib as il         # noqa: E402
 from backend import get_backend   # noqa: E402
 from splunk_helpers import (get_logger, load_conf_stanza, load_credential,  # noqa: E402
-                            parse_options, splunk_home)
+                            parse_options, policy_cache_path)
 
 
 def cache_path():
-    return os.path.join(splunk_home(), "var", "run", "splunk", "ta_imperva_policies_cache.json")
+    return policy_cache_path()
 
 
 def load_entries(session_key, conf, log, force=False):

@@ -1,0 +1,68 @@
+<form version="1.1" theme="dark" hideFilters="true">
+  <label>Imperva IOC Block – audit log</label>
+  <description>Every Block / Unblock / Detection-rule change from the dashboards, stored in the CSV lookup imperva_audit.csv (| inputlookup imperva_audit). Export: the ⤓ Export button under the table → CSV.</description>
+
+  <row>
+    <panel>
+      <html>
+        <div><a href="imperva_ioc_block" style="display:inline-block;padding:6px 14px;border:1px solid #3c444d;border-radius:4px;text-decoration:none;font-weight:600;margin:0 6px 4px 0;color:#c3cbd4">⛔ Block – last 7 days</a>
+        <a href="imperva_ioc_history" style="display:inline-block;padding:6px 14px;border:1px solid #3c444d;border-radius:4px;text-decoration:none;font-weight:600;margin:0 6px 4px 0;color:#c3cbd4">🗂 Older detections</a>
+        <a href="imperva_ioc_blocked" style="display:inline-block;padding:6px 14px;border:1px solid #3c444d;border-radius:4px;text-decoration:none;font-weight:600;margin:0 6px 4px 0;color:#c3cbd4">🔓 Blocked IPs / Unblock</a>
+        <a href="imperva_ioc_rules" style="display:inline-block;padding:6px 14px;border:1px solid #3c444d;border-radius:4px;text-decoration:none;font-weight:600;margin:0 6px 4px 0;color:#c3cbd4">⚙ Detection rules</a>
+        <a href="imperva_ioc_audit" style="display:inline-block;padding:6px 14px;border:1px solid #3c444d;border-radius:4px;text-decoration:none;font-weight:600;margin:0 6px 4px 0;background:#1F6F8B;color:#fff;border-color:#1F6F8B">📄 Audit log</a></div>
+      </html>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <input type="text" token="a_q" searchWhenChanged="true">
+        <label>🔎 Search IP / Ticket / user / description (* = all)</label>
+        <default>*</default>
+      </input>
+      <input type="dropdown" token="a_act" searchWhenChanged="true">
+        <label>Action</label>
+        <choice value="*">All</choice>
+        <choice value="block">block</choice>
+        <choice value="unblock">unblock</choice>
+        <choice value="rule_*">detection rule changes</choice>
+        <default>*</default>
+      </input>
+      <input type="dropdown" token="a_days" searchWhenChanged="true">
+        <label>Period</label>
+        <choice value="7">Last 7 days</choice>
+        <choice value="30">Last 30 days</choice>
+        <choice value="90">Last 90 days</choice>
+        <choice value="0">All</choice>
+        <default>30</default>
+      </input>
+      <table>
+        <title>Audit log (newest first)</title>
+        <search>
+          <query>| inputlookup imperva_audit
+| eval _time=tonumber(time)
+| where $a_days$=0 OR _time&gt;=relative_time(now(), "-$a_days$d@d")
+| search action=$a_act|s$
+| eval _q=lower(trim(replace($a_q|s$, "[*]", "")))
+| where _q="" OR like(lower(ip." ".ticket." ".user." ".description." ".action), "%"._q."%")
+| sort 0 - _time
+| eval time=strftime(_time, "%Y-%m-%d %H:%M:%S")
+| table time user action ip ticket description status verified policy backend soar_container detail</query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+          <refresh>60s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="count">50</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">none</option>
+        <format type="color" field="status">
+          <colorPalette type="map">{"blocked":#DC4E41,"unblocked":#53A051,"no_change":#708794,"rejected":#AF575A,"error":#B6488E}</colorPalette>
+        </format>
+        <format type="color" field="verified">
+          <colorPalette type="map">{"yes":#53A051,"no":#DC4E41,"unknown":#F8BE34}</colorPalette>
+        </format>
+      </table>
+    </panel>
+  </row>
+</form>

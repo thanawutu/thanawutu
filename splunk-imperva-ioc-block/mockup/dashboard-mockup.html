@@ -4,374 +4,241 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
-/* Layout: SOC console. Status strip -> KPI band -> stats/chart -> attacker table with per-row action -> live WAF list -> audit. */
 :root{
   --bg:#eef1f4; --panel:#ffffff; --panel-2:#f5f7f9; --line:#d7dde3; --fg:#18202a; --muted:#5d6b78;
-  --accent:#1f6f8b; --accent-ink:#ffffff;
+  --accent:#1f6f8b; --sel:#e3f0f5;
   --crit:#c4362b; --crit-bg:#fbe7e5; --warn:#a86b00; --warn-bg:#fdf1d8; --ok:#2f7d4a; --ok-bg:#e3f3e8;
-  --info:#2c62b3; --info-bg:#e4ecf9; --mute-bg:#e9edf1;
-  --bar-block:#c4362b; --bar-unblock:#2f7d4a; --grid:#e3e7eb;
+  --info:#2c62b3; --info-bg:#e4ecf9; --mute-bg:#e9edf1; --grid:#e3e7eb;
   --font-ui:"IBM Plex Sans Thai","Noto Sans Thai","Segoe UI",system-ui,sans-serif;
-  --font-data:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
-  --r:6px;
+  --font-data:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace; --r:6px;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#0f141a; --panel:#161d25; --panel-2:#1b242e; --line:#2a3542; --fg:#e3e9ef; --muted:#8d9cab;
-  --accent:#4fb3d4; --accent-ink:#06222c;
+  --accent:#4fb3d4; --sel:#18323d;
   --crit:#ff6b5e; --crit-bg:#3a1a19; --warn:#f2b445; --warn-bg:#3a2c12; --ok:#5fcf86; --ok-bg:#16301f;
-  --info:#7aa7f0; --info-bg:#1a2740; --mute-bg:#232d38;
-  --bar-block:#ff6b5e; --bar-unblock:#5fcf86; --grid:#222c37; color-scheme:dark}}
+  --info:#7aa7f0; --info-bg:#1a2740; --mute-bg:#232d38; --grid:#222c37; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#0f141a; --panel:#161d25; --panel-2:#1b242e; --line:#2a3542; --fg:#e3e9ef; --muted:#8d9cab;
-  --accent:#4fb3d4; --accent-ink:#06222c;
+  --accent:#4fb3d4; --sel:#18323d;
   --crit:#ff6b5e; --crit-bg:#3a1a19; --warn:#f2b445; --warn-bg:#3a2c12; --ok:#5fcf86; --ok-bg:#16301f;
-  --info:#7aa7f0; --info-bg:#1a2740; --mute-bg:#232d38;
-  --bar-block:#ff6b5e; --bar-unblock:#5fcf86; --grid:#222c37; color-scheme:dark}
-
-*{box-sizing:border-box}
-body{background:var(--bg);color:var(--fg);font-family:var(--font-ui);font-size:14px;line-height:1.5;
-  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 40px}
-body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--panel)}
-.wrap{max-width:1360px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+  --info:#7aa7f0; --info-bg:#1a2740; --mute-bg:#232d38; --grid:#222c37; color-scheme:dark}
+*{box-sizing:border-box} [hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font-ui);font-size:14px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-bottom:40px}
+.wrap{max-width:1380px;margin:0 auto;display:flex;flex-direction:column;gap:14px;padding-top:14px}
 .mono{font-family:var(--font-data);font-variant-numeric:tabular-nums}
-h1,h2{text-wrap:balance;margin:0}
-h1{font-size:20px;font-weight:600;letter-spacing:.01em}
-h2{font-size:14px;font-weight:600}
+h1,h2{margin:0;text-wrap:balance} h1{font-size:19px;font-weight:600} h2{font-size:14px;font-weight:600}
 .label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
-
-/* top bar */
-.topbar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--panel);border-bottom:1px solid var(--line);
-  margin-left:calc(-1 * max(16px,env(safe-area-inset-left,0px)));margin-right:calc(-1 * max(16px,env(safe-area-inset-right,0px)));
-  padding:12px max(16px,env(safe-area-inset-right,0px)) 12px max(16px,env(safe-area-inset-left,0px))}
-.topbar .in{max-width:1360px;margin:0 auto;display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center;justify-content:space-between}
-.crumbs{display:flex;flex-direction:column;gap:2px;min-width:0}
-.statusline{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.note{font-size:12px;color:var(--muted)}
+.topbar{background:var(--panel);border-bottom:1px solid var(--line);margin:0 calc(-1 * max(16px,env(safe-area-inset-right,0px))) 0 calc(-1 * max(16px,env(safe-area-inset-left,0px)));
+  padding:calc(12px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) 0 max(16px,env(safe-area-inset-left,0px))}
+.topbar .in{max-width:1380px;margin:0 auto;display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;justify-content:space-between}
+.tabs{max-width:1380px;margin:10px auto 0;display:flex;gap:2px;overflow-x:auto}
+.tabs a{padding:8px 14px;text-decoration:none;color:var(--muted);font-weight:600;font-size:13px;white-space:nowrap;border-bottom:3px solid transparent}
+.tabs a:hover{color:var(--fg)}
+.tabs a[aria-current="page"]{color:var(--accent);border-bottom-color:var(--accent)}
+.tabs .cnt{display:inline-block;margin-left:6px;background:var(--mute-bg);color:var(--fg);border-radius:999px;padding:0 7px;font-size:11px;font-family:var(--font-data)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:12px;background:var(--panel-2);white-space:nowrap}
-.dot{width:8px;height:8px;border-radius:50%;background:var(--ok)}
-.dot.busy{background:var(--warn);animation:pulse 1s infinite}
-@keyframes pulse{50%{opacity:.35}}
-@media (prefers-reduced-motion: reduce){.dot.busy{animation:none}}
 .sim{background:var(--warn-bg);color:var(--warn);border-color:transparent;font-weight:600}
-
+a{color:var(--accent)}
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;min-width:0}
 .panel-head{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;justify-content:space-between;margin-bottom:10px}
 .panel-head p{margin:0;color:var(--muted);font-size:12px}
-
-/* KPIs */
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
-.kpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;display:flex;flex-direction:column;gap:4px;min-width:0;border-top:3px solid var(--line)}
-.kpi .v{font-family:var(--font-data);font-size:28px;font-weight:600;line-height:1.1;font-variant-numeric:tabular-nums}
-.kpi .s{font-size:12px;color:var(--muted)}
-.kpi.k-crit{border-top-color:var(--crit)} .kpi.k-ok{border-top-color:var(--ok)} .kpi.k-warn{border-top-color:var(--warn)} .kpi.k-info{border-top-color:var(--info)}
-.kpi.k-bad .v{color:var(--crit)}
-.flash{animation:flash 1.2s ease-out}
-@keyframes flash{0%{background:var(--warn-bg)}100%{background:var(--panel)}}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-top:3px solid var(--line);border-radius:var(--r);padding:10px 12px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.kpi .v{font-family:var(--font-data);font-size:26px;font-weight:600;line-height:1.1;font-variant-numeric:tabular-nums}
+.kpi .s{font-size:11.5px;color:var(--muted)}
+.k-crit{border-top-color:var(--crit)} .k-warn{border-top-color:var(--warn)} .k-ok{border-top-color:var(--ok)} .k-info{border-top-color:var(--info)}
+.flash{animation:flash 1.2s ease-out} @keyframes flash{0%{background:var(--warn-bg)}100%{background:var(--panel)}}
 @media (prefers-reduced-motion: reduce){.flash{animation:none}}
-
-.grid2{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:16px}
-@media (max-width:900px){.grid2{grid-template-columns:1fr}}
-
-/* chart */
-.chart-wrap{overflow-x:auto}
-.chart-wrap svg{display:block;width:100%;min-width:560px;height:auto}
-.legend{display:flex;gap:14px;font-size:12px;color:var(--muted)}
-.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
-
-/* tables */
-.tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--r)}
-table{border-collapse:collapse;width:100%;font-size:13px}
-th{position:sticky;top:0;background:var(--panel-2);text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
-td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
-tr:last-child td{border-bottom:none}
-tbody tr:hover td{background:var(--panel-2)}
-td.num{text-align:right;font-family:var(--font-data);font-variant-numeric:tabular-nums}
-td.ip{font-family:var(--font-data);white-space:nowrap;font-weight:500}
-td.small{font-size:12px;color:var(--muted);min-width:180px}
-tr.is-new td{background:color-mix(in srgb,var(--warn-bg) 60%,transparent)}
-
-.pill{display:inline-block;border-radius:4px;padding:1px 8px;font-size:11.5px;font-weight:600;white-space:nowrap;letter-spacing:.02em}
-.p-block{background:var(--crit-bg);color:var(--crit)}
-.p-review{background:var(--warn-bg);color:var(--warn)}
-.p-monitor{background:var(--info-bg);color:var(--info)}
-.p-done{background:var(--mute-bg);color:var(--muted)}
-.p-safe{background:var(--ok-bg);color:var(--ok)}
-
-.vtbar{display:flex;align-items:center;gap:8px;white-space:nowrap}
-.vtbar .track{width:64px;height:6px;border-radius:3px;background:var(--mute-bg);overflow:hidden;display:flex}
-.vtbar .m{background:var(--crit)} .vtbar .su{background:var(--warn)}
-
-button,.btn{font:inherit;font-size:13px;border-radius:5px;border:1px solid var(--line);background:var(--panel-2);color:var(--fg);padding:6px 12px;cursor:pointer;white-space:nowrap}
-button:hover{border-color:var(--muted)}
-button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.chart-wrap{overflow-x:auto} .chart-wrap svg{display:block;width:100%;height:auto}
+.chart-wrap rect.hit{fill:transparent} .chart-wrap g.day:hover rect.hit{fill:var(--grid)}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:11.5px;color:var(--muted)} .legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px}
+.control{position:sticky;top:0;z-index:6;background:var(--panel);border:1px solid var(--accent);border-radius:var(--r);padding:12px 14px;display:flex;flex-direction:column;gap:10px;box-shadow:0 4px 14px rgba(0,0,0,.06)}
+.control.u{border-color:var(--ok)}
+.crow{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-end}
+.field{display:flex;flex-direction:column;gap:3px;min-width:0}
+.field label,.field .flabel{font-size:11.5px;color:var(--muted);font-weight:500}
+input[type=text],select{font:inherit;font-size:13px;padding:7px 9px;border:1px solid var(--line);border-radius:5px;background:var(--panel-2);color:var(--fg);min-width:0;width:100%}
+button{font:inherit;font-size:13px;border-radius:5px;border:1px solid var(--line);background:var(--panel-2);color:var(--fg);padding:6px 12px;cursor:pointer;white-space:nowrap}
 button:disabled{opacity:.45;cursor:not-allowed}
-.b-block{background:var(--crit);border-color:var(--crit);color:#fff;font-weight:600}
-.b-block:hover{filter:brightness(1.08);border-color:var(--crit)}
-.b-primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
-.b-ghost{background:transparent}
-.b-sm{padding:3px 10px;font-size:12px}
-a{color:var(--accent)}
-
-/* confirm drawer */
-.confirm{border:1px solid var(--crit);background:var(--panel);border-radius:var(--r);padding:14px 16px;display:flex;flex-direction:column;gap:12px}
-.confirm-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px 14px}
-.kv{display:flex;flex-direction:column;gap:2px;min-width:0}
-.kv b{font-weight:500;overflow-wrap:anywhere}
-.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px 14px}
-.field{display:flex;flex-direction:column;gap:4px;min-width:0}
-.field label{font-size:12px;color:var(--muted);font-weight:500}
-input[type=text],select,textarea{font:inherit;font-size:13px;padding:7px 9px;border:1px solid var(--line);border-radius:5px;background:var(--panel-2);color:var(--fg);width:100%;min-width:0}
-textarea{resize:vertical;min-height:38px;font-family:var(--font-data)}
-.err{color:var(--crit);font-size:12px}
-.row-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-
-/* job steps */
-.steps{display:flex;flex-wrap:wrap;gap:6px;list-style:none;padding:0;margin:0}
-.steps li{font-size:12px;border:1px solid var(--line);border-radius:4px;padding:3px 8px;color:var(--muted);background:var(--panel-2)}
-.steps li.run{color:var(--warn);border-color:var(--warn)}
-.steps li.done{color:var(--ok);border-color:var(--ok)}
-.steps li.fail{color:var(--crit);border-color:var(--crit)}
-
-.form-panel .fields{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
-.checkline{display:flex;gap:8px;align-items:center;font-size:13px}
-.seg{display:inline-flex;border:1px solid var(--line);border-radius:5px;overflow:hidden}
-.seg label{padding:6px 10px;font-size:12.5px;cursor:pointer;background:var(--panel-2)}
-.seg input{position:absolute;opacity:0;pointer-events:none}
-.seg input:checked + span{color:var(--accent);font-weight:600}
-.seg label:has(input:checked){background:var(--panel)}
-.seg input:focus-visible + span{outline:2px solid var(--accent);outline-offset:2px}
-
-.toast{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:10px 14px;border-radius:6px;font-size:13px;max-width:min(420px,calc(100vw - 32px));box-shadow:0 6px 24px rgba(0,0,0,.25);z-index:20}
-.note{font-size:12px;color:var(--muted)}
-/* backend flow */
-.flow{display:flex;flex-wrap:wrap;align-items:stretch;gap:0;row-gap:8px}
-.node{flex:1 1 180px;min-width:0;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);padding:10px 12px;display:flex;flex-direction:column;gap:2px;transition:border-color .2s,background .2s,opacity .2s}
-.node .t{font-weight:600;font-size:13px}
-.node .d{font-size:11.5px;color:var(--muted);font-family:var(--font-data);overflow-wrap:anywhere}
-.node.active{border-color:var(--warn);background:var(--warn-bg)}
-.node.ok{border-color:var(--ok)}
-.node.off{opacity:.35;border-style:dashed}
-.arrow{flex:0 0 56px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:10.5px;color:var(--muted);text-align:center;font-family:var(--font-data)}
-.arrow i{display:block;width:100%;height:2px;background:var(--line);position:relative;margin:4px 0}
-.arrow i::after{content:"";position:absolute;right:-1px;top:-4px;border:5px solid transparent;border-left-color:var(--line)}
-.arrow.active i{background:var(--warn)} .arrow.active i::after{border-left-color:var(--warn)}
-.arrow.off{opacity:.3}
-@media (max-width:640px){.arrow{flex-basis:100%;flex-direction:row;gap:8px}.arrow i{width:2px;height:16px;margin:0}.arrow i::after{right:-4px;top:auto;bottom:-6px;border-left-color:transparent;border-top-color:var(--line)}}
-.mode-seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;font-size:12px}
-.mode-seg button{border:0;border-radius:0;background:var(--panel-2);padding:4px 12px;font-size:12px}
-.mode-seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);font-weight:600}
-@media (prefers-reduced-motion: reduce){.node{transition:none}}
-.b-unblock{background:var(--ok-bg);border-color:var(--ok);color:var(--ok);font-weight:600}
-.searchbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
-.searchbar input{max-width:340px;flex:1 1 220px}
-.confirm.unb{border-color:var(--ok)}
-.events{font-family:var(--font-data);font-size:12px;background:var(--panel-2);border:1px solid var(--line);border-radius:var(--r);padding:10px;overflow-x:auto;white-space:pre;margin:0}
+.run{font-weight:700;padding:8px 18px;border:0;color:#fff;background:var(--crit)}
+.run.u{background:var(--ok)}
+.selbox{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:36px;border:1px dashed var(--line);border-radius:5px;padding:4px 8px;background:var(--panel-2)}
+.tag{display:inline-flex;align-items:center;gap:4px;font-family:var(--font-data);font-size:12px;background:var(--sel);border:1px solid var(--accent);border-radius:4px;padding:1px 4px 1px 8px}
+.tag button{border:0;background:transparent;padding:0 4px;font-size:14px;line-height:1;color:var(--muted)}
+.result{font-size:12.5px;border-radius:5px;padding:7px 10px}
+.result.ok{background:var(--ok-bg);color:var(--ok)} .result.running{background:var(--warn-bg);color:var(--warn)}
+.tbl-wrap{overflow:auto;border:1px solid var(--line);border-radius:var(--r);max-height:560px}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th{position:sticky;top:0;z-index:1;background:var(--panel-2);text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;padding:7px 9px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:7px 9px;border-bottom:1px solid var(--line);vertical-align:top}
+tbody tr[data-ip]{cursor:pointer} tbody tr[data-ip]:hover td{background:var(--panel-2)}
+tbody tr.selected td{background:var(--sel)}
+td.ip{font-family:var(--font-data);white-space:nowrap;font-weight:500} td.num{text-align:right;font-family:var(--font-data)}
+td.small{font-size:11.5px;color:var(--muted);min-width:170px}
+td.nw{white-space:nowrap}
+.pill{display:inline-block;border-radius:4px;padding:1px 7px;font-size:11px;font-weight:600;white-space:nowrap}
+.p-block{background:var(--crit-bg);color:var(--crit)} .p-review{background:var(--warn-bg);color:var(--warn)} .p-monitor{background:var(--info-bg);color:var(--info)}
+.p-done{background:var(--mute-bg);color:var(--muted)} .p-safe{background:var(--ok-bg);color:var(--ok)}
+.sev-high{background:var(--crit-bg);color:var(--crit)} .sev-medium{background:var(--warn-bg);color:var(--warn)} .sev-low{background:var(--info-bg);color:var(--info)}
+.box{width:15px;height:15px;border:1.5px solid var(--muted);border-radius:3px;display:inline-block;vertical-align:-3px}
+tr.selected .box{background:var(--accent);border-color:var(--accent)}
+.toast{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:10px 14px;border-radius:6px;font-size:13px;max-width:min(440px,calc(100vw - 32px));z-index:20}
+.review{border-left:4px solid var(--warn);background:var(--warn-bg);color:var(--fg);padding:10px 14px;border-radius:var(--r);font-size:12.5px}
+.review b{color:var(--warn)}
+.sw{position:relative;width:36px;height:20px;border-radius:999px;border:0;padding:0;background:var(--line)}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:#fff;transition:left .15s}
+.sw[aria-checked="true"]{background:var(--ok)} .sw[aria-checked="true"]::after{left:19px}
+tr.off td:not(:first-child){opacity:.45}
+.del{color:var(--crit);border-color:transparent;background:transparent}
 </style>
 
 <header class="topbar">
   <div class="in">
-    <div class="crumbs">
-      <span class="label">Apps › Imperva IOC Block</span>
-      <h1>Imperva WAF – Block Malicious IP IOCs</h1>
-    </div>
-    <div class="statusline">
-      <span class="chip sim">Mockup · simulated data, no real API calls</span>
-      <span class="mode-seg" role="group" aria-label="Backend (api_mode)">
-        <button type="button" id="modeDirect" aria-pressed="false">Direct API</button>
-        <button type="button" id="modeSoar" aria-pressed="true">Via SOAR</button>
-      </span>
-      <span class="chip"><span class="dot" id="wafDot"></span><span id="wafStatus">WAF list read just now</span></span>
-      <span class="chip mono" id="refreshIn">Auto refresh in 5:00</span>
-      <button class="b-sm" id="refreshNow" type="button">Refresh WAF now</button>
+    <div><span class="label">Apps › Imperva IOC Block</span><h1 id="pageTitle">Imperva WAF – IOC Block</h1></div>
+    <div class="chips">
+      <span class="chip sim">Mockup v3 · simulated data</span>
+      <span class="chip">Policy 2169031 · via SOAR</span>
     </div>
   </div>
+  <nav class="tabs" aria-label="Pages">
+    <a href="#" data-page="dash">⛔ Block – last 7 days<span class="cnt" id="nDash">0</span></a>
+    <a href="#history" data-page="history">🗂 Older detections<span class="cnt" id="nHist">0</span></a>
+    <a href="#blocked" data-page="blocked">🔓 Blocked IPs / Unblock<span class="cnt" id="nBlk">0</span></a>
+    <a href="#rules" data-page="rules">⚙ Detection rules</a>
+    <a href="#audit" data-page="audit">📄 Audit log</a>
+  </nav>
 </header>
 
-<main class="wrap" style="padding-top:16px">
-
-  <section class="panel" aria-label="How a block request travels">
-    <div class="panel-head">
-      <h2 id="flowTitle">Backend: via Splunk SOAR (api_mode = soar)</h2>
-      <p id="flowNote">Search Head has no internet route. SOAR calls the Imperva API and VirusTotal.</p>
-    </div>
-    <div class="flow">
-      <div class="node" id="nSplunk"><span class="label">1 · Splunk Search Head</span><span class="t">Dashboard · impervablock</span><span class="d">validates IPs, writes registry + audit</span></div>
-      <div class="arrow" id="a1"><span>POST /rest/container</span><i></i><span>ph-auth-token</span></div>
-      <div class="node" id="nSoar"><span class="label">2 · Splunk SOAR</span><span class="t">Playbook imperva_ioc_block</span><span class="d">re-validates: policy allow-list, protected nets · also queries VirusTotal for vtcheck</span></div>
-      <div class="arrow" id="a2"><span>GET / PUT</span><i></i><span>x-API-Id / x-API-Key</span></div>
-      <div class="node" id="nImperva"><span class="label">3 · Imperva Cloud WAF</span><span class="t">Policy 2169031</span><span class="d">BlockIOCsFromSplunk · ACL · IP/BLOCK</span></div>
-    </div>
+<!-- ============ Page 1: dashboard (7 days, search + Block) ============ -->
+<main class="wrap" id="v-dash">
+  <div class="review"><b>Mockup v3:</b> แยกเป็น 5 หน้า (แท็บด้านบน) · หน้านี้แสดงเฉพาะ IP ที่ detect ใน <b>7 วันล่าสุด</b> และทำได้แค่ <b>Search + Block</b> · IP ที่เก่ากว่า 7 วันอยู่หน้า <b>Older detections</b> · ตาราง IP ที่ block อยู่บน WAF ย้ายไปหน้า <b>Blocked IPs / Unblock</b> (Search + Unblock)</div>
+  <section class="kpis" aria-label="Summary">
+    <div class="kpi k-warn"><span class="label">Detected WAF IPs</span><span class="v" id="kDet">0</span><span class="s" id="kDetSub">last 7 days</span></div>
+    <div class="kpi k-info"><span class="label">Blocked on WAF now</span><span class="v" id="kWaf">0</span><span class="s">policy 2169031 (live)</span></div>
+    <div class="kpi k-crit"><span class="label">Blocked today</span><span class="v" id="kToday">0</span><span class="s" id="kTodaySub">yesterday 0</span></div>
+    <div class="kpi k-crit"><span class="label">Blocked 7 days</span><span class="v" id="k7">0</span><span class="s" id="k7Sub">avg 0 / day</span></div>
+    <div class="kpi k-ok"><span class="label">Unblocked 7 days</span><span class="v" id="kUn7">0</span><span class="s">from audit CSV</span></div>
   </section>
-
-  <!-- KPIs -->
-  <section class="kpis" aria-label="Blocked IP summary">
-    <div class="kpi k-crit"><span class="label">Total blocked IPs on WAF (live)</span><span class="v" id="kTotal">0</span><span class="s" id="kTotalSub">policy 2169031</span></div>
-    <div class="kpi k-ok"><span class="label">Blocked from Splunk & verified</span><span class="v" id="kVerified">0</span><span class="s">re-read from WAF after write</span></div>
-    <div class="kpi" id="kMissingBox"><span class="label">Registered but NOT on WAF</span><span class="v" id="kMissing">0</span><span class="s">removed manually or write failed</span></div>
-    <div class="kpi k-warn"><span class="label">New blocks (last 1h)</span><span class="v" id="kNew">0</span><span class="s">marked NEW in the list</span></div>
-    <div class="kpi k-info"><span class="label">Unique IPs blocked (30 days)</span><span class="v" id="k30">0</span><span class="s" id="k30Sub">avg 0 / day</span></div>
-    <div class="kpi k-info"><span class="label">Blocked today</span><span class="v" id="kToday">0</span><span class="s" id="kTodaySub">yesterday 0</span></div>
+  <section class="panel">
+    <div class="panel-head"><h2>Blocked / unblocked IPs per day – last 7 days</h2><div class="legend"><span><i style="background:var(--crit)"></i>Blocked</span><span><i style="background:var(--ok)"></i>Unblocked (+n)</span><span>30 days → Older detections</span></div></div>
+    <div class="chart-wrap" id="chart7"></div>
   </section>
-
-  <section class="grid2">
-    <div class="panel">
-      <div class="panel-head">
-        <h2>Daily block / unblock count – last 30 days</h2>
-        <div class="legend"><span><i style="background:var(--bar-block)"></i>Blocked IPs</span><span><i style="background:var(--bar-unblock)"></i>Unblocked IPs</span></div>
-      </div>
-      <div class="chart-wrap" id="chart"></div>
+  <section class="control" aria-label="Search and block">
+    <div class="crow">
+      <div class="field" style="flex:1 1 300px"><label for="d_q">🔎 Search IP / Ticket / Incident no. / Rule</label><input type="text" id="d_q" placeholder="เช่น 54.245 หรือ ITHM 1000101"></div>
     </div>
-    <div class="panel">
-      <div class="panel-head"><h2>Daily blocks by threat actor / incident</h2><p>last 30 days, from audit log</p></div>
-      <div class="tbl-wrap" style="max-height:250px;overflow:auto">
-        <table><thead><tr><th>Day</th><th>Threat actor</th><th>Incident no.</th><th style="text-align:right">IPs</th></tr></thead>
-        <tbody id="byActor"></tbody></table>
-      </div>
+    <div class="crow">
+      <div class="field" style="flex:1 1 340px"><span class="flabel">Selected IPs — คลิกแถวในตารางด้านล่าง</span><div class="selbox" id="d_sel"></div></div>
+      <div class="field" style="flex:0 1 190px"><label for="d_tk">Ticket / Incident no.</label><input type="text" id="d_tk" placeholder="ITHM 1234567"></div>
+      <div class="field" style="flex:1 1 240px"><label for="d_desc">Description</label><input type="text" id="d_desc" placeholder="เหตุผล / รายละเอียด"></div>
+      <button class="run" id="d_run" type="button" disabled>⛔ Block 0 IPs</button>
     </div>
+    <div class="result" id="d_res" hidden></div>
   </section>
-
-  <!-- Attackers -->
   <section class="panel">
     <div class="panel-head">
-      <h2>Attacking IPs (last 24h, count &gt; 300) + VirusTotal verdict</h2>
-      <p><span class="mono">index=imperva sourcetype="incapsula:cef" category!=normal act!=allowed | stats … BY src | vtcheck</span></p>
+      <h2>IPs detected by WAF rules – last 7 days</h2>
+      <p>คลิกแถวเพื่อเลือก · Ticket/Incident no. เติมจาก ITHM ใน finding note · IP ที่ block แล้วจะย้ายไปหน้า Blocked IPs</p>
     </div>
-    <div class="tbl-wrap">
-      <table>
-        <thead><tr>
-          <th>Action</th><th>src</th><th>Suggestion</th><th>Why</th><th>VirusTotal</th><th>Location</th><th>ASN</th>
-          <th style="text-align:right">Events</th><th>Category</th><th>WAF act</th><th>VT</th>
-        </tr></thead>
-        <tbody id="attackers"></tbody>
-      </table>
-    </div>
-    <p class="note" style="margin:8px 0 0">VirusTotal rule: ≥3 engines malicious → BLOCK · 1–2 engines, suspicious, or negative reputation → REVIEW (BLOCK if ≥1000 events) · clean → MONITOR.</p>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th></th><th>IP</th><th>Rule</th><th>Incident no.</th><th>Severity</th><th>Last detected</th><th style="text-align:right">Findings</th><th>Suggestion</th><th>Other WAF policies</th><th>VirusTotal</th><th>Location</th></tr></thead>
+      <tbody id="d_tbl"></tbody></table></div>
   </section>
+</main>
 
-  <!-- Confirm drawer -->
-  <section class="confirm" id="confirm" hidden aria-live="polite">
-    <div class="panel-head" style="margin:0">
-      <h2 id="cTitle">Confirm block</h2>
-      <p>Fill in the block description, then confirm. This adds the IP to ACL policy 2169031, which applies to every website the policy is assigned to.</p>
-    </div>
-    <div class="confirm-grid" id="cInfo"></div>
-    <div class="fields">
-      <div class="field"><label for="cActor">Threat actor name *</label><input type="text" id="cActor" value="Unknown"></div>
-      <div class="field"><label for="cIncident">Incident no. *</label><input type="text" id="cIncident" placeholder="INC-2026-…"></div>
-      <div class="field" style="grid-column:span 2;min-width:0"><label for="cComment">Comment *</label><input type="text" id="cComment" value="-"></div>
-    </div>
-    <div class="row-actions">
-      <button class="b-block" id="cConfirm" type="button">Confirm block on Imperva WAF</button>
-      <button class="b-ghost" id="cCancel" type="button">Cancel</button>
-      <label class="checkline note"><input type="checkbox" id="simFail"> Simulate a WAF write that does not stick (verification fails)</label>
-      <label class="checkline note" id="simSoarWrap"><input type="checkbox" id="simSoar"> Simulate SOAR playbook not active (Splunk times out)</label>
-      <span class="err" id="cErr"></span>
-    </div>
-  </section>
-
-  <!-- Job result -->
-  <section class="panel" id="job" hidden aria-live="polite">
-    <div class="panel-head"><h2 id="jobTitle">Block result</h2><button class="b-sm b-ghost" type="button" id="jobClose">Dismiss</button></div>
-    <ul class="steps" id="jobSteps"></ul>
-    <div class="tbl-wrap" style="margin-top:10px">
-      <table><thead><tr><th>ip</th><th>policy_id</th><th>status</th><th>verified_in_waf</th><th>backend</th><th>soar_container</th><th>threat_actor</th><th>incident_no</th><th>detail</th></tr></thead>
-      <tbody id="jobRows"></tbody></table>
-    </div>
-  </section>
-
-  <!-- Bulk form -->
-  <section class="panel form-panel">
-    <div class="panel-head"><h2>Bulk / dry-run / unblock</h2><p>Same as the Submit form in the Splunk dashboard</p></div>
-    <form id="bulk" class="fields" novalidate>
-      <div class="field" style="grid-column:1 / -1"><label for="fIps">IP / CIDR (comma separated)</label><textarea id="fIps" rows="2" placeholder="e.g. 185.220.101.47, 45.95.147.236"></textarea></div>
-      <div class="field"><label for="fAction">Action</label><select id="fAction"><option value="block">Block</option><option value="unblock">Unblock</option></select></div>
-      <div class="field"><span class="label" style="text-transform:none;letter-spacing:0;font-size:12px;font-weight:500">Mode</span>
-        <div class="seg" role="radiogroup" aria-label="Mode">
-          <label><input type="radio" name="mode" value="dry" id="mDry" checked><span>Dry-run</span></label>
-          <label><input type="radio" name="mode" value="apply" id="mApply"><span>Apply to Imperva</span></label>
-        </div>
-      </div>
-      <div class="field"><label for="fActor">Threat actor name</label><input type="text" id="fActor" value="Unknown"></div>
-      <div class="field"><label for="fIncident">Incident no.</label><input type="text" id="fIncident" value="N/A"></div>
-      <div class="field"><label for="fComment">Comment</label><input type="text" id="fComment" value="-"></div>
-      <div class="field" style="grid-column:1 / -1">
-        <div class="row-actions">
-          <button type="button" class="b-sm" id="fillAll">Select ALL attacking IPs</button>
-          <label class="checkline"><input type="checkbox" id="fConfirm"> I confirm</label>
-          <button type="submit" class="b-primary" id="fSubmit">Submit</button>
-          <span class="err" id="fErr"></span>
-        </div>
-      </div>
-    </form>
-  </section>
-
-  <!-- Live WAF list -->
+<!-- ============ Page 2: older detections (> 7 days, search + Block) ============ -->
+<main class="wrap" id="v-history" hidden>
   <section class="panel">
-    <div class="panel-head">
-      <h2>Blocked IPs on Imperva WAF (read live from the WAF policy)</h2>
-      <p><span class="mono">| impervalist</span> joined with the KV store registry · refreshes every 5 min and after every block/unblock</p>
-    </div>
-    <form class="searchbar" id="wafSearch" role="search">
-      <label class="label" for="wafFilter">Search</label>
-      <input type="text" id="wafFilter" placeholder="IP, site, threat actor, incident, comment">
-      <button type="submit" class="b-primary b-sm">Search</button>
-      <button type="button" class="b-sm b-ghost" id="wafClear">Clear</button>
-      <span class="note" id="wafCount"></span>
-    </form>
-    <div class="tbl-wrap">
-      <table>
-        <thead><tr><th>Actions</th><th></th><th>Blocked time</th><th>ip</th><th>Policy</th><th>Verification</th><th>Threat actor</th><th>Incident no.</th><th>Comment</th><th>Blocked by</th><th>Last checked on WAF</th></tr></thead>
-        <tbody id="waf"></tbody>
-      </table>
-    </div>
+    <div class="panel-head"><h2>Blocked / unblocked IPs per day – last 30 days</h2><div class="legend"><span><i style="background:var(--crit)"></i>Blocked</span><span><i style="background:var(--ok)"></i>Unblocked (+n)</span><span>hover a day for details</span></div></div>
+    <div class="chart-wrap" id="chart30"></div>
   </section>
-
-  <!-- Unblock confirm -->
-  <section class="confirm unb" id="unb" hidden aria-live="polite">
-    <div class="panel-head" style="margin:0">
-      <h2 id="uTitle">Confirm unblock</h2>
-      <p>This removes the IP from ACL policy 2169031.</p>
+  <section class="control" aria-label="Search and block older detections">
+    <div class="crow">
+      <div class="field" style="flex:1 1 300px"><label for="h_q">🔎 Search IP / Ticket / Incident no. / Rule</label><input type="text" id="h_q" placeholder="เช่น 45.95 หรือ ITHM 1000060"></div>
+      <div class="field" style="flex:0 0 210px"><label for="h_rng">Detected</label><select id="h_rng"><option value="30">8 – 30 days ago</option><option value="90">31 – 90 days ago</option><option value="all">older than 7 days (all)</option></select></div>
     </div>
-    <div class="confirm-grid" id="uInfo"></div>
-    <div class="fields">
-      <div class="field"><label for="uReason">Unblock reason *</label><input type="text" id="uReason" value="False positive"></div>
-      <div class="field"><label for="uIncident">Incident / change no. *</label><input type="text" id="uIncident" placeholder="CHG-2026-…"></div>
+    <div class="crow">
+      <div class="field" style="flex:1 1 340px"><span class="flabel">Selected IPs — คลิกแถวในตารางด้านล่าง</span><div class="selbox" id="h_sel"></div></div>
+      <div class="field" style="flex:0 1 190px"><label for="h_tk">Ticket / Incident no.</label><input type="text" id="h_tk" placeholder="ITHM 1234567"></div>
+      <div class="field" style="flex:1 1 240px"><label for="h_desc">Description</label><input type="text" id="h_desc" placeholder="เหตุผล / รายละเอียด"></div>
+      <button class="run" id="h_run" type="button" disabled>⛔ Block 0 IPs</button>
     </div>
-    <div class="row-actions">
-      <button class="b-unblock" id="uConfirm" type="button">Confirm unblock on Imperva WAF</button>
-      <button class="b-ghost" id="uCancel" type="button">Cancel</button>
-      <span class="err" id="uErr"></span>
-    </div>
+    <div class="result" id="h_res" hidden></div>
   </section>
-
-  <!-- Per-IP event search -->
-  <section class="panel" id="ev" hidden>
-    <div class="panel-head"><h2 id="evTitle">Events</h2><button class="b-sm b-ghost" type="button" id="evClose">Close</button></div>
-    <p class="note" style="margin:0 0 8px">In Splunk this opens Search in a new tab with:</p>
-    <pre class="events" id="evSpl"></pre>
-    <div class="tbl-wrap" style="margin-top:10px">
-      <table><thead><tr><th>Category</th><th>WAF act</th><th style="text-align:right">Events (7d)</th><th>Location</th><th>VirusTotal</th></tr></thead><tbody id="evRows"></tbody></table>
-    </div>
-  </section>
-
-  <!-- SOAR containers -->
-  <section class="panel" id="soarPanel">
-    <div class="panel-head">
-      <h2>SOAR containers (label imperva_ioc_block)</h2>
-      <p>SOAR gets only action, IPs, policy and user. Threat actor, incident no. and comment stay in Splunk. Block/unblock containers stay closed on SOAR as an audit trail · <span id="listCt">0</span> short-lived list containers created and deleted</p>
-    </div>
-    <div class="tbl-wrap" style="max-height:260px;overflow:auto">
-      <table><thead><tr><th>Container</th><th>Name</th><th>Status</th><th>Playbook run</th><th>Requested by</th><th>IPs sent</th><th>Created</th><th>Result</th></tr></thead>
-      <tbody id="soarRows"></tbody></table>
-    </div>
-  </section>
-
-  <!-- Audit -->
   <section class="panel">
-    <div class="panel-head"><h2>Audit log – who blocked what</h2><p>index=_internal source=*imperva_ioc_block.log</p></div>
-    <div class="tbl-wrap" style="max-height:320px;overflow:auto">
-      <table><thead><tr><th>_time</th><th>user</th><th>action</th><th>ip</th><th>policy_id</th><th>status</th><th>verified</th><th>backend</th><th>soar_container</th><th>threat_actor</th><th>incident_no</th><th>comment</th><th>dry_run</th></tr></thead>
-      <tbody id="audit"></tbody></table>
+    <div class="panel-head"><h2 id="h_title">IPs detected by WAF rules – 8 to 30 days ago</h2><p>ยังไม่ได้ block · คลิกแถวเพื่อเลือก</p></div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th></th><th>IP</th><th>Rule</th><th>Incident no.</th><th>Severity</th><th>Last detected</th><th style="text-align:right">Findings</th><th>Suggestion</th><th>Other WAF policies</th><th>VirusTotal</th><th>Location</th></tr></thead>
+      <tbody id="h_tbl"></tbody></table></div>
+  </section>
+</main>
+
+<!-- ============ Page 3: blocked IPs (search + Unblock) ============ -->
+<main class="wrap" id="v-blocked" hidden>
+  <section class="kpis">
+    <div class="kpi k-info"><span class="label">Blocked on WAF now</span><span class="v" id="bWaf">0</span><span class="s">policy 2169031 · read live</span></div>
+    <div class="kpi k-ok"><span class="label">Unblocked 7 days</span><span class="v" id="bUn7">0</span><span class="s">from audit CSV</span></div>
+    <div class="kpi"><span class="label">Last WAF read</span><span class="v" id="bRead" style="font-size:20px">-</span><span class="s">auto refresh every 5 min</span></div>
+  </section>
+  <section class="control u" aria-label="Search and unblock">
+    <div class="crow">
+      <div class="field" style="flex:1 1 300px"><label for="b_q">🔎 Search IP / Ticket / Incident no. / Description</label><input type="text" id="b_q" placeholder="เช่น 193.42 หรือ ITHM 1000090"></div>
     </div>
+    <div class="crow">
+      <div class="field" style="flex:1 1 340px"><span class="flabel">Selected IPs — คลิกแถวในตารางด้านล่าง</span><div class="selbox" id="b_sel"></div></div>
+      <div class="field" style="flex:0 1 190px"><label for="b_tk">Ticket / Incident no.</label><input type="text" id="b_tk" placeholder="ITHM 1234567"></div>
+      <div class="field" style="flex:1 1 240px"><label for="b_desc">Description</label><input type="text" id="b_desc" placeholder="เหตุผลที่ unblock"></div>
+      <button class="run u" id="b_run" type="button" disabled>🔓 Unblock 0 IPs</button>
+    </div>
+    <div class="result" id="b_res" hidden></div>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><h2>IPs blocked on WAF policy 2169031 (read live)</h2><p>IP ที่ unblock แล้วจะหายจากตารางนี้</p></div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th></th><th>IP</th><th>Blocked time</th><th>Ticket / Incident no.</th><th>Description</th><th>Blocked by</th><th>Detected by rule</th><th>Verified on WAF</th></tr></thead>
+      <tbody id="b_tbl"></tbody></table></div>
+  </section>
+</main>
+
+<!-- ============ Page 4: detection rules ============ -->
+<main class="wrap" id="v-rules" hidden>
+  <section class="panel">
+    <div class="panel-head"><h2>Detection rules · KV store imperva_ioc_rules</h2></div>
+    <p class="note" style="margin:0 0 12px">หน้า Block ดึง finding เฉพาะ rule ที่ <b>Include</b> และไม่ตรงกับ rule ที่ <b>Exclude</b> · ใช้ <span class="mono">*</span> เป็น wildcard ได้ · เปลี่ยนแล้วมีผลทันที ไม่ต้องแก้ code หรือ deploy app ใหม่ · ทุกการเปลี่ยนแปลงบันทึกลง audit CSV</p>
+    <div class="crow" style="margin-bottom:12px;padding:10px;border:1px dashed var(--line);border-radius:var(--r)">
+      <div class="field" style="flex:1 1 320px"><label for="rName">Rule name / pattern (เลือกจาก ES หรือพิมพ์เอง)</label><input type="text" id="rName" list="esRules" placeholder="เช่น WAF - SQL Injection Burst หรือ *WAF*"><datalist id="esRules"></datalist></div>
+      <div class="field" style="flex:0 0 150px"><label for="rMode">Mode</label><select id="rMode"><option value="include">Include</option><option value="exclude">Exclude</option></select></div>
+      <div class="field" style="flex:1 1 220px"><label for="rNote">Note</label><input type="text" id="rNote" placeholder="เหตุผล (optional)"></div>
+      <button class="run u" id="rAdd" type="button">＋ Add rule</button>
+    </div>
+    <div class="tbl-wrap" style="max-height:none"><table>
+      <thead><tr><th>Enabled</th><th>Rule name / pattern</th><th>Mode</th><th style="text-align:right">Findings 7d</th><th>Note</th><th>Updated by</th><th>Updated</th><th></th></tr></thead>
+      <tbody id="rules"></tbody></table></div>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><h2>Preview · ES correlation searches ที่สร้าง finding (7 days)</h2><p>✔ = ถูกดึงเข้าหน้า Block</p></div>
+    <div class="tbl-wrap" style="max-height:none"><table>
+      <thead><tr><th>Used</th><th>ES correlation search</th><th style="text-align:right">Findings 7d</th><th>Matched by</th></tr></thead>
+      <tbody id="esPrev"></tbody></table></div>
+  </section>
+</main>
+
+<!-- ============ Page 5: audit log ============ -->
+<main class="wrap" id="v-audit" hidden>
+  <section class="panel">
+    <div class="panel-head"><h2>Audit log · lookup imperva_audit.csv</h2></div>
+    <p class="note" style="margin:0 0 10px">ทุกการ Block / Unblock / แก้ Detection rule จะ append ลง <span class="mono">imperva_audit.csv</span> (outputlookup append=true, replicate ทั้ง search head cluster) · ใน Splunk: <span class="mono">| inputlookup imperva_audit.csv</span> · Export → CSV ได้</p>
+    <div class="crow" style="margin-bottom:10px">
+      <div class="field" style="flex:1 1 260px"><label for="aq">Search IP / Ticket / user</label><input type="text" id="aq"></div>
+      <div class="field" style="flex:0 0 160px"><label for="aact">Action</label><select id="aact"><option value="">All</option><option>block</option><option>unblock</option><option>rule_add</option><option>rule_remove</option><option>rule_enable</option><option>rule_disable</option></select></div>
+    </div>
+    <div class="tbl-wrap" style="max-height:none"><table>
+      <thead><tr><th>Time</th><th>User</th><th>Action</th><th>IP</th><th>Ticket / Incident no.</th><th>Description</th><th>Status</th><th>Verified</th><th>SOAR container</th></tr></thead>
+      <tbody id="audit"></tbody></table></div>
   </section>
 </main>
 
@@ -380,448 +247,202 @@ textarea{resize:vertical;min-height:38px;font-family:var(--font-data)}
 <script>
 (function(){
 "use strict";
-const USER = "soc.analyst";
-const SITES = [{id:"2169031",name:"BlockIOCsFromSplunk"}];   // policy_ids (v2 ACL policy)
-let MODE = "soar";                                           // api_mode: "v2_policy" (direct) | "soar"
-let soarSeq = 4812, listContainers = 0;
-const soarContainers = [];
-const PROTECTED = ["8.8.8.0/24"];               // imperva.conf protected_networks (sample)
-const MAX_IPS = 50, HOUR = 3600e3, DAY = 86400e3;
-const now0 = Date.now();
-
-/* ---------- simulated data (all sample values) ---------- */
-const attackers = [
-  {ip:"185.220.101.47", count:4820, city:"Frankfurt am Main", region:"Hesse", country:"Germany", cc:"DE", asn:"208294", owner:"Sample Hosting GmbH", vt:{m:14,s:2,h:58,e:94,rep:-38}, cat:"SQL Injection, XSS", act:"blocked"},
-  {ip:"45.95.147.236", count:2210, city:"Amsterdam", region:"North Holland", country:"Netherlands", cc:"NL", asn:"49870", owner:"Example Cloud B.V.", vt:{m:7,s:1,h:60,e:94,rep:-12}, cat:"Bot Access Control", act:"blocked"},
-  {ip:"103.152.18.90", count:1340, city:"Ho Chi Minh City", region:"Ho Chi Minh", country:"Vietnam", cc:"VN", asn:"135905", owner:"Sample Telecom VN", vt:{m:1,s:1,h:66,e:94,rep:0}, cat:"Remote File Inclusion", act:"alerted"},
-  {ip:"91.240.118.172", count:880, city:"Moscow", region:"Moscow", country:"Russia", cc:"RU", asn:"57523", owner:"Example Networks LLC", vt:{m:2,s:0,h:63,e:94,rep:-3}, cat:"Illegal Resource Access", act:"blocked"},
-  {ip:"20.115.62.14", count:640, city:"San Antonio", region:"Texas", country:"United States", cc:"US", asn:"8075", owner:"Sample Cloud Provider", vt:{m:0,s:0,h:70,e:94,rep:0}, cat:"Bad Bots", act:"alerted"},
-  {ip:"8.8.8.27", count:520, city:"Mountain View", region:"California", country:"United States", cc:"US", asn:"15169", owner:"Sample DNS Provider", vt:{m:0,s:0,h:71,e:94,rep:5}, cat:"DDoS", act:"alerted"},
-  {ip:"10.20.4.15", count:410, city:"-", region:"-", country:"Private", cc:"-", asn:"-", owner:"internal", vt:null, cat:"Cross Site Request Forgery", act:"alerted"},
-  {ip:"112.85.42.188", count:365, city:"Nanjing", region:"Jiangsu", country:"China", cc:"CN", asn:"4837", owner:"Sample Backbone CN", vt:{m:5,s:3,h:55,e:94,rep:-20}, cat:"SQL Injection", act:"blocked"},
+const USER="analyst01", HOUR=3600e3, DAY=86400e3, now0=Date.now();
+const RULES=["WAF - High-Volume Blocked Requests from Single Source","WAF - Partner Site Attack","WAF - DDoS Behavior Detection","WAF - Abnormal User-Agent Length","WAF - Attack Analytics Multi-Category"];
+const D=(ip,rule,inc,sev,ageH,n,vt,loc,sug,pol)=>({ip,rule:RULES[rule],inc,sev,last:now0-ageH*HOUR,n,vt,loc,sug,pol:pol||"-"});
+const detected=[
+ D("54.245.198.114",1,"ITHM 1000101","high",0.5,14,6,"Boardman, US","BLOCK"),
+ D("54.213.203.214",1,"ITHM 1000101","high",0.6,11,5,"Boardman, US","BLOCK"),
+ D("52.88.145.123",1,"ITHM 1000101","high",0.7,9,2,"Boardman, US","REVIEW"),
+ D("223.181.15.230",4,"-","medium",20,3,9,"Mumbai, IN","BLOCK"),
+ D("211.24.84.19",2,"ITHM 1000102","medium",30,4,3,"Kuala Lumpur, MY","BLOCK"),
+ D("57.141.0.36",3,"-","medium",50,2,0,"Paris, FR","MONITOR"),
+ D("185.220.101.47",0,"ITHM 1000103","high",75,21,14,"Frankfurt, DE","ALREADY_BLOCKED","BLOCK in 1000001 Block DDoS policy"),
+ D("20.20.20.20",0,"-","low",100,5,0,"Singapore, SG","DO_NOT_BLOCK","ALLOW in 1000002 Allow partner DC"),
+ D("103.152.18.90",0,"ITHM 1000104","medium",140,6,1,"Ho Chi Minh City, VN","REVIEW"),
+ D("45.95.147.236",0,"ITHM 1000060","high",10*24,18,11,"Amsterdam, NL","BLOCK"),
+ D("194.26.29.102",2,"ITHM 1000058","medium",13*24,7,6,"Moscow, RU","BLOCK"),
+ D("118.193.33.60",4,"-","medium",19*24,4,2,"Hong Kong, HK","REVIEW"),
+ D("5.188.206.14",3,"-","low",26*24,2,1,"St Petersburg, RU","MONITOR"),
+ D("89.248.165.52",0,"ITHM 1000031","high",45*24,25,12,"Amsterdam, NL","BLOCK"),
+ D("162.142.125.9",0,"-","low",70*24,3,4,"Ann Arbor, US","REVIEW"),
 ];
+const blocked=[
+ {ip:"193.42.33.7",t:now0-3*DAY,tk:"ITHM 1000090",desc:"Credential stuffing on /login",by:"analyst01",rule:RULES[0]},
+ {ip:"141.98.10.60",t:now0-9*DAY,tk:"ITHM 1000071",desc:"Scanner, VT 9/94",by:"analyst02",rule:RULES[4]},
+ {ip:"91.240.118.172",t:now0-14*DAY,tk:"ITHM 1000055",desc:"SQLi burst on partner site",by:"analyst03",rule:RULES[1]},
+];
+const audit=blocked.map((b,i)=>({t:b.t,user:b.by,action:"block",ip:b.ip,tk:b.tk,desc:b.desc,status:"blocked",ver:"yes",cont:4700+i*13}));
+const rules=[
+ {id:1,pat:"*WAF*",mode:"include",on:true,note:"all WAF correlation searches",by:"admin",t:now0-30*DAY},
+ {id:2,pat:"*WAF Monitor Error code 404*",mode:"exclude",on:true,note:"monitoring only, not an attack",by:"admin",t:now0-30*DAY},
+];
+let ruleSeq=3;
+const esSearches=[
+ {name:RULES[0],n:31},{name:RULES[1],n:34},{name:RULES[2],n:4},{name:RULES[3],n:2},{name:RULES[4],n:3},
+ {name:"WAF Monitor Error code 404",n:412},{name:"Bot - Credential Stuffing on Login API",n:7},{name:"Endpoint - Malware Detected",n:12},
+];
+const wild=(pat,str)=>new RegExp("^"+pat.split("*").map(x=>x.replace(/[.+?^${}()|[\]\\]/g,"\\$&")).join(".*")+"$","i").test(str);
+const ruleUsed=name=>{const inc=rules.find(r=>r.on&&r.mode==="include"&&wild(r.pat,name)); const exc=rules.find(r=>r.on&&r.mode==="exclude"&&wild(r.pat,name)); return {use:!!inc&&!exc,inc,exc};};
+let seed=11; const rnd=()=>(seed=(seed*9301+49297)%233280)/233280;
+const daily=[]; const t0=new Date(); t0.setHours(0,0,0,0);
+for(let i=29;i>=0;i--){ daily.push({day:new Date(t0.getTime()-i*DAY), b:i===0?0:Math.floor(rnd()*7)+(rnd()>.85?6:0), u:rnd()>.75?Math.floor(rnd()*3):0}); }
 
-// WAF state (live blacklist) per site
-const waf = {"2169031": new Set(["193.42.33.7","62.233.50.11","141.98.10.60"])};
-// KV store registry  key = site_ip
-const registry = new Map();
-function reg(site, ip, d){ registry.set(site+"_"+ip, Object.assign({site, ip, status:"blocked"}, d)); }
-reg("2169031","193.42.33.7",{at:now0-3*DAY-5*HOUR, by:"soc.lead", actor:"SampleBear", incident:"INC-2026-0311", comment:"Credential stuffing on /login"});
-reg("2169031","141.98.10.60",{at:now0-9*DAY, by:"soc.analyst", actor:"Unknown", incident:"INC-2026-0287", comment:"Scanner, VT 9/94"});
-reg("2169031","77.91.124.20",{at:now0-12*DAY, by:"soc.analyst", actor:"SamplePanda", incident:"INC-2026-0260", comment:"Removed from WAF manually?"});
-// 62.233.50.11 is on WAF but has no registry record => blocked outside Splunk
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const pad=n=>String(n).padStart(2,"0");
+const fmt=t=>{const d=new Date(t);return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;};
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function toast(m){const t=$("toast");t.textContent=m;t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>t.hidden=true,4200);}
+const sugPill={BLOCK:"p-block",REVIEW:"p-review",MONITOR:"p-monitor",ALREADY_BLOCKED:"p-done",DO_NOT_BLOCK:"p-safe"};
+const onWaf=ip=>blocked.some(b=>b.ip===ip);
+const has=(q,...xs)=>!q||xs.join(" ").toLowerCase().includes(q);
+const age=d=>now0-d.last;
+const pendingDetected=()=>detected.filter(d=>!onWaf(d.ip)&&ruleUsed(d.rule).use);
+const win={dash:d=>age(d)<=7*DAY,
+  history:d=>{const r=$("h_rng").value,a=age(d); return r==="30"?a>7*DAY&&a<=30*DAY : r==="90"?a>30*DAY&&a<=90*DAY : a>7*DAY;}};
 
-// audit + 30-day history (seeded, deterministic)
-const audit = [];
-let seed = 7; const rnd = () => (seed = (seed*9301+49297)%233280)/233280;
-const actors = ["SampleBear","SamplePanda","Unknown","SampleSpider"];
-const daily = []; // {day: Date(midnight), blocked:Set, unblocked:Set, byActor:Map}
-const today0 = new Date(); today0.setHours(0,0,0,0);
-for(let i=29;i>=0;i--){
-  const d = new Date(today0.getTime()-i*DAY);
-  const rec = {day:d, blocked:new Set(), unblocked:new Set(), byActor:new Map()};
-  const nb = i===0 ? 0 : Math.floor(rnd()*9) + (rnd()>.85?8:0);
-  const nu = rnd()>.7 ? Math.floor(rnd()*3) : 0;
-  for(let k=0;k<nb;k++){
-    const ip = `${100+Math.floor(rnd()*120)}.${Math.floor(rnd()*255)}.${Math.floor(rnd()*255)}.${Math.floor(rnd()*254)+1}`;
-    rec.blocked.add(ip);
-    const a = actors[Math.floor(rnd()*actors.length)], inc = "INC-2026-0"+(200+Math.floor((29-i)*4+rnd()*3));
-    const key = a+"|"+inc; rec.byActor.set(key,(rec.byActor.get(key)||new Set()).add(ip));
-  }
-  for(let k=0;k<nu;k++) rec.unblocked.add("u"+i+"_"+k);
-  daily.push(rec);
+const P={dash:{p:"d",act:"block",sel:new Set(),busy:false},history:{p:"h",act:"block",sel:new Set(),busy:false},blocked:{p:"b",act:"unblock",sel:new Set(),busy:false}};
+let soarSeq=4813;
+
+function detRows(page){const q=$(P[page].p+"_q").value.trim().toLowerCase();
+  return pendingDetected().filter(win[page]).filter(d=>has(q,d.ip,d.inc,d.rule)).sort((a,b)=>b.last-a.last);}
+function renderDet(page){
+  const pg=P[page], rows=detRows(page), q=$(pg.p+"_q").value.trim();
+  $(pg.p+"_tbl").innerHTML=rows.map(d=>{
+    const ok=d.sug!=="DO_NOT_BLOCK"&&d.sug!=="ALREADY_BLOCKED";
+    return `<tr data-ip="${d.ip}" class="${pg.sel.has(d.ip)?"selected":""}">
+    <td>${ok?'<span class="box"></span>':''}</td><td class="ip">${d.ip}</td><td class="small">${esc(d.rule)}</td>
+    <td class="mono nw">${esc(d.inc)}</td><td><span class="pill sev-${d.sev}">${d.sev}</span></td><td class="mono nw">${fmt(d.last)}</td>
+    <td class="num">${d.n}</td><td><span class="pill ${sugPill[d.sug]}">${d.sug}</span></td><td class="small">${esc(d.pol)}</td>
+    <td class="mono">${d.vt}/94</td><td class="nw">${esc(d.loc)}</td></tr>`;}).join("")
+    ||`<tr><td colspan="11" class="note">${q?`ไม่พบ IP ที่ตรงกับ “${esc(q)}”`:"ไม่มี IP ที่รอ block ในช่วงเวลานี้"}</td></tr>`;
 }
-// seed visible audit with recent history
-[["soc.lead","block","193.42.33.7","2169031","blocked","yes","SampleBear","INC-2026-0311","Credential stuffing on /login",now0-3*DAY-5*HOUR],
- ["soc.analyst","block","141.98.10.60","2169031","blocked","yes","Unknown","INC-2026-0287","Scanner, VT 9/94",now0-9*DAY]]
- .forEach((r,i)=>audit.push({user:r[0],action:r[1],ip:r[2],site:r[3],status:r[4],verified:r[5],actor:r[6],incident:r[7],comment:r[8],dry:false,t:r[9],backend:"soar",cont:4790+i*7}));
-[[4797,"Splunk Imperva block 141.98.10.60","soc.analyst","141.98.10.60",now0-9*DAY],[4790,"Splunk Imperva block 193.42.33.7","soc.lead","193.42.33.7",now0-3*DAY-5*HOUR]]
- .forEach(c=>soarContainers.push({id:c[0],name:c[1],status:"closed",run:"success",by:c[2],ips:c[3],t:c[4],result:"1 blocked, verified"}));
-
-/* ---------- logic mirrored from the Splunk app ---------- */
-function v4(ip){ const m=/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?:\/(\d{1,2}))?$/.exec(ip); if(!m) return null;
-  const o=m.slice(1,5).map(Number); if(o.some(x=>x>255)) return null; const p=m[5]===undefined?32:Number(m[5]); if(p>32) return null;
-  return {n:((o[0]<<24)>>>0)+(o[1]<<16)+(o[2]<<8)+o[3], p}; }
-function inCidr(ip, cidr){ const a=v4(ip), c=v4(cidr); if(!a||!c) return false; const mask=c.p===0?0:(~0<<(32-c.p))>>>0; return ((a.n&mask)>>>0)===((c.n&mask)>>>0); }
-const NONPUBLIC=["0.0.0.0/8","10.0.0.0/8","100.64.0.0/10","127.0.0.0/8","169.254.0.0/16","172.16.0.0/12","192.0.0.0/24","192.0.2.0/24","192.168.0.0/16","198.18.0.0/15","198.51.100.0/24","203.0.113.0/24","224.0.0.0/3"];
-function validate(ip){
-  const a=v4(ip); if(!a) return "invalid IP/CIDR";
-  if(NONPUBLIC.some(c=>inCidr(ip.split("/")[0],c))) return "non-public address (private/reserved/loopback/multicast)";
-  if(a.p<24) return "CIDR wider than /24 not allowed";
-  const hit=PROTECTED.find(c=>inCidr(ip.split("/")[0],c)); if(hit) return "overlaps protected network "+hit;
-  return null; }
-function parseList(raw){ return [...new Set(raw.split(/[\s,;]+/).map(s=>s.trim().replace(/^["']|["']$/g,"")).filter(Boolean))].map(s=>s.endsWith("/32")?s.slice(0,-3):s); }
-function onWafAnySite(ip){ return SITES.some(s=>waf[s.id].has(ip)); }
-function suggest(a){
-  if(validate(a.ip)) return ["DO_NOT_BLOCK", validate(a.ip).startsWith("overlaps")?"in protected_networks":"non-public address"];
-  if(onWafAnySite(a.ip)) return ["ALREADY_BLOCKED","already on Imperva blacklist"];
-  const hv=a.count>=1000, v=a.vt;
-  if(!v) return hv?["BLOCK","VT unavailable, very high volume"]:["REVIEW","VT unavailable – verify manually"];
-  if(v.m>=3) return ["BLOCK", v.m+" VT engines flag malicious"];
-  if(v.m>=1||v.s>=2||v.rep<0) return hv?["BLOCK",`VT mal=${v.m} sus=${v.s} + high volume (${a.count})`]:["REVIEW",`VT mal=${v.m} sus=${v.s} rep=${v.rep}`];
-  if(hv) return ["REVIEW","VT clean but very high volume"];
-  return ["MONITOR",`VT clean, moderate volume (${a.count})`]; }
-
-/* ---------- helpers ---------- */
-const $ = id => document.getElementById(id);
-const esc = s => String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const pad = n => String(n).padStart(2,"0");
-const fmt = t => { const d=new Date(t); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; };
-const fmtDay = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-const sleep = ms => new Promise(r=>setTimeout(r,ms));
-const pillClass = {BLOCK:"p-block",REVIEW:"p-review",MONITOR:"p-monitor",ALREADY_BLOCKED:"p-done",DO_NOT_BLOCK:"p-safe"};
-function toast(msg){ const t=$("toast"); t.textContent=msg; t.hidden=false; clearTimeout(toast._t); toast._t=setTimeout(()=>t.hidden=true,4200); }
-function flash(id){ const el=$(id).closest(".kpi"); el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash"); }
-let wafCheckedAt = Date.now();
-
-/* ---------- renderers ---------- */
-function renderAttackers(){
-  const prio={BLOCK:1,REVIEW:2,MONITOR:3,ALREADY_BLOCKED:4,DO_NOT_BLOCK:5};
-  const rows = attackers.map(a=>({a, s:suggest(a)})).sort((x,y)=>prio[x.s[0]]-prio[y.s[0]]||y.a.count-x.a.count);
-  $("attackers").innerHTML = rows.map(({a,s})=>{
-    const v=a.vt, score = v?`${v.m}/${v.e}`:"no data";
-    const bar = v?`<span class="track"><span class="m" style="width:${Math.min(100,v.m/v.e*400)}%"></span><span class="su" style="width:${Math.min(100,v.s/v.e*400)}%"></span></span>`:"";
-    let btn;
-    if(s[0]==="ALREADY_BLOCKED") btn=`<span class="pill p-done">Blocked</span>`;
-    else if(s[0]==="DO_NOT_BLOCK") btn=`<span class="pill p-safe">Do not block</span>`;
-    else btn=`<button class="b-block b-sm" type="button" data-block="${esc(a.ip)}">Block</button>`;
-    return `<tr>
-      <td>${btn}</td>
-      <td class="ip">${esc(a.ip)}</td>
-      <td><span class="pill ${pillClass[s[0]]}">${s[0]}</span></td>
-      <td class="small">${esc(s[1])}</td>
-      <td><span class="vtbar mono">${bar}${score}${v?` <span class="note">rep ${v.rep}</span>`:""}</span></td>
-      <td>${esc(a.city!=="-"?a.city+", ":"")}${esc(a.country)} <span class="note mono">[${esc(a.cc)}]</span></td>
-      <td class="small">${a.asn!=="-"?"AS"+esc(a.asn)+" "+esc(a.owner):"-"}</td>
-      <td class="num">${a.count.toLocaleString()}</td>
-      <td class="small">${esc(a.cat)}</td>
-      <td>${esc(a.act)}</td>
-      <td><a href="https://www.virustotal.com/gui/ip-address/${encodeURIComponent(a.ip)}" target="_blank" rel="noopener">Open</a></td>
-    </tr>`; }).join("");
+function renderBlocked(){
+  const pg=P.blocked, q=$("b_q").value.trim().toLowerCase();
+  const rows=blocked.filter(b=>has(q,b.ip,b.tk,b.desc,b.rule)).sort((a,b)=>b.t-a.t);
+  $("b_tbl").innerHTML=rows.map(b=>`<tr data-ip="${b.ip}" class="${pg.sel.has(b.ip)?"selected":""}">
+    <td><span class="box"></span></td><td class="ip">${b.ip}</td><td class="mono nw">${fmt(b.t)}</td>
+    <td class="mono nw">${esc(b.tk)}</td><td class="small">${esc(b.desc)}</td><td>${esc(b.by)}</td><td class="small">${esc(b.rule||"-")}</td><td><span class="pill p-safe">yes</span></td></tr>`).join("")
+    ||`<tr><td colspan="8" class="note">${q?`ไม่พบ IP ที่ตรงกับ “${esc(q)}”`:"ไม่มี IP ที่ถูก block"}</td></tr>`;
+  $("bWaf").textContent=blocked.length; $("bRead").textContent=fmt(Date.now()).slice(11);
 }
-
-function wafRows(){
-  const rows=[];
-  for(const s of SITES){
-    for(const ip of waf[s.id]){
-      const r=registry.get(s.id+"_"+ip);
-      rows.push({site:s, ip, inWaf:true, r: r&&r.status==="blocked"?r:null});
-    }
-  }
-  for(const r of registry.values()){
-    if(r.status==="blocked" && !waf[r.site].has(r.ip)) rows.push({site:SITES.find(s=>s.id===r.site), ip:r.ip, inWaf:false, r});
-  }
-  return rows.sort((a,b)=>((b.r&&b.r.at)||0)-((a.r&&a.r.at)||0));
+function renderCtl(page){
+  const pg=P[page], n=pg.sel.size;
+  $(pg.p+"_run").textContent=`${pg.act==="block"?"⛔ Block":"🔓 Unblock"} ${n} IP${n===1?"":"s"}`;
+  $(pg.p+"_run").disabled=!n||pg.busy;
+  $(pg.p+"_sel").innerHTML=[...pg.sel].map(ip=>`<span class="tag">${ip}<button type="button" data-rm="${ip}" aria-label="remove ${ip}">×</button></span>`).join("")||'<span class="note">ยังไม่ได้เลือก IP</span>';
 }
-
-function renderWaf(){
-  const q=$("wafFilter").value.trim().toLowerCase();
-  const all=wafRows();
-  const rows=all.filter(x=>!q||[x.ip,x.r&&x.r.actor,x.r&&x.r.incident,x.r&&x.r.comment,x.site.name].join(" ").toLowerCase().includes(q));
-  $("waf").innerHTML = rows.map(x=>{
-    const isNew = x.r && Date.now()-x.r.at < HOUR && x.inWaf;
-    let ver;
-    if(x.inWaf && x.r) ver=`<span class="pill p-safe">Verified on WAF</span>`;
-    else if(x.inWaf) ver=`<span class="pill p-monitor">On WAF – blocked outside Splunk</span>`;
-    else ver=`<span class="pill p-block">NOT on WAF – removed or failed</span>`;
-    const acts = `<div class="row-actions" style="flex-wrap:nowrap;gap:6px">${x.inWaf?`<button class="b-unblock b-sm" type="button" data-unblock="${esc(x.ip)}" data-site="${x.site.id}">Unblock</button>`:`<span class="note">not on WAF</span>`}<button class="b-sm" type="button" data-events="${esc(x.ip)}" aria-label="Search events for ${esc(x.ip)}">🔍 Search</button></div>`;
-    return `<tr class="${isNew?"is-new":""}">
-      <td>${acts}</td>
-      <td>${isNew?'<span class="pill p-review">NEW</span>':""}</td>
-      <td class="mono" style="white-space:nowrap">${x.r?fmt(x.r.at):"-"}</td>
-      <td class="ip">${esc(x.ip)}</td>
-      <td class="small" style="min-width:150px"><span class="mono">${x.site.id}</span><br>${esc(x.site.name)}</td>
-      <td>${ver}</td>
-      <td>${esc(x.r?x.r.actor:"-")}</td>
-      <td class="mono">${esc(x.r?x.r.incident:"-")}</td>
-      <td class="small">${esc(x.r?x.r.comment:"-")}</td>
-      <td>${esc(x.r?x.r.by:"-")}</td>
-      <td class="mono note" style="white-space:nowrap">${fmt(wafCheckedAt)}</td></tr>`; }).join("") || `<tr><td colspan="11" class="note">No blocked IPs match “${esc(q)}”.</td></tr>`;
-  $("wafCount").textContent = `${rows.length} of ${all.length} rows`;
-  // KPIs
-  const live=new Set(); SITES.forEach(s=>waf[s.id].forEach(ip=>live.add(ip)));
-  $("kTotal").textContent=live.size;
-  $("kTotalSub").textContent=`policy 2169031 · BlockIOCsFromSplunk`;
-  $("kVerified").textContent=all.filter(x=>x.inWaf&&x.r).length;
-  const miss=all.filter(x=>!x.inWaf).length; $("kMissing").textContent=miss;
-  $("kMissingBox").className="kpi "+(miss?"k-crit k-bad":"k-ok");
-  $("kNew").textContent=all.filter(x=>x.inWaf&&x.r&&Date.now()-x.r.at<HOUR).length;
-}
-
-function renderStats(){
-  const uniq=new Set(); daily.forEach(d=>d.blocked.forEach(ip=>uniq.add(ip)));
-  $("k30").textContent=uniq.size;
-  const avg=daily.reduce((s,d)=>s+d.blocked.size,0)/daily.length;
-  $("k30Sub").textContent=`avg ${avg.toFixed(1)} / day`;
-  const t=daily[daily.length-1].blocked.size, y=daily[daily.length-2].blocked.size;
-  $("kToday").textContent=t;
-  $("kTodaySub").textContent=`yesterday ${y} · ${t>=y?"▲":"▼"} ${Math.abs(t-y)}`;
-  // by actor table
-  const rows=[];
-  for(let i=daily.length-1;i>=0;i--) for(const [k,set] of daily[i].byActor){ const [a,inc]=k.split("|"); rows.push([fmtDay(daily[i].day),a,inc,set.size]); }
-  $("byActor").innerHTML=rows.slice(0,40).map(r=>`<tr><td class="mono">${r[0]}</td><td>${esc(r[1])}</td><td class="mono">${esc(r[2])}</td><td class="num">${r[3]}</td></tr>`).join("");
-  renderChart();
-}
-
-function renderChart(){
-  const W=720,H=230,L=34,R=8,T=14,B=34, n=daily.length, cw=(W-L-R)/n;
-  const maxV=Math.max(4,...daily.map(d=>d.blocked.size+d.unblocked.size));
-  const step=maxV>20?10:maxV>8?4:2, top=Math.ceil(maxV/step)*step;
-  const y=v=>T+(H-T-B)*(1-v/top);
+function chart(el,days){
+  const data=daily.slice(-days), n=data.length, W=days>7?1300:1000, H=days>7?230:200, L=34,R=8,T=28,B=34, cw=(W-L-R)/n, bw=days>7?.6:.4;
+  const mx=Math.max(4,...data.map(d=>d.b+d.u)), step=mx>12?5:2, top=Math.ceil(mx/step)*step, y=v=>T+(H-T-B)*(1-v/top);
+  const wd=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
   let g="";
-  for(let v=0;v<=top;v+=step) g+=`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)" stroke-width="1"/><text x="${L-6}" y="${y(v)+4}" text-anchor="end" font-size="10" fill="var(--muted)" font-family="IBM Plex Mono,monospace">${v}</text>`;
-  daily.forEach((d,i)=>{
-    const x=L+i*cw+cw*.18, w=cw*.64, b=d.blocked.size, u=d.unblocked.size, isT=i===n-1;
-    if(b) g+=`<rect x="${x}" y="${y(b)}" width="${w}" height="${y(0)-y(b)}" fill="var(--bar-block)" rx="1.5" opacity="${isT?1:.82}"><title>${fmtDay(d.day)}: ${b} blocked</title></rect>`;
-    if(u) g+=`<rect x="${x}" y="${y(b+u)}" width="${w}" height="${y(b)-y(b+u)}" fill="var(--bar-unblock)" rx="1.5"><title>${fmtDay(d.day)}: ${u} unblocked</title></rect>`;
-    if(b+u) g+=`<text x="${x+w/2}" y="${y(b+u)-3}" text-anchor="middle" font-size="9" fill="${isT?"var(--fg)":"var(--muted)"}" font-weight="${isT?600:400}" font-family="IBM Plex Mono,monospace">${b+u}</text>`;
-    if(i%5===4||isT) g+=`<text x="${x+w/2}" y="${H-B+16}" text-anchor="middle" font-size="10" fill="${isT?"var(--fg)":"var(--muted)"}" font-weight="${isT?600:400}" font-family="IBM Plex Mono,monospace">${isT?"today":pad(d.day.getDate())+"/"+pad(d.day.getMonth()+1)}</text>`;
-  });
-  g+=`<line x1="${L}" x2="${W-R}" y1="${y(0)}" y2="${y(0)}" stroke="var(--muted)" stroke-width="1"/>`;
-  $("chart").innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Daily blocked and unblocked IPs, last 30 days">${g}</svg>`;
+  for(let v=0;v<=top;v+=step) g+=`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/><text x="${L-6}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="var(--muted)">${v}</text>`;
+  data.forEach((d,i)=>{const x0=L+i*cw, w=cw*bw, x=x0+(cw-w)/2, cx=x+w/2, today=i===n-1;
+    let s=`<g class="day"><rect class="hit" x="${x0}" y="${T-24}" width="${cw}" height="${H-T-B+24}"/><title>${fmt(d.day).slice(0,10)} (${wd[d.day.getDay()]}): ${d.b} blocked, ${d.u} unblocked</title>`;
+    if(d.b) s+=`<rect x="${x}" y="${y(d.b)}" width="${w}" height="${y(0)-y(d.b)}" fill="var(--crit)" rx="2"/>`;
+    if(d.u) s+=`<rect x="${x}" y="${y(d.b+d.u)}" width="${w}" height="${y(d.b)-y(d.b+d.u)}" fill="var(--ok)" rx="2"/>`;
+    const ty=y(d.b+d.u);
+    s+=`<text x="${cx}" y="${ty-4}" text-anchor="middle" font-size="11.5" font-weight="600" font-family="var(--font-data)" fill="var(--crit)">${d.b}</text>`;
+    if(d.u) s+=`<text x="${cx}" y="${ty-17}" text-anchor="middle" font-size="10.5" font-weight="600" font-family="var(--font-data)" fill="var(--ok)">+${d.u}</text>`;
+    s+=`<text x="${cx}" y="${H-B+15}" text-anchor="middle" font-size="11" font-weight="${today?700:400}" fill="${today?"var(--fg)":"var(--muted)"}">${pad(d.day.getDate())}/${pad(d.day.getMonth()+1)}</text>`;
+    s+=`<text x="${cx}" y="${H-B+28}" text-anchor="middle" font-size="10" fill="var(--muted)">${today?"today":wd[d.day.getDay()]}</text></g>`;
+    g+=s;});
+  $(el).innerHTML=`<svg viewBox="0 0 ${W} ${H}" style="min-width:${days>7?900:420}px" role="img" aria-label="Blocked and unblocked IPs per day, last ${days} days">${g}</svg>`;
 }
+function renderKPIs(){
+  const v=pendingDetected().filter(win.dash);
+  $("kDet").textContent=v.length; $("kDetSub").textContent=`last 7 days · ${esSearches.filter(e=>ruleUsed(e.name).use).length} WAF rules in use`;
+  $("kWaf").textContent=blocked.length;
+  const td=daily[daily.length-1], yd=daily[daily.length-2], w=daily.slice(-7);
+  $("kToday").textContent=td.b; $("kTodaySub").textContent=`yesterday ${yd.b}`;
+  const b7=w.reduce((s,d)=>s+d.b,0); $("k7").textContent=b7; $("k7Sub").textContent=`avg ${(b7/7).toFixed(1)} / day`;
+  const u7=w.reduce((s,d)=>s+d.u,0); $("kUn7").textContent=u7; $("bUn7").textContent=u7;
+  $("nDash").textContent=v.length; $("nHist").textContent=pendingDetected().filter(d=>age(d)>7*DAY).length; $("nBlk").textContent=blocked.length;
+  chart("chart7",7); chart("chart30",30);
+}
+const hTitle={"30":"8 to 30 days ago","90":"31 to 90 days ago","all":"older than 7 days"};
+function renderAll(){renderKPIs(); renderDet("dash"); renderDet("history"); renderBlocked(); ["dash","history","blocked"].forEach(renderCtl); $("h_title").textContent="IPs detected by WAF rules – "+hTitle[$("h_rng").value];}
+
+function pick(page,ip){
+  const pg=P[page]; if(pg.busy) return; const tk=$(pg.p+"_tk");
+  if(page==="blocked"){ if(pg.sel.has(ip)) pg.sel.delete(ip); else {pg.sel.add(ip); const b=blocked.find(x=>x.ip===ip); if(b&&!tk.value) tk.value=b.tk;} }
+  else { const d=detected.find(x=>x.ip===ip);
+    if(d.sug==="DO_NOT_BLOCK"){toast(`${ip} ถูก allow อยู่ใน WAF policy (${d.pol}) — block ไม่ได้`);return;}
+    if(d.sug==="ALREADY_BLOCKED"){toast(`${ip} ถูก block อยู่แล้วใน policy อื่น (${d.pol})`);return;}
+    if(pg.sel.has(ip)) pg.sel.delete(ip); else {pg.sel.add(ip); if(!tk.value&&d.inc!=="-") tk.value=d.inc;} }
+  page==="blocked"?renderBlocked():renderDet(page); renderCtl(page);
+}
+Object.keys(P).forEach(page=>{const p=P[page].p;
+  $(p+"_tbl").addEventListener("click",e=>{const tr=e.target.closest("tr[data-ip]"); if(tr) pick(page,tr.dataset.ip);});
+  $(p+"_sel").addEventListener("click",e=>{const b=e.target.closest("[data-rm]"); if(b){P[page].sel.delete(b.dataset.rm); renderAll();}});
+  $(p+"_q").addEventListener("input",()=>{page==="blocked"?renderBlocked():renderDet(page);});
+  $(p+"_run").addEventListener("click",()=>run(page));
+});
+$("h_rng").addEventListener("change",()=>{P.history.sel.clear(); renderAll();});
+
+async function run(page){
+  const pg=P[page]; if(!pg.sel.size||pg.busy) return;
+  const ips=[...pg.sel], tk=$(pg.p+"_tk").value.trim()||"-", desc=$(pg.p+"_desc").value.trim()||"-", cont=soarSeq++, r=$(pg.p+"_res");
+  pg.busy=true; renderCtl(page);
+  r.hidden=false; r.className="result running";
+  r.textContent=`ส่ง ${ips.length} IP ไป SOAR (container ${cont}) → Imperva policy 2169031 → อ่านกลับเพื่อ verify…`;
+  await sleep(1600);
+  const t=Date.now(), td=daily[daily.length-1];
+  if(pg.act==="block"){
+    ips.forEach(ip=>{const d=detected.find(x=>x.ip===ip); blocked.push({ip,t,tk,desc,by:USER,rule:d?d.rule:"-"}); td.b++;
+      audit.push({t,user:USER,action:"block",ip,tk,desc,status:"blocked",ver:"yes",cont});});
+    r.className="result ok"; r.textContent=`✔ Block ${ips.length} IP บน policy 2169031 และ verify บน WAF แล้ว · ${tk} · ย้ายไปหน้า Blocked IPs · บันทึกลง imperva_audit.csv`;
+  } else {
+    ips.forEach(ip=>{const i=blocked.findIndex(b=>b.ip===ip); if(i>=0) blocked.splice(i,1); td.u++;
+      audit.push({t,user:USER,action:"unblock",ip,tk,desc,status:"unblocked",ver:"removed",cont});});
+    r.className="result ok"; r.textContent=`✔ Unblock ${ips.length} IP แล้ว — หายจากตารางและ verify บน WAF แล้ว · บันทึกลง imperva_audit.csv`;
+  }
+  pg.sel.clear(); $(pg.p+"_tk").value=""; $(pg.p+"_desc").value=""; pg.busy=false;
+  renderAll();
+  document.querySelectorAll(`#v-${page} .kpi`).forEach(el=>{el.classList.remove("flash");void el.offsetWidth;el.classList.add("flash");});
+}
+
+function renderRules(){
+  const cnt=r=>esSearches.filter(e=>wild(r.pat,e.name)).reduce((s,e)=>s+e.n,0);
+  $("rules").innerHTML=rules.map(r=>`<tr class="${r.on?"":"off"}"><td><button class="sw" role="switch" aria-checked="${r.on}" data-tg="${r.id}" aria-label="enable ${esc(r.pat)}"></button></td>
+   <td class="mono">${esc(r.pat)}</td><td><span class="pill ${r.mode==="include"?"p-safe":"p-block"}">${r.mode}</span></td><td class="num">${cnt(r)}</td>
+   <td class="small">${esc(r.note)}</td><td>${esc(r.by)}</td><td class="mono nw">${fmt(r.t)}</td>
+   <td><button class="del" type="button" data-del="${r.id}">🗑 Remove</button></td></tr>`).join("")||'<tr><td colspan="8" class="note">No rules – the Block page will be empty.</td></tr>';
+  $("esPrev").innerHTML=esSearches.slice().sort((a,b)=>b.n-a.n).map(e=>{const u=ruleUsed(e.name);
+   return `<tr><td>${u.use?'<span class="pill p-safe">✔ used</span>':'<span class="pill p-done">– not used</span>'}</td><td>${esc(e.name)}</td><td class="num">${e.n}</td>
+   <td class="small">${u.exc?"excluded by "+esc(u.exc.pat):u.inc?"included by "+esc(u.inc.pat):"no include rule"}</td></tr>`;}).join("");
+  $("esRules").innerHTML=esSearches.map(e=>`<option value="${esc(e.name)}">`).join("");
+}
+function ruleAudit(act,r){audit.push({t:Date.now(),user:USER,action:act,ip:"-",tk:"-",desc:`${r.mode} ${r.pat}`,status:"rule",ver:"-",cont:"-"});}
+$("rAdd").addEventListener("click",()=>{const pat=$("rName").value.trim(); if(!pat){toast("ใส่ชื่อ rule หรือ pattern ก่อน");return;}
+  if(rules.some(r=>r.pat.toLowerCase()===pat.toLowerCase()&&r.mode===$("rMode").value)){toast("มี rule นี้อยู่แล้ว");return;}
+  const r={id:ruleSeq++,pat,mode:$("rMode").value,on:true,note:$("rNote").value.trim()||"-",by:USER,t:Date.now()}; rules.push(r); ruleAudit("rule_add",r);
+  $("rName").value="";$("rNote").value=""; renderRules(); renderAll(); toast(`เพิ่ม ${r.mode} rule “${pat}” แล้ว — มีผลทันที`);});
+$("rules").addEventListener("click",e=>{const tg=e.target.closest("[data-tg]"), del=e.target.closest("[data-del]");
+  if(tg){const r=rules.find(x=>x.id==tg.dataset.tg); r.on=!r.on; r.by=USER; r.t=Date.now(); ruleAudit(r.on?"rule_enable":"rule_disable",r);}
+  if(del){const i=rules.findIndex(x=>x.id==del.dataset.del); ruleAudit("rule_remove",rules[i]); rules.splice(i,1);}
+  if(tg||del){renderRules(); renderAll();}});
 
 function renderAudit(){
-  $("audit").innerHTML = audit.slice().sort((a,b)=>b.t-a.t).slice(0,60).map(e=>`<tr>
-    <td class="mono" style="white-space:nowrap">${fmt(e.t)}</td><td>${esc(e.user)}</td><td>${e.action}</td><td class="ip">${esc(e.ip)}</td><td class="mono">${e.site}</td>
-    <td><span class="pill ${statusPill(e.status)}">${e.status}</span></td><td>${e.verified}</td><td class="mono">${e.backend||"-"}</td><td class="mono">${e.cont||"-"}</td><td>${esc(e.actor)}</td><td class="mono">${esc(e.incident)}</td><td class="small">${esc(e.comment)}</td><td>${e.dry?"True":"False"}</td></tr>`).join("");
+  const aq=$("aq").value.trim().toLowerCase(), act=$("aact").value, cls={blocked:"p-block",unblocked:"p-safe",rule:"p-monitor"};
+  $("audit").innerHTML=audit.slice().sort((a,b)=>b.t-a.t).filter(e=>(!act||e.action===act)&&has(aq,e.ip,e.tk,e.user,e.desc))
+   .map(e=>`<tr><td class="mono nw">${fmt(e.t)}</td><td>${esc(e.user)}</td><td>${e.action}</td><td class="ip">${e.ip}</td><td class="mono nw">${esc(e.tk)}</td><td class="small">${esc(e.desc)}</td>
+   <td><span class="pill ${cls[e.status]||"p-done"}">${e.status}</span></td><td>${e.ver}</td><td class="mono">${e.cont}</td></tr>`).join("")||'<tr><td colspan="9" class="note">No audit rows.</td></tr>';
 }
-function statusPill(s){ return {blocked:"p-block",unblocked:"p-safe",no_change:"p-done",rejected:"p-review",error:"p-block"}[s] || "p-review"; }
-function renderAll(){ renderAttackers(); renderWaf(); renderStats(); renderAudit(); }
+$("aq").addEventListener("input",renderAudit); $("aact").addEventListener("change",renderAudit);
 
-/* ---------- backend flow highlight ---------- */
-function flow(stage){ // stage: "splunk" | "soar" | "imperva" | null
-  const soar = MODE==="soar";
-  $("nSoar").classList.toggle("off", !soar);
-  $("a1").classList.toggle("off", false);
-  $("a1").querySelector("span").textContent = soar ? "POST /rest/container" : "direct HTTPS";
-  $("a1").querySelector("span:last-child").textContent = soar ? "ph-auth-token" : "(bypasses SOAR)";
-  $("a2").classList.toggle("off", !soar);
-  ["nSplunk","nSoar","nImperva"].forEach(id=>$(id).classList.remove("active"));
-  ["a1","a2"].forEach(id=>$(id).classList.remove("active"));
-  if(stage==="splunk") $("nSplunk").classList.add("active");
-  if(stage==="soar"){ $("a1").classList.add("active"); $("nSoar").classList.add("active"); }
-  if(stage==="imperva"){ (soar?$("a2"):$("a1")).classList.add("active"); $("nImperva").classList.add("active"); }
+const TITLES={dash:"Imperva WAF – IOC Block",history:"Imperva IOC Block – Older detections",blocked:"Imperva IOC Block – Blocked IPs / Unblock",rules:"Imperva IOC Block – Detection rules",audit:"Imperva IOC Block – Audit log"};
+function route(){
+  const h=(location.hash||"#").slice(1), cur=TITLES[h]?h:"dash";
+  Object.keys(TITLES).forEach(k=>$("v-"+k).hidden=k!==cur);
+  document.querySelectorAll(".tabs a").forEach(a=>{ if(a.dataset.page===cur) a.setAttribute("aria-current","page"); else a.removeAttribute("aria-current"); });
+  $("pageTitle").textContent=TITLES[cur];
+  if(cur==="rules") renderRules(); if(cur==="audit") renderAudit(); if(cur==="blocked") renderBlocked();
+  window.scrollTo(0,0);
 }
-function renderSoar(){
-  $("soarPanel").hidden = MODE!=="soar";
-  $("listCt").textContent = listContainers;
-  const runPill={running:"p-review",success:"p-safe",failed:"p-block","not started":"p-block"};
-  $("soarRows").innerHTML = soarContainers.slice().sort((x,y)=>y.t-x.t).map(c=>`<tr>
-    <td class="mono">${c.id}</td><td>${esc(c.name)}</td>
-    <td><span class="pill ${c.status==="closed"?"p-done":"p-review"}">${c.status}</span></td>
-    <td><span class="pill ${runPill[c.run]||"p-done"}">${c.run}</span></td>
-    <td>${esc(c.by)}</td><td class="mono">${esc(c.ips||"-")}</td><td class="mono" style="white-space:nowrap">${fmt(c.t)}</td><td class="small">${esc(c.result||"")}</td></tr>`).join("");
-}
-
-/* ---------- simulated impervablock ---------- */
-let busy=false;
-async function runImpervablock({ips, action, dry, meta, failWrite, siteIds}){
-  const sites = siteIds ? SITES.filter(s=>siteIds.includes(s.id)) : SITES;
-  const soar = MODE==="soar", soarDown = soar && $("simSoar").checked;
-  busy=true; setBusy(true);
-  $("job").hidden=false;
-  $("jobTitle").textContent=`${action==="block"?"Block":"Unblock"} result${dry?" (dry-run)":""}: ${ips.join(", ")} · ${soar?"via SOAR":"direct API"}`;
-  const keys = soar
-    ? [["val","Validate IPs (Splunk)"],["cont","Create SOAR container + imperva_request"],["pb","Playbook imperva_ioc_block starts"],["reval","SOAR re-validates (allow-list, protected)"],
-       ["read","GET policy 2169031"],["put","PUT policy (IP/BLOCK)"],["verify","Re-read policy to verify"],["res","imperva_result → Splunk polls it"],["kv","Save description to KV store"],["ref","Refresh WAF list"]]
-    : [["val","Validate IPs"],["read","GET policy 2169031"],["put","PUT policy (IP/BLOCK)"],["verify","Re-read policy to verify"],["kv","Save description to KV store"],["ref","Refresh WAF list"]];
-  $("jobSteps").innerHTML=keys.map(([k,l])=>`<li id="st_${k}">${l}</li>`).join(""); $("jobRows").innerHTML="";
-  const mark=(k,c)=>{ const el=$("st_"+k); if(el) el.className=c; };
-  const step=async(k,ms)=>{ mark(k,"run"); await sleep(ms); mark(k,"done"); };
-  const out=[], t=Date.now();
-  let cont=null, c=null;
-
-  flow("splunk"); mark("val","run"); await sleep(350);
-  const accepted=[];
-  for(const ip of ips){ const why = action==="block"?validate(ip):(v4(ip)?null:"invalid IP/CIDR"); if(why) out.push({ip,site:"-",status:"rejected",verified:"-",detail:why}); else accepted.push(ip); }
-  mark("val","done");
-
-  if(accepted.length && soar){
-    flow("soar"); cont=soarSeq++;
-    c={id:cont,name:`Splunk Imperva ${action} ${accepted.join(",")}`.slice(0,60),status:"new",run:"running",by:USER,ips:accepted.join(","),t:Date.now(),result:"waiting…"};
-    soarContainers.push(c); renderSoar();
-    await step("cont",450);
-    if(soarDown){
-      c.run="not started"; renderSoar();
-      mark("pb","run"); await sleep(1400); mark("pb","fail");
-      accepted.forEach(ip=>out.push({ip,site:"-",status:"error",verified:"unknown",detail:`No result from SOAR within 90s (container ${cont}). Is the playbook active for label 'imperva_ioc_block'?`}));
-      c.result="no playbook run (label not active)"; renderSoar();
-      accepted.length=0;
-    } else {
-      await step("pb",500); await step("reval",350);
-    }
-  }
-  if(accepted.length){
-    for(const s of sites){
-      flow("imperva"); await step("read",380);
-      const cur=waf[s.id], changed=[], unchanged=[];
-      accepted.forEach(ip=> (action==="block" ? (cur.has(ip)?unchanged:changed) : (cur.has(ip)?changed:unchanged)).push(ip));
-      if(dry){ changed.forEach(ip=>out.push({ip,site:s.id,status:"would_be_"+(action==="block"?"blocked":"unblocked"),verified:"-",detail:`blocked IPs in policy: ${cur.size} (no write in dry-run)`})); }
-      else if(changed.length){
-        mark("put","run"); await sleep(450); const before=cur.size;
-        if(!failWrite) changed.forEach(ip=> action==="block"?cur.add(ip):cur.delete(ip));
-        mark("put","done"); mark("verify","run"); await sleep(420);
-        changed.forEach(ip=>{
-          const ok = action==="block"?cur.has(ip):!cur.has(ip);
-          out.push(ok?{ip,site:s.id,status:action==="block"?"blocked":"unblocked",verified:action==="block"?"yes":"removed",detail:`blocked IPs in policy ${before} → ${cur.size} (re-read from WAF)`}
-                     :{ip,site:s.id,status:"error",verified:"no",detail:"write accepted but NOT confirmed on re-read from WAF"});
-        });
-        mark("verify", out.some(r=>r.status==="error")?"fail":"done");
-      }
-      unchanged.forEach(ip=>out.push({ip,site:s.id,status:"no_change",verified:action==="block"?"yes":"-",detail:action==="block"?"already blocked":"not in policy"}));
-    }
-    if(soar){
-      flow("soar"); await step("res",400);
-      const okN=out.filter(r=>r.status==="blocked"||r.status==="unblocked").length;
-      c.status="closed"; c.run="success";
-      c.result=dry?`dry-run: ${out.filter(r=>r.status.startsWith("would")).length} would change`
-              :`${okN} ${action==="block"?"blocked":"unblocked"}${out.some(r=>r.status==="error")?", verification FAILED":", verified"}`;
-      renderSoar();
-    }
-  }
-  flow("splunk");
-  if(!dry){
-    mark("kv","run"); await sleep(250);
-    out.forEach(r=>{
-      const key=r.site+"_"+r.ip, ex=registry.get(key);
-      if(action==="block" && (r.status==="blocked" || (r.status==="no_change" && !(ex&&ex.status==="blocked"))))
-        registry.set(key,{site:r.site, ip:r.ip, status:"blocked", at:t, by:USER, actor:meta.actor, incident:meta.incident, comment:meta.comment});
-      if(action==="unblock" && r.status==="unblocked" && ex){ ex.status="unblocked"; ex.unblockedAt=t; ex.unblockedBy=USER; ex.unblockReason=meta.comment; }
-    });
-    const td=daily[daily.length-1];
-    out.forEach(r=>{
-      if(r.status==="blocked"){ td.blocked.add(r.ip); const k=meta.actor+"|"+meta.incident; td.byActor.set(k,(td.byActor.get(k)||new Set()).add(r.ip)); }
-      if(r.status==="unblocked") td.unblocked.add(r.ip);
-    });
-    mark("kv","done");
-  }
-  keys.forEach(([k])=>{ const el=$("st_"+k); if(el && !el.className && k!=="ref") el.className = out.some(r=>r.status==="error"&&r.verified==="unknown") ? "" : "done"; });
-  const backend = soar?"soar":"v2_policy";
-  out.forEach(r=>audit.push({user:USER,action,ip:r.ip,site:r.site,status:r.status,verified:r.verified,actor:meta.actor,incident:meta.incident,comment:meta.comment,dry,t,backend,cont:cont||"-"}));
-  $("jobRows").innerHTML=out.map(r=>`<tr><td class="ip">${esc(r.ip)}</td><td class="mono">${r.site}</td><td><span class="pill ${statusPill(r.status)}">${r.status}</span></td>
-    <td>${r.verified==="yes"?'<span class="pill p-safe">yes</span>':r.verified==="no"?'<span class="pill p-block">no</span>':esc(r.verified)}</td>
-    <td class="mono">${backend}</td><td class="mono">${cont||"-"}</td>
-    <td>${esc(meta.actor)}</td><td class="mono">${esc(meta.incident)}</td><td class="small">${esc(r.detail)}</td></tr>`).join("");
-  mark("ref","run"); await refreshWaf(true); mark("ref","done");
-  flow(null);
-  renderAll(); ["kTotal","kVerified","kNew","kToday","k30"].forEach(flash);
-  const okN=out.filter(r=>r.status==="blocked"||r.status==="unblocked").length, errN=out.filter(r=>r.status==="error").length;
-  toast(soarDown?`SOAR did not answer: container ${cont} has no playbook run. Nothing was changed on the WAF.`
-        : dry?`Dry-run done. ${out.filter(r=>r.status.startsWith("would")).length} change(s) would be made.`
-        : errN?`${errN} write(s) were not confirmed on the WAF. See the result table.`
-        : `${okN} change(s) applied${soar?" by SOAR (container "+cont+")":""} and verified on the WAF.`);
-  busy=false; setBusy(false);
-  return out;
-}
-function setBusy(b){ $("wafDot").className="dot"+(b?" busy":""); ["cConfirm","fSubmit","refreshNow","uConfirm"].forEach(id=>$(id).disabled=b); document.querySelectorAll("[data-block],[data-unblock]").forEach(x=>x.disabled=b); }
-
-/* ---------- auto refresh (impervalist) ---------- */
-let nextRefresh=Date.now()+300e3;
-async function refreshWaf(quiet){
-  const soar=MODE==="soar";
-  $("wafStatus").textContent= soar?"Asking SOAR to read policy 2169031…":"Reading policy 2169031 from WAF…"; $("wafDot").className="dot busy";
-  if(soar){ listContainers++; }
-  await sleep(quiet?300:(soar?1100:600));
-  wafCheckedAt=Date.now(); nextRefresh=wafCheckedAt+300e3;
-  $("wafStatus").textContent=(soar?"Read via SOAR at ":"WAF list read at ")+fmt(wafCheckedAt).slice(11);
-  if(!busy) $("wafDot").className="dot";
-  renderWaf(); renderSoar();
-}
-setInterval(()=>{ const s=Math.max(0,Math.round((nextRefresh-Date.now())/1000)); $("refreshIn").textContent=`Auto refresh in ${Math.floor(s/60)}:${pad(s%60)}`; if(s===0&&!busy) refreshWaf(); },1000);
-$("refreshNow").addEventListener("click",()=>refreshWaf());
-
-/* ---------- per-row Block → Confirm ---------- */
-let pending=null;
-$("attackers").addEventListener("click",e=>{
-  const b=e.target.closest("[data-block]"); if(!b||busy) return;
-  const a=attackers.find(x=>x.ip===b.dataset.block), s=suggest(a); pending=a;
-  $("cTitle").textContent=`Confirm block of ${a.ip} on Imperva WAF`;
-  const v=a.vt;
-  $("cInfo").innerHTML=[
-    ["IP",`<span class="mono">${esc(a.ip)}</span>`],["Suggestion",`<span class="pill ${pillClass[s[0]]}">${s[0]}</span> ${esc(s[1])}`],
-    ["VirusTotal",v?`<span class="mono">${v.m}/${v.e}</span> malicious, ${v.s} suspicious, reputation ${v.rep}`:"no data"],
-    ["Location",`${esc(a.city)}, ${esc(a.region)}, ${esc(a.country)} [${esc(a.cc)}]`],["ASN",`AS${esc(a.asn)} ${esc(a.owner)}`],
-    ["Policy",SITES.map(s=>`<span class="mono">${s.id}</span> ${esc(s.name)}`).join("<br>")]]
-    .map(([k,v])=>`<div class="kv"><span class="label">${k}</span><b>${v}</b></div>`).join("");
-  $("cActor").value="Unknown"; $("cIncident").value=""; $("cComment").value=`Imperva attack ${a.count} events, ${a.cat}`; $("cErr").textContent="";
-  $("confirm").hidden=false; $("confirm").scrollIntoView({behavior:"smooth",block:"center"}); $("cIncident").focus({preventScroll:true});
-});
-$("cCancel").addEventListener("click",()=>{ $("confirm").hidden=true; pending=null; });
-$("cConfirm").addEventListener("click",async()=>{
-  if(!pending||busy) return;
-  const meta={actor:$("cActor").value.trim(), incident:$("cIncident").value.trim(), comment:$("cComment").value.trim()};
-  if(!meta.actor||!meta.incident||!meta.comment){ $("cErr").textContent="Fill in threat actor, incident no. and comment before confirming."; return; }
-  const ip=pending.ip; $("confirm").hidden=true; pending=null;
-  await runImpervablock({ips:[ip], action:"block", dry:false, meta, failWrite:$("simFail").checked});
-  $("job").scrollIntoView({behavior:"smooth",block:"start"});
-});
-$("jobClose").addEventListener("click",()=>$("job").hidden=true);
-
-/* ---------- bulk form ---------- */
-$("fillAll").addEventListener("click",()=>{ $("fIps").value=attackers.map(a=>a.ip).join(","); $("fConfirm").checked=false; });
-$("bulk").addEventListener("submit",async e=>{
-  e.preventDefault(); if(busy) return;
-  const ips=parseList($("fIps").value);
-  if(!ips.length){ $("fErr").textContent="Enter at least one IP."; return; }
-  if(ips.length>MAX_IPS){ $("fErr").textContent=`${ips.length} IPs requested; max_ips_per_action is ${MAX_IPS}.`; return; }
-  if(!$("fConfirm").checked){ $("fErr").textContent="Tick “I confirm” to run."; return; }
-  $("fErr").textContent="";
-  await runImpervablock({ips, action:$("fAction").value, dry:$("mDry").checked,
-    meta:{actor:$("fActor").value.trim()||"Unknown", incident:$("fIncident").value.trim()||"N/A", comment:$("fComment").value.trim()||"-"}, failWrite:false});
-  $("fConfirm").checked=false; $("job").scrollIntoView({behavior:"smooth",block:"start"});
-});
-$("wafSearch").addEventListener("submit",e=>{ e.preventDefault(); renderWaf(); });
-$("wafFilter").addEventListener("input",renderWaf);
-$("wafClear").addEventListener("click",()=>{ $("wafFilter").value=""; renderWaf(); $("wafFilter").focus(); });
-
-let pendingUnb=null;
-$("waf").addEventListener("click",e=>{
-  const u=e.target.closest("[data-unblock]"), ev=e.target.closest("[data-events]");
-  if(u && !busy){
-    const ip=u.dataset.unblock, site=SITES.find(s=>s.id===u.dataset.site), r=registry.get(site.id+"_"+ip);
-    pendingUnb={ip, site:site.id};
-    $("uTitle").textContent=`Confirm unblock of ${ip} on ${site.name}`;
-    $("uInfo").innerHTML=[["IP",`<span class="mono">${esc(ip)}</span>`],["Policy",`<span class="mono">${site.id}</span> ${esc(site.name)}`],
-      ["Blocked",r&&r.status==="blocked"?`${fmt(r.at)} by ${esc(r.by)}`:"outside Splunk (no record)"],
-      ["Block description",r&&r.status==="blocked"?`${esc(r.actor)} · <span class="mono">${esc(r.incident)}</span> · ${esc(r.comment)}`:"-"]]
-      .map(([k,v])=>`<div class="kv"><span class="label">${k}</span><b>${v}</b></div>`).join("");
-    $("uReason").value="False positive"; $("uIncident").value=""; $("uErr").textContent="";
-    $("unb").hidden=false; $("unb").scrollIntoView({behavior:"smooth",block:"center"}); $("uIncident").focus({preventScroll:true});
-  }
-  if(ev){
-    const ip=ev.dataset.events, a=attackers.find(x=>x.ip===ip);
-    $("evTitle").textContent=`Imperva events for ${ip} (last 7 days)`;
-    $("evSpl").textContent=`index=imperva sourcetype="incapsula:cef" src=${ip}  earliest=-7d@d`;
-    $("evRows").innerHTML = a
-      ? a.cat.split(", ").map((c,i,arr)=>`<tr><td>${esc(c)}</td><td>${esc(a.act)}</td><td class="num">${Math.round(a.count/arr.length).toLocaleString()}</td><td>${esc(a.city)}, ${esc(a.country)}</td><td class="mono">${a.vt?a.vt.m+"/"+a.vt.e:"-"}</td></tr>`).join("")
-      : `<tr><td colspan="5" class="note">No events for this IP in the last 7 days. It is blocked at the WAF edge, so new requests are dropped before logging as attacks.</td></tr>`;
-    $("ev").hidden=false; $("ev").scrollIntoView({behavior:"smooth",block:"center"});
-  }
-});
-$("evClose").addEventListener("click",()=>$("ev").hidden=true);
-$("uCancel").addEventListener("click",()=>{ $("unb").hidden=true; pendingUnb=null; });
-$("uConfirm").addEventListener("click",async()=>{
-  if(!pendingUnb||busy) return;
-  const reason=$("uReason").value.trim(), inc=$("uIncident").value.trim();
-  if(!reason||!inc){ $("uErr").textContent="Fill in the unblock reason and incident / change no."; return; }
-  const {ip,site}=pendingUnb; $("unb").hidden=true; pendingUnb=null;
-  await runImpervablock({ips:[ip], action:"unblock", dry:false, meta:{actor:"-", incident:inc, comment:reason}, failWrite:false, siteIds:[site]});
-  $("job").scrollIntoView({behavior:"smooth",block:"start"});
-});
-
-function setMode(m){
-  MODE=m;
-  $("modeSoar").setAttribute("aria-pressed", String(m==="soar"));
-  $("modeDirect").setAttribute("aria-pressed", String(m!=="soar"));
-  $("flowTitle").textContent = m==="soar" ? "Backend: via Splunk SOAR (api_mode = soar)" : "Backend: direct API (api_mode = v2_policy)";
-  $("flowNote").textContent = m==="soar" ? "Search Head has no internet route. SOAR calls the Imperva API and VirusTotal." : "Search Head calls api.imperva.com itself. SOAR is not used.";
-  $("simSoarWrap").hidden = m!=="soar";
-  flow(null); renderSoar();
-}
-$("modeSoar").addEventListener("click",()=>{ if(!busy){ setMode("soar"); toast("api_mode = soar: requests go through the SOAR playbook."); } });
-$("modeDirect").addEventListener("click",()=>{ if(!busy){ setMode("v2_policy"); toast("api_mode = v2_policy: the Search Head calls Imperva directly."); } });
-
-renderAll(); setMode("soar");
+window.addEventListener("hashchange",route);
+renderAll(); route();
 })();
 </script>

@@ -155,33 +155,51 @@ Set `api_mode = soar`. Splunk sends each block, unblock or list request to Splun
    # proxy = http://proxy.corp:8080
    ```
 5. Give analysts the `imperva_blocker` role (Settings → Roles).
-6. The IOC panel reads from Imperva WAF logs (`index=imperva sourcetype="incapsula:cef"`). It shows
-   attack events (`category!=normal act!=allowed`) from the last 24h, grouped by `src`, and keeps
-   sources with `count > 300`. To change the threshold or time range, edit the base search
-   `attack_ips` in the dashboard.
+6. Create the audit CSV once (the file is not shipped, so an app update never overwrites it):
+   ```
+   | makeresults | eval time=now(), user="install", action="install", ip="-", ticket="-", description="audit log created", status="-", verified="-", policy="-", backend="-", soar_container="-", detail="-"
+   | table time user action ip ticket description status verified policy backend soar_container detail
+   | outputlookup imperva_audit
+   ```
+   Optional: run the saved search **"Imperva - audit CSV backfill from log (run once)"** to copy the
+   old block / unblock history from `index=_internal` into the CSV (run it only once).
+   On a search head cluster push with `-preserve-lookups true` as an extra safety.
 
 ## Usage
-Dashboard: **Apps → Imperva IOC Block**
-**Per IP (quickest):** click `⛔ Block` on a row, check the VT and location details in the
-confirmation panel, then click `✅ CONFIRM BLOCK`. That blocks the IP for real on every configured site.
+Dashboard: **Apps → Imperva IOC Block**. Five pages (links at the top of every page):
 
-**Bulk / dry-run / unblock (form):**
-1. Click any other cell in *Attacking IPs*. Its `src` goes into the IP box and its `msg` goes into Reason.
-   Or click the *Select ALL* panel to load every attacking IP at once (capped by `max_ips_per_action`).
-   You can also paste several IPs, separated by commas.
-2. Pick Block or Unblock and set the Mode (Dry-run first).
-3. Fill in Reason / Ticket.
-4. Tick **I confirm** and press **Submit**.
-5. Check the *Result* panel: `would_be_blocked`, `blocked`, `no_change`, `rejected` or `error`.
+| Page | What you can do |
+|---|---|
+| ⛔ **Block – last 7 days** (`imperva_ioc_block`) | KPIs (detected WAF IPs, blocked on WAF now, blocked today / 7 days, unblocked 7 days), daily chart, **Search + Block** of IPs detected in the last 7 days that are not blocked yet |
+| 🗂 **Older detections** (`imperva_ioc_history`) | 30-day chart, **Search + Block** of IPs last detected 8–30 / 31–90 days ago |
+| 🔓 **Blocked IPs / Unblock** (`imperva_ioc_blocked`) | live list of the WAF policy, **Search + Unblock**; an unblocked IP disappears |
+| ⚙ **Detection rules** (`imperva_ioc_rules`) | which ES correlation searches feed the Block pages (KV store `imperva_ioc_rules`, Include / Exclude, `*` wildcard, enable / disable / remove) + preview |
+| 📄 **Audit log** (`imperva_ioc_audit`) | every Block / Unblock / rule change from the CSV lookup `imperva_audit.csv`, search + export |
 
-You can also run it straight from SPL:
+Block / Unblock: click rows to select IPs (click again to unselect), check **Ticket / Incident no.**
+(filled from the ITHM note of the finding) and **Description**, then click the red
+`⛔ BLOCK n IPs` (or green `🔓 UNBLOCK n IPs`) cell - one click, no second confirmation.
+The result is verified on the WAF and appended to the audit CSV (`imperva_audit_write` macro).
+IPs that are allow-listed or already blocked by another WAF policy cannot be selected.
+
+Detection rules: defaults are Include `*WAF*` and Exclude `*WAF Monitor Error code 404*`
+(written on first use). Add a rule by picking a correlation search from the list (or typing a
+pattern), choose Include / Exclude, click `＋ ADD ... RULE`. Changes apply on the next search.
+
+VirusTotal rate limit (HTTP 429): the lookup waits `rate_limit_retry_seconds` (60) and calls
+again for the same IP until all IPs are done or `rate_limit_max_wait_seconds` is used up.
+The scheduled search **"Imperva - VT cache warm-up"** (every 10 min, enabled) has no per-run
+limit and keeps retrying, so every detected IP gets a VT score; the dashboards read the cache.
+Imperva API calls are retried on HTTP 429 / 503 (honours `Retry-After`).
+
+From SPL:
 ```
-| makeresults | impervablock action=block ip="8.8.4.4" dry_run=true reason="TI-123" threat_actor="APT-X" incident_no="INC-2026-0042" comment="C2 beacon"
+| makeresults | impervablock action=block ip="8.8.4.4" incident_no="ITHM 1234567" description="C2 beacon"
+| makeresults | impervablock action=unblock ip="8.8.4.4" incident_no="ITHM 1234568" description="false positive"
 | impervalist
 | inputlookup imperva_block_registry
-index=imperva sourcetype="incapsula:cef" category!=normal act!=allowed
-| stats count BY src | where count > 300
-| impervablock action=block field=src dry_run=true reason="Imperva attack count>300"
+| inputlookup imperva_audit
+| impervarules
 ```
 
 ## Tests (no Splunk needed)

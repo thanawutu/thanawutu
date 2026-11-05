@@ -1,4 +1,8 @@
-<nav search_view="search">
+<nav search_view="search" color="#1F6F8B">
   <view name="imperva_ioc_block" default="true" />
+  <view name="imperva_ioc_history" />
+  <view name="imperva_ioc_blocked" />
+  <view name="imperva_ioc_rules" />
+  <view name="imperva_ioc_audit" />
   <view name="search" />
 </nav>

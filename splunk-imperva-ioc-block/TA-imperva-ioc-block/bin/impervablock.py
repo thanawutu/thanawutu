@@ -4,7 +4,7 @@ Splunk custom search command: impervablock
 Usage (SPL):
     | makeresults | impervablock action=block ip="198.51.100.7,192.0.2.0/24" reason="IOC TI-1234"
     | inputlookup malicious_ip_iocs.csv | impervablock action=block field=ip
-    | makeresults | impervablock action=unblock ip="198.51.100.7"
+    | makeresults | impervablock action=unblock ip="198.51.100.7" incident_no="ITHM 1234567" description="false positive"
     ... | impervablock action=block field=src_ip dry_run=true
 
 Options:
@@ -13,10 +13,10 @@ Options:
     field    take IPs from this field of input rows (default: none)
     site_id  override site id(s) from imperva.conf (comma separated)
     dry_run  true -> read & compute only, do not write to Imperva
-    reason        free text, written to the audit log and registry
-    threat_actor  threat actor name                 (stored in KV store registry)
-    incident_no   incident / ticket number          (stored in KV store registry)
-    comment       any other comment                 (stored in KV store registry)
+    incident_no   Ticket / Incident no.             (stored in KV store registry)
+    description   free text description             (stored in KV store registry as comment;
+                                                     for unblock also as the unblock reason)
+    reason, threat_actor, comment                   (older options, still accepted)
 
 After writing, the blacklist is re-read from Imperva to VERIFY the change
 (column verified_in_waf). Successful blocks are recorded in the KV store
@@ -37,7 +37,7 @@ import splunk.Intersplunk as si  # noqa: E402
 import imperva_lib as il         # noqa: E402
 from backend import get_backend   # noqa: E402
 from soar_bridge import SoarError  # noqa: E402
-from splunk_helpers import (get_logger, is_true, kv_get,  # noqa: E402
+from splunk_helpers import (drop_policy_cache, get_logger, is_true, kv_get,  # noqa: E402
                             kv_upsert, load_conf_stanza, load_credential, parse_options,
                             protected_networks, registry_key)
 
@@ -49,7 +49,8 @@ def clean(v):
 def main():
     results, _dummy, settings = si.getOrganizedResults()
     opts = parse_options(sys.argv[1:], ("action", "ip", "field", "site_id", "policy_id", "dry_run",
-                                        "reason", "threat_actor", "incident_no", "comment"))
+                                        "reason", "threat_actor", "incident_no", "comment",
+                                        "description"))
     session_key = settings.get("sessionKey")
     user = settings.get("owner", "unknown")
     log = get_logger("imperva_ioc_block", "imperva_ioc_block.log")
@@ -60,8 +61,10 @@ def main():
         "reason": clean(opts.get("reason")),
         "threat_actor": clean(opts.get("threat_actor")),
         "incident_no": clean(opts.get("incident_no")),
-        "comment": clean(opts.get("comment")),
+        "comment": clean(opts.get("description")) or clean(opts.get("comment")),
     }
+    if not meta["reason"]:
+        meta["reason"] = meta["comment"]
 
     if not session_key:
         si.generateErrorResults("No session key - set passauth = true in commands.conf")
@@ -124,6 +127,8 @@ def main():
                     row(ip, "-", "error", str(e), "unknown")
 
         # ---- registry (description / threat actor / incident) in KV store ------------
+        if not dry_run and any(r["status"] in ("blocked", "unblocked") for r in out):
+            drop_policy_cache()  # the WAF changed: the next policy check must read it again
         if not dry_run:
             docs = []
             for r in out:
