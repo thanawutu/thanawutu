@@ -11,6 +11,12 @@ Options:
     field        field holding the IP          (default: src)
     count_field  field holding attack count    (default: count)
     check_waf    true -> also mark IPs that are already on the Imperva blacklist (default: true)
+    cache_only   true -> never call VirusTotal: use the cache, IPs not checked yet get
+                 vt_status "pending" (the dashboards use this; the saved search
+                 "Imperva - VT cache warm-up" does the lookups every 10 min)
+    max_lookups / max_wait   override [virustotal] limits (warm-up: max_lookups=0 max_wait=1500)
+
+Cache: per search head file + KV store collection imperva_cache (shared by the cluster).
 
 Added fields:
     vt_status vt_malicious vt_suspicious vt_harmless vt_undetected vt_engines vt_reputation
@@ -31,8 +37,12 @@ import splunk.Intersplunk as si  # noqa: E402
 import imperva_lib as il         # noqa: E402
 import vt_lib as vt              # noqa: E402
 from backend import get_backend, get_soar_bridge   # noqa: E402
-from splunk_helpers import (get_logger, is_true, load_conf_stanza,  # noqa: E402
-                            load_credential, parse_options, protected_networks, splunk_home)
+import json                      # noqa: E402
+import time                      # noqa: E402
+
+from splunk_helpers import (CACHE, cache_key_ip, get_logger, is_true,  # noqa: E402
+                            kv_query, kv_upsert, load_conf_stanza, load_credential,
+                            parse_options, protected_networks, splunk_home)
 
 VT_REALM = "virustotal"
 
@@ -59,7 +69,8 @@ def in_networks(ip, networks):
 
 def main():
     results, _dummy, settings = si.getOrganizedResults()
-    opts = parse_options(sys.argv[1:], ("field", "count_field", "check_waf", "max_lookups", "max_wait"))
+    opts = parse_options(sys.argv[1:], ("field", "count_field", "check_waf", "max_lookups", "max_wait",
+                                        "cache_only"))
     session_key = settings.get("sessionKey")
     log = get_logger("imperva_vtcheck", "imperva_vtcheck.log")
     field = opts.get("field", "src")
@@ -105,8 +116,29 @@ def main():
             else:
                 todo.append(ip)
 
+        # ---- shared cache (KV store): results looked up on another cluster member ----
+        ttl = int(float(vconf.get("cache_ttl_hours", 24)) * 3600)
+        if todo:
+            try:
+                docs = kv_query(session_key, CACHE, {"_key": {"$in": [cache_key_ip(ip) for ip in todo]}})
+                by_key = dict((d.get("_key"), d) for d in docs)
+                for ip in list(todo):
+                    d = by_key.get(cache_key_ip(ip))
+                    if d and time.time() - float(d.get("ts") or 0) < ttl:
+                        info = json.loads(d.get("data") or "{}")
+                        cached_info[ip] = info
+                        cache.put(ip, info, now=float(d["ts"]))
+                        todo.remove(ip)
+            except Exception as e:  # noqa: BLE001 - the cache is best effort
+                log.warning("cannot read shared VT cache: %s", e)
+
         # ---- lookups: directly from the Search Head, or through SOAR ----------
         fresh = {}
+        if todo and is_true(opts.get("cache_only", "false")):
+            # dashboards never wait for VirusTotal: the warm-up saved search looks these up
+            fresh = {ip: {"vt_status": "pending", "vt_link": vt.VT_GUI + ip,
+                          "vt_error": "not checked yet - VT warm-up runs every 10 min"} for ip in todo}
+            todo = []
         if todo:
             try:
                 if vt_via == "soar":
@@ -131,9 +163,15 @@ def main():
                 log.warning("VirusTotal lookup via %s failed: %s", vt_via, e)
                 fresh = {ip: {"vt_status": "error", "vt_error": str(e), "vt_link": vt.VT_GUI + ip}
                          for ip in todo}
+            shared = []
             for ip, info in fresh.items():
                 if info.get("vt_status") in ("ok", "not_found"):
                     cache.put(ip, info)
+                    shared.append({"_key": cache_key_ip(ip), "ts": time.time(), "data": json.dumps(info)})
+            try:
+                kv_upsert(session_key, shared, CACHE)
+            except Exception as e:  # noqa: BLE001
+                log.warning("cannot write shared VT cache: %s", e)
         lookups_done = sum(1 for i in fresh.values() if i.get("vt_status") in ("ok", "not_found", "error"))
         rate_limited = any(i.get("vt_status") == "rate_limited" for i in fresh.values())
 

@@ -186,6 +186,12 @@ Detection rules: defaults are Include `*WAF*` and Exclude `*WAF Monitor Error co
 (written on first use). Add a rule by picking a correlation search from the list (or typing a
 pattern), choose Include / Exclude, click `＋ ADD ... RULE`. Changes apply on the next search.
 
+The dashboards never call VirusTotal or wait for it (`vtcheck cache_only=true`): they read the
+cache, and IPs not checked yet show `pending` (suggestion REVIEW). The cache is shared by every
+search head of the cluster (KV store `imperva_cache`), as is the WAF-policy cache, which the
+saved search **"Imperva - WAF policy cache refresh"** renews every 5 min. "Blocked on WAF" on the
+Block page comes from the registry; only the Blocked IPs page reads the WAF live.
+
 VirusTotal rate limit (HTTP 429): the lookup waits `rate_limit_retry_seconds` (60) and calls
 again for the same IP until all IPs are done or `rate_limit_max_wait_seconds` is used up.
 The scheduled search **"Imperva - VT cache warm-up"** (every 10 min, enabled) has no per-run

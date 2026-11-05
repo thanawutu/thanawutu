@@ -30,8 +30,8 @@ import splunk.Intersplunk as si  # noqa: E402
 
 import imperva_lib as il         # noqa: E402
 from backend import get_backend   # noqa: E402
-from splunk_helpers import (get_logger, load_conf_stanza, load_credential,  # noqa: E402
-                            parse_options, policy_cache_path)
+from splunk_helpers import (CACHE, get_logger, kv_get, kv_upsert, load_conf_stanza,  # noqa: E402
+                            load_credential, parse_options, policy_cache_path)
 
 
 def cache_path():
@@ -49,17 +49,35 @@ def load_entries(session_key, conf, log, force=False):
                 return c["entries"], c.get("targets", []), "cache"
         except (IOError, OSError, ValueError, KeyError):
             pass
+        try:  # shared by the cluster (refreshed every 5 min by "Imperva - WAF policy cache refresh")
+            d = kv_get(session_key, "policies", CACHE)
+            if d and time.time() - float(d.get("ts") or 0) < ttl:
+                c = json.loads(d.get("data") or "{}")
+                _save_file(path, float(d["ts"]), c["entries"], c.get("targets", []), log)
+                return c["entries"], c.get("targets", []), "shared cache"
+        except Exception as e:  # noqa: BLE001
+            log.warning("cannot read shared policy cache: %s", e)
     backend = get_backend(conf, load_credential, session_key)
     entries = backend.policy_entries()
+    now = time.time()
+    _save_file(path, now, entries, backend.targets, log)
+    try:
+        kv_upsert(session_key, [{"_key": "policies", "ts": now,
+                                 "data": json.dumps({"entries": entries, "targets": backend.targets})}], CACHE)
+    except Exception as e:  # noqa: BLE001
+        log.warning("cannot write shared policy cache: %s", e)
+    return entries, backend.targets, getattr(backend, "mode", "-")
+
+
+def _save_file(path, ts, entries, targets, log):
     try:
         d = os.path.dirname(path)
         fd, tmp = tempfile.mkstemp(dir=d, prefix=".policies")
         with os.fdopen(fd, "w") as f:
-            json.dump({"ts": time.time(), "entries": entries, "targets": backend.targets}, f)
+            json.dump({"ts": ts, "entries": entries, "targets": targets}, f)
         os.replace(tmp, path)
     except (IOError, OSError) as e:
         log.warning("cannot save policy cache: %s", e)
-    return entries, backend.targets, getattr(backend, "mode", "-")
 
 
 def main():
@@ -79,7 +97,7 @@ def main():
                 r["waf_policy_verdict"], r["waf_policies"] = "UNKNOWN", "cannot read WAF policies: %s" % e
             si.outputResults(results)
             return
-        if not results:  # used as a generating-style call: show summary
+        if not any((r.get(field) or "").strip() for r in results):  # no IPs: show a summary
             results = [{"policies_ip_rules": len(entries), "read_via": via}]
         for r in results:
             ip = (r.get(field) or "").strip()

@@ -67,6 +67,10 @@ export = system
 access = read : [ admin, imperva_blocker ], write : [ admin, imperva_blocker ]
 export = system
 
+[collections/imperva_cache]
+access = read : [ admin, imperva_blocker ], write : [ admin, imperva_blocker ]
+export = system
+
 [macros]
 access = read : [ admin, imperva_blocker ], write : [ admin ]
 

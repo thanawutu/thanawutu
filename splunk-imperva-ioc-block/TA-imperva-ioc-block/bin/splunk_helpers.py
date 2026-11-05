@@ -105,6 +105,25 @@ def kv_list(session_key, collection):
     return json.loads(content) or []
 
 
+def kv_query(session_key, collection, query):
+    """Documents of `collection` matching a KV store query dict, e.g. {"_key": {"$in": [...]}}."""
+    import urllib.parse
+    q = urllib.parse.urlencode({"query": json.dumps(query), "output_mode": "json"})
+    _resp, content = rest.simpleRequest(_kv_path("?" + q, collection), sessionKey=session_key,
+                                        method="GET", raiseAllErrors=True)
+    return json.loads(content) or []
+
+
+# Cache shared by every search head of the cluster (KV store collection imperva_cache):
+#   vt_<ip>   VirusTotal result of one IP          {ts, data: json}
+#   policies  IP rules of every WAF policy          {ts, data: json}
+CACHE = "imperva_cache"
+
+
+def cache_key_ip(ip):
+    return "vt_" + ip.replace(":", "-").replace("/", "_")
+
+
 def kv_delete(session_key, key, collection):
     rest.simpleRequest(_kv_path("/" + key, collection), sessionKey=session_key, method="DELETE",
                        raiseAllErrors=True)

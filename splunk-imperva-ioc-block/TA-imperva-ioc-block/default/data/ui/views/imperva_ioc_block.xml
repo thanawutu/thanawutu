@@ -27,10 +27,10 @@
     <refresh>300s</refresh>
     <refreshType>delay</refreshType>
   </search>
+  <!-- from the KV store registry (no SOAR call); the live WAF list is on the Blocked IPs page -->
   <search id="waf_now">
-    <query>| impervalist
+    <query>| inputlookup imperva_block_registry where status="blocked"
 | eval _r=$d_refresh|s$
-| where in_waf="yes"
 | stats dc(ip) AS blocked_on_waf</query>
     <earliest>-1m</earliest>
     <latest>now</latest>
@@ -61,14 +61,14 @@
     </panel>
     <panel>
       <single>
-        <title>Blocked on WAF now</title>
+        <title>Blocked on WAF (from Splunk)</title>
         <search base="waf_now">
           <query>| fields blocked_on_waf</query>
         </search>
         <option name="colorMode">block</option>
         <option name="rangeColors">["0x5A9BD5","0x5A9BD5"]</option>
         <option name="useColors">1</option>
-        <option name="underLabel">policy, read live</option>
+        <option name="underLabel">registry - live list on Blocked IPs page</option>
       </single>
     </panel>
     <panel>
