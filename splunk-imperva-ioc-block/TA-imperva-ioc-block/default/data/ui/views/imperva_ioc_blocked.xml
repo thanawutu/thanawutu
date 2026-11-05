@@ -137,6 +137,9 @@
         <format type="color" field="Action">
           <colorPalette type="expression">if(like(value, "🔓%"), "#53A051", "#3C444D")</colorPalette>
         </format>
+        <format type="color" field="SelectAll">
+          <colorPalette type="expression">if(like(value, "☑%"), "#1F6F8B", "#3C444D")</colorPalette>
+        </format>
         <format type="color" field="waf_check">
           <colorPalette type="expression">if(like(value, "✔%") OR value=="-", "#3C444D", "#B26B00")</colorPalette>
         </format>
@@ -149,6 +152,10 @@
             <set token="b_sel">,</set>
             <set token="form.b_tk">-</set>
             <set token="form.b_desc">-</set>
+          </condition>
+          <condition field="SelectAll">
+            <!-- replaces the selection with every IP that matches the search box -->
+            <set token="b_sel">,$click.value2$,</set>
           </condition>
           <condition field="Clear">
             <set token="b_sel">,</set>

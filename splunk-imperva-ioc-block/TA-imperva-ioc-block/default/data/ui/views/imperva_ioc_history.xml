@@ -105,14 +105,18 @@
         <default>-</default>
       </input>
       <table>
-        <search>
-          <query>| makeresults
-| eval ip=split(trim($h_sel|s$, ","), ",")
+        <search base="det">
+          <query>| eval _q=lower(trim(replace($h_q|s$, "[*]", "")))
+| where _q="" OR like(lower(src." ".incident_no." ".rule_name), "%"._q."%")
+| sort - _sev_rank - count
+| head 50
+| stats count AS shown_n values(src) AS shown
+| eval SelectAll=if(shown_n>0, "☑ Select all ".shown_n." shown: ".mvjoin(shown, ","), "-")
+| eval ip=mvappend("", split(replace(trim($h_sel|s$, ","), "☑ Select all \d+ shown: ", ""), ","))
 | mvexpand ip
-| where ip!="" AND ip!="-"
-| stats count BY ip
-| where count%2=1
-| stats count AS _c values(ip) AS ip
+| eventstats count AS _c BY ip
+| eval ip=if(ip!="" AND ip!="-" AND _c%2=1, ip, null())
+| stats first(SelectAll) AS SelectAll values(ip) AS ip
 | eval ips=coalesce(mvjoin(ip, ","), ""), n=if(ips="", 0, mvcount(split(ips, ",")))
 | eval _add=trim(replace($h_add|s$, "[\s;]+", ","), ","), _add=if(_add="-", "", _add)
 | eval ips=trim(ips.",".replace(_add, ",+", ","), ","), ips=mvjoin(mvdedup(split(ips, ",")), ",")
@@ -132,15 +136,17 @@
 | eval waf_check=coalesce(mvjoin(waf_check, " | "), if(n=0, "-", "✔ none blocked / allowed on WAF"))
 | eval Action=if(n=0, "Click rows below or add IPs manually", "⛔ BLOCK ".n." IP".if(n=1, "", "s")), Clear=if(n=0, "-", "✖ Clear selection")
 | eval selected_ips=if(n=0, "-", replace(ips, ",", ", ")), ticket=$h_tk|s$, description=$h_desc|s$
-| table Action Clear selected_ips waf_check ticket description</query>
-          <earliest>-1m</earliest>
-          <latest>now</latest>
+| eval ticket=if(ticket="-" AND match($h_q|s$, "(?i)^\s*ITHM"), upper(trim($h_q|s$)), ticket)
+| table Action Clear SelectAll selected_ips waf_check ticket description</query>
         </search>
         <option name="count">1</option>
         <option name="wrap">true</option>
         <option name="drilldown">cell</option>
         <format type="color" field="Action">
           <colorPalette type="expression">if(like(value, "⛔%"), "#DC4E41", "#3C444D")</colorPalette>
+        </format>
+        <format type="color" field="SelectAll">
+          <colorPalette type="expression">if(like(value, "☑%"), "#1F6F8B", "#3C444D")</colorPalette>
         </format>
         <format type="color" field="waf_check">
           <colorPalette type="expression">if(like(value, "✔%") OR value=="-", "#3C444D", "#B26B00")</colorPalette>
@@ -155,6 +161,10 @@
             <set token="form.h_tk">-</set>
             <set token="form.h_desc">-</set>
             <set token="form.h_add">-</set>
+          </condition>
+          <condition field="SelectAll">
+            <!-- replaces the selection with every IP that matches the search box -->
+            <set token="h_sel">,$click.value2$,</set>
           </condition>
           <condition field="Clear">
             <set token="h_sel">,</set>
