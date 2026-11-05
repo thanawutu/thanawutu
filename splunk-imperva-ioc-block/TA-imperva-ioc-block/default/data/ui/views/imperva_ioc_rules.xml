@@ -66,7 +66,7 @@
           <colorPalette type="expression">if(like(value, "＋%"), "#53A051", "#3C444D")</colorPalette>
         </format>
         <drilldown>
-          <condition match="&quot;$click.name2$&quot;==&quot;Add&quot; AND &quot;$row.pattern$&quot;!=&quot;-&quot; AND &quot;$row.pattern$&quot;!=&quot;&quot;">
+          <condition match="'click.name2'==&quot;Add&quot; AND 'row.pattern'!=&quot;-&quot; AND 'row.pattern'!=&quot;&quot;">
             <set token="r_exec_pat">$row.pattern$</set>
             <set token="r_exec_mode">$row.mode$</set>
             <set token="r_exec_note">$row.note$</set>
@@ -126,15 +126,15 @@
           <colorPalette type="map">{"include":#53A051,"exclude":#DC4E41}</colorPalette>
         </format>
         <drilldown>
-          <condition match="&quot;$click.name2$&quot;==&quot;Toggle&quot; AND &quot;$row.enabled$&quot;==&quot;on&quot;">
+          <condition match="'click.name2'==&quot;Toggle&quot; AND 'row.enabled'==&quot;on&quot;">
             <set token="r_exec_key">$row.key$</set>
             <set token="r_op">disable</set>
           </condition>
-          <condition match="&quot;$click.name2$&quot;==&quot;Toggle&quot;">
+          <condition match="'click.name2'==&quot;Toggle&quot;">
             <set token="r_exec_key">$row.key$</set>
             <set token="r_op">enable</set>
           </condition>
-          <condition match="&quot;$click.name2$&quot;==&quot;Remove&quot;">
+          <condition match="'click.name2'==&quot;Remove&quot;">
             <set token="r_exec_key">$row.key$</set>
             <set token="r_op">remove</set>
           </condition>

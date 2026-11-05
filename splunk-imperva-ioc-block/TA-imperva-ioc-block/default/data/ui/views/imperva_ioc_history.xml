@@ -125,7 +125,7 @@
         </format>
         <drilldown>
           <!-- one click = do it (no second confirm) -->
-          <condition match="&quot;$click.name2$&quot;==&quot;Action&quot; AND &quot;$row.selected_ips$&quot;!=&quot;-&quot;">
+          <condition match="'click.name2'==&quot;Action&quot; AND 'row.selected_ips'!=&quot;-&quot;">
             <set token="h_exec_ips">$row.selected_ips$</set>
             <set token="h_exec_tk">$row.ticket$</set>
             <set token="h_exec_desc">$row.description$</set>
@@ -134,7 +134,7 @@
             <set token="form.h_desc">-</set>
             <set token="form.h_add">-</set>
           </condition>
-          <condition match="&quot;$click.name2$&quot;==&quot;Clear&quot;">
+          <condition match="'click.name2'==&quot;Clear&quot;">
             <set token="h_sel">,</set>
             <set token="form.h_add">-</set>
           </condition>
@@ -200,14 +200,14 @@
           <condition field="VirusTotal">
             <link target="_blank">https://www.virustotal.com/gui/ip-address/$row.src|n$</link>
           </condition>
-          <condition match="&quot;$row.suggestion$&quot;==&quot;DO_NOT_BLOCK&quot; OR &quot;$row.suggestion$&quot;==&quot;ALREADY_BLOCKED&quot;">
+          <condition match="'row.suggestion'==&quot;DO_NOT_BLOCK&quot; OR 'row.suggestion'==&quot;ALREADY_BLOCKED&quot;">
             <set token="h_note">$row.src$ cannot be selected: $row.suggestion_reason$</set>
           </condition>
           <condition>
             <!-- click = select / unselect this IP; Ticket is filled from the finding's ITHM note -->
             <unset token="h_note"></unset>
-            <eval token="h_sel">if(like("$h_sel$", "%,$row.src$,%"), replace("$h_sel$", ",$row.src$,", ","), "$h_sel$" . "$row.src$,")</eval>
-            <eval token="form.h_tk">if("$h_tk$"=="-" OR "$h_tk$"=="", "$row.incident_no$", "$h_tk$")</eval>
+            <eval token="h_sel">if(like('h_sel', "%,".'row.src'.",%"), replace('h_sel', ",".'row.src'.",", ","), 'h_sel'.'row.src'.",")</eval>
+            <eval token="form.h_tk">if(isnull('form.h_tk') OR 'form.h_tk'=="-" OR 'form.h_tk'=="", 'row.incident_no', 'form.h_tk')</eval>
           </condition>
         </drilldown>
       </table>
