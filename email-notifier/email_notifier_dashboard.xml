@@ -1,0 +1,221 @@
+<form version="1.1" theme="light" hideFilters="false">
+  <label>Email Notifier — ส่งอีเมลแจ้งเตือนพนักงาน</label>
+  <description>อัปโหลดรายชื่อเป็น Lookup → เขียนข้อความ → ดูตัวอย่าง → ทดสอบส่งหาตัวเอง → ส่งจริง (ส่งแยกทีละคนด้วย sendemail ผ่าน SMTP ที่ตั้งค่าไว้ใน Splunk)</description>
+
+  <!--
+    วิธีใช้ (ดูรายละเอียดใน README.md):
+    1) อัปโหลดรายชื่อ: Settings > Lookups > Lookup table files > New Lookup Table File (CSV ต้องมีคอลัมน์ email)
+    2) สร้างไฟล์ประวัติครั้งแรกครั้งเดียว (รันใน Search):
+       | makeresults | eval sent_at=now(), batch="init", sent_by="setup", email="", subject="", status="init" | outputlookup notify_log.csv
+    3) เลือกไฟล์รายชื่อ ใส่ข้อความ กด Submit เพื่อดูตัวอย่าง
+    4) โหมด "ทดสอบ" ส่งฉบับแรกหาอีเมลของคุณ / โหมด "ส่งจริง" ส่งทุกคน — ทั้งสองโหมดต้องพิมพ์ SEND ในช่องยืนยัน
+  -->
+
+  <fieldset submitButton="true" autoRun="false">
+    <input type="dropdown" token="lookup" searchWhenChanged="false">
+      <label>1. ไฟล์รายชื่อ (Lookup CSV)</label>
+      <fieldForLabel>title</fieldForLabel>
+      <fieldForValue>title</fieldForValue>
+      <search>
+        <query><![CDATA[| rest splunk_server=local count=0 /servicesNS/-/-/data/lookup-table-files
+| search title="*.csv" title!="notify_log.csv"
+| dedup title | sort title | table title]]></query>
+        <earliest>-1m</earliest>
+        <latest>now</latest>
+      </search>
+    </input>
+    <input type="text" token="subject" searchWhenChanged="false">
+      <label>2. หัวเรื่อง (ใช้ {{name}} ได้)</label>
+      <default>[แจ้งเตือน] ปิดปรับปรุงระบบ HR Portal</default>
+    </input>
+    <input type="text" token="body" searchWhenChanged="false">
+      <label>3. เนื้อหา — ขึ้นบรรทัดใหม่ด้วย \n, ตัวแปร {{คอลัมน์}}</label>
+      <default>เรียน คุณ{{name}}\n\nขอแจ้งให้ทราบว่าระบบ HR Portal จะปิดปรับปรุงวันเสาร์ 20:00-23:00 น.\n\nขอบคุณครับ/ค่ะ\nฝ่ายทรัพยากรบุคคล</default>
+    </input>
+    <input type="radio" token="mode" searchWhenChanged="false">
+      <label>4. การดำเนินการ</label>
+      <choice value="preview">ดูตัวอย่างเท่านั้น</choice>
+      <choice value="test">ทดสอบ: ส่งฉบับแรกหาอีเมลด้านขวา</choice>
+      <choice value="all">ส่งจริงถึงทุกคน</choice>
+      <default>preview</default>
+      <!-- แผงส่งจะไม่โหลด (และไม่มีการเรียก sendemail) จนกว่าจะเลือกโหมดส่ง -->
+      <change>
+        <condition value="preview"><unset token="show_send"></unset></condition>
+        <condition><set token="show_send">1</set></condition>
+      </change>
+    </input>
+    <input type="text" token="test_to" searchWhenChanged="false">
+      <label>อีเมลสำหรับทดสอบ</label>
+      <default>-</default>
+    </input>
+    <input type="text" token="confirm" searchWhenChanged="false">
+      <label>พิมพ์ SEND เพื่อยืนยันการส่ง</label>
+      <default>-</default>
+    </input>
+  </fieldset>
+
+  <!-- ===== สรุปรายชื่อ ===== -->
+  <row>
+    <panel>
+      <single>
+        <title>รายชื่อทั้งหมด</title>
+        <search id="summary">
+          <query><![CDATA[| inputlookup $lookup|s$
+| eval email=lower(trim(email))
+| eval valid=if(match(email, "^[^\s@<>(),;:\"\\\\|]+@[^\s@<>(),;:\"\\\\|]+\.[^\s@<>(),;:\"\\\\|]+$$"), 1, 0)
+| streamstats count as occ by email
+| stats count as total sum(eval(if(valid=1 AND occ=1,1,0))) as ready sum(eval(if(valid=0,1,0))) as invalid sum(eval(if(valid=1 AND occ>1,1,0))) as dup]]></query>
+        </search>
+        <option name="field">total</option>
+        <option name="underLabel">รายการในไฟล์</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>พร้อมส่ง</title>
+        <search base="summary"><query>fields ready</query></search>
+        <option name="underLabel">อีเมลถูกต้องและไม่ซ้ำ</option>
+        <option name="rangeValues">[0]</option>
+        <option name="rangeColors">["0x677085","0x1f8a4c"]</option>
+        <option name="useColors">1</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>อีเมลไม่ถูกต้อง</title>
+        <search base="summary"><query>fields invalid</query></search>
+        <option name="underLabel">จะไม่ถูกส่ง</option>
+        <option name="rangeValues">[0]</option>
+        <option name="rangeColors">["0x53a051","0xc0392b"]</option>
+        <option name="useColors">1</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>อีเมลซ้ำ</title>
+        <search base="summary"><query>fields dup</query></search>
+        <option name="underLabel">ข้ามรายการที่ซ้ำ</option>
+        <option name="rangeValues">[0]</option>
+        <option name="rangeColors">["0x53a051","0xf1813f"]</option>
+        <option name="useColors">1</option>
+      </single>
+    </panel>
+  </row>
+
+  <!-- ===== ตัวอย่างก่อนส่ง ===== -->
+  <row>
+    <panel>
+      <title>ตัวอย่างอีเมลของผู้รับแต่ละคน</title>
+      <table>
+        <search>
+          <query><![CDATA[| inputlookup $lookup|s$
+| eval email=lower(trim(email))
+| eval valid=if(match(email, "^[^\s@<>(),;:\"\\\\|]+@[^\s@<>(),;:\"\\\\|]+\.[^\s@<>(),;:\"\\\\|]+$$"), 1, 0)
+| streamstats count as occ by email
+| eval subject_r=$subject|s$, body_r=$body|s$
+| foreach * [ eval subject_r=replace(subject_r, "\{\{\s*<<FIELD>>\s*\}\}", coalesce('<<FIELD>>', "")), body_r=replace(body_r, "\{\{\s*<<FIELD>>\s*\}\}", coalesce('<<FIELD>>', "")) ]
+| eval subject_r=replace(subject_r, "[\r\n]+", " ")
+| eval body_r=split(replace(body_r, "\\\\n", urldecode("%0A")), urldecode("%0A"))
+| eval status=case(valid=0, "✕ อีเมลไม่ถูกต้อง", occ>1, "ซ้ำ (ข้าม)", match(subject_r." ".mvjoin(body_r," "), "\{\{"), "⚠ มีตัวแปรที่ไม่มีคอลัมน์", true(), "✓ พร้อมส่ง")
+| rename email as "ถึง", subject_r as "หัวเรื่อง", body_r as "เนื้อหา", status as "สถานะ"
+| fields - valid occ
+| table "สถานะ" "ถึง" * "หัวเรื่อง" "เนื้อหา"]]></query>
+        </search>
+        <option name="count">10</option>
+        <option name="wrap">true</option>
+        <option name="rowNumbers">true</option>
+        <option name="drilldown">none</option>
+        <format type="color" field="สถานะ">
+          <colorPalette type="map">{"✓ พร้อมส่ง":#E4F5EB,"✕ อีเมลไม่ถูกต้อง":#FBE9E7,"ซ้ำ (ข้าม)":#FFF4DC,"⚠ มีตัวแปรที่ไม่มีคอลัมน์":#FFF4DC}</colorPalette>
+        </format>
+      </table>
+    </panel>
+  </row>
+
+  <!-- ===== ส่ง (ทำงานเฉพาะโหมด test/all และพิมพ์ SEND) =====
+       - ส่งแยกทีละคนด้วย map + sendemail ผู้รับไม่เห็นอีเมลกันและกัน
+       - ค่าในหัวเรื่อง/เนื้อหาถูก escape (\ และ ") ก่อนใส่ใน SPL
+       - กันส่งซ้ำ: ข้ามผู้รับที่เคยส่งข้อความชุดเดียวกัน (batch) สำเร็จแล้ว แม้กด refresh หน้า
+  -->
+  <row>
+    <panel depends="$show_send$">
+      <title>ผลการส่ง ($mode$)</title>
+      <table>
+        <search>
+          <query><![CDATA[| inputlookup $lookup|s$
+| eval email=lower(trim(email))
+| where match(email, "^[^\s@<>(),;:\"\\\\|]+@[^\s@<>(),;:\"\\\\|]+\.[^\s@<>(),;:\"\\\\|]+$$")
+| dedup email
+| where "$show_send$"="1" AND ("$mode$"="all" OR "$mode$"="test") AND $confirm|s$="SEND"
+| streamstats count as rn
+| where "$mode$"="all" OR rn=1
+| eval to=if("$mode$"="test", lower(trim($test_to|s$)), email)
+| where match(to, "^[^\s@<>(),;:\"\\\\|]+@[^\s@<>(),;:\"\\\\|]+\.[^\s@<>(),;:\"\\\\|]+$$")
+| eval subject_r=$subject|s$, body_r=$body|s$
+| foreach * [ eval subject_r=replace(subject_r, "\{\{\s*<<FIELD>>\s*\}\}", coalesce('<<FIELD>>', "")), body_r=replace(body_r, "\{\{\s*<<FIELD>>\s*\}\}", coalesce('<<FIELD>>', "")) ]
+| eval subject_r=if("$mode$"="test", "[TEST] ", "").replace(subject_r, "[\r\n]+", " ")
+| eval body_r=replace(body_r, "\\\\n", urldecode("%0A"))
+| eval batch=md5($lookup|s$."|".$subject|s$."|".$body|s$."|$mode$")
+| lookup notify_log.csv batch email as to OUTPUT status as prev_status
+| where "$mode$"="test" OR isnull(prev_status) OR prev_status!="submitted"
+| eval s_esc=replace(replace(subject_r, "\\\\", "\\\\\\\\"), "\"", "\\\\\""), b_esc=replace(replace(body_r, "\\\\", "\\\\\\\\"), "\"", "\\\\\"")
+| map maxsearches=5000 search="| makeresults | sendemail to=\"$$to$$\" subject=\"$$s_esc$$\" message=\"$$b_esc$$\" content_type=plain sendresults=false inline=false | eval email=\"$$to$$\", batch=\"$$batch$$\", subject=\"$$s_esc$$\""
+| eval sent_at=now(), sent_by="$env:user$", status="submitted"
+| table sent_at batch sent_by email subject status
+| outputlookup append=true notify_log.csv
+| eval sent_at=strftime(sent_at, "%Y-%m-%d %H:%M:%S")]]></query>
+          <done>
+            <condition match="$job.resultCount$ &gt; 0">
+              <set token="form.confirm">-</set>
+            </condition>
+          </done>
+        </search>
+        <option name="count">20</option>
+        <option name="drilldown">none</option>
+      </table>
+      <html>
+        <p style="color:#677085">ส่วนนี้จะทำงานเมื่อเลือก <b>ทดสอบ</b> หรือ <b>ส่งจริง</b> และพิมพ์ <code>SEND</code> แล้วกด Submit เท่านั้น — หลังส่งเสร็จช่องยืนยันจะถูกล้างอัตโนมัติ.
+        Splunk อาจแสดงคำเตือน “risky command” (sendemail/map) ให้กด Run เพื่อยืนยันอีกชั้น.
+        ถ้ามีฉบับที่ล้มเหลว กด Submit ซ้ำได้ ระบบจะส่งเฉพาะคนที่ยังไม่ได้รับ.</p>
+      </html>
+    </panel>
+  </row>
+
+  <!-- ===== ประวัติ ===== -->
+  <row>
+    <panel>
+      <title>ประวัติการส่ง (สรุปตามชุด)</title>
+      <table>
+        <search>
+          <query><![CDATA[| inputlookup notify_log.csv
+| where status!="init"
+| stats min(sent_at) as first max(sent_at) as last dc(email) as recipients values(sent_by) as sent_by first(subject) as subject by batch
+| sort - last
+| eval first=strftime(first, "%Y-%m-%d %H:%M"), last=strftime(last, "%Y-%m-%d %H:%M")
+| table last first subject recipients sent_by batch]]></query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+          <refresh>60s</refresh>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+    <panel>
+      <title>ข้อผิดพลาดจาก sendemail (24 ชม. ล่าสุด — ต้องมีสิทธิ์อ่าน _internal)</title>
+      <table>
+        <search>
+          <query><![CDATA[index=_internal (sourcetype=splunk_python OR source=*python.log*) sendemail (ERROR OR WARNING)
+| table _time log_level _raw
+| sort - _time]]></query>
+          <earliest>-24h</earliest>
+          <latest>now</latest>
+          <refresh>60s</refresh>
+        </search>
+        <option name="count">10</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+</form>

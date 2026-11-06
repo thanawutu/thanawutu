@@ -1,7 +1,0 @@
-{
-  "name": "email-notifier",
-  "version": "1.1.0",
-  "description": "เครื่องมือส่งอีเมลแจ้งเตือนถึงพนักงานหลายคน ผ่าน Splunk sendemail (HTML UI + Node proxy)",
-  "main": "server.js",
-  "scripts": { "start": "node server.js" }
-}

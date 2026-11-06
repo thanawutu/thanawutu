@@ -1,42 +1,38 @@
-# 📣 Email Notifier — ส่งอีเมลแจ้งเตือนพนักงานผ่าน Splunk
+# 📣 Email Notifier — Splunk Dashboard
 
-หน้าเว็บ HTML สำหรับส่งอีเมลแจ้งเตือนถึงพนักงานหลายคน: **อัปโหลดรายชื่อ → เขียนข้อความ → ดูตัวอย่าง → กดส่ง**
-ส่งผ่านคำสั่ง [`sendemail`](https://docs.splunk.com/Documentation/Splunk/latest/SearchReference/Sendemail) ของ Splunk ซึ่งเชื่อมกับ SMTP ภายในอยู่แล้ว
+Dashboard ไฟล์เดียว (Classic / Simple XML) สำหรับส่งอีเมลแจ้งเตือนถึงพนักงานหลายคน ผ่าน `sendemail` ของ Splunk ซึ่งใช้ SMTP ภายในที่ตั้งไว้แล้ว
+ไม่ต้องสร้าง app ไม่มี server แยก และไม่มี custom JS
 
-```
-Browser (index.html) ──POST /api/send──▶ server.js ──REST :8089──▶ Splunk ──▶ internal SMTP
-                                         (เก็บ Splunk token)   | makeresults | sendemail to=... 
-```
+**ขั้นตอน:** อัปโหลดรายชื่อ (Lookup) → เขียนข้อความ → ดูตัวอย่าง → ทดสอบส่งหาตัวเอง → ส่งจริง
 
-ใช้ `server.js` เป็นตัวกลางเพื่อไม่ให้ Splunk token อยู่ในเบราว์เซอร์ และเลี่ยงปัญหา CORS/ใบรับรองของพอร์ต 8089 (ไม่ต้องติดตั้งแพ็กเกจเพิ่ม ใช้ Node.js 18 ขึ้นไป)
-
-## ความสามารถ
-- อัปโหลด CSV/TXT (ลากวางได้) หรือวางรายชื่อเอง; ตรวจอีเมลผิดรูปแบบและอีเมลซ้ำ
-- ตัวแปรในหัวเรื่องและเนื้อหา เช่น `{{name}}`, `{{department}}` (ใช้ได้ทุกคอลัมน์ในไฟล์)
-- ดูตัวอย่างแยกรายคน และเตือนเมื่อตัวแปรไม่มีคอลัมน์รองรับหรือข้อมูลว่าง
-- ส่งแยกทีละคน (1 search ต่อ 1 ฉบับ) มีหน้าต่างยืนยัน แถบความคืบหน้า ปุ่มหยุด ส่งซ้ำรายการที่ล้มเหลว และ export ผลเป็น CSV
-- โหมด 🧪 ทดสอบ (จำลองการส่ง ไม่มีอีเมลออกจริง)
-
-## ติดตั้ง
-1. ใน Splunk: ตั้งค่า SMTP ไว้แล้วที่ *Settings → Server settings → Email settings*
-2. สร้าง user/role สำหรับเครื่องมือนี้ ให้สิทธิ์รัน search ใน app `search` และสร้าง token (*Settings → Tokens*)
-3. ตั้งค่าและรัน:
-   ```bash
-   cp .env.example .env    # แล้วแก้ SPLUNK_URL, SPLUNK_TOKEN, MAIL_FROM
-   node server.js
+## ติดตั้ง (ครั้งเดียว)
+1. **สร้าง dashboard:** Dashboards → Create New Dashboard → เลือก **Classic Dashboards** → Edit → **Source** → วางเนื้อหาจาก `email_notifier_dashboard.xml` → Save
+2. **สร้างไฟล์ประวัติการส่ง:** รันคำสั่งนี้ใน Search ครั้งเดียว
    ```
-4. เปิด http://localhost:3000 → กด “ทดสอบการเชื่อมต่อ” → ลองโหมดทดสอบก่อน แล้วค่อยเลือก “ส่งจริง”
+   | makeresults | eval sent_at=now(), batch="init", sent_by="setup", email="", subject="", status="init" | outputlookup notify_log.csv
+   ```
+3. ตรวจว่า Splunk ตั้ง SMTP แล้วที่ *Settings → Server settings → Email settings* (ผู้ส่ง default ก็ตั้งที่นี่)
+4. ตั้ง Permissions ของ dashboard และ lookup ให้เฉพาะ role ที่ได้รับอนุญาต
 
-## รูปแบบไฟล์รายชื่อ
-```csv
-email,name,department
-somchai@example.com,สมชาย ใจดี,IT
-```
-ดู `sample-recipients.csv` — ถ้าเป็น Excel ให้ Save As เป็น **CSV UTF-8**
+## ใช้งาน
+1. **อัปโหลดรายชื่อ:** *Settings → Lookups → Lookup table files → New Lookup Table File* (CSV UTF-8 ต้องมีคอลัมน์ `email`) ดูตัวอย่างใน `sample-recipients.csv`
+2. เปิด dashboard แล้วเลือกไฟล์รายชื่อ
+3. ใส่หัวเรื่องและเนื้อหา:
+   - ใช้ตัวแปรจากคอลัมน์ได้ เช่น `{{name}}`, `{{department}}`
+   - ขึ้นบรรทัดใหม่ในเนื้อหาด้วย `\n`
+4. โหมด **ดูตัวอย่าง** → กด Submit เพื่อดูอีเมลของผู้รับแต่ละคน ตารางจะแสดงอีเมลที่ผิดรูปแบบ อีเมลซ้ำ และตัวแปรที่ไม่มีคอลัมน์รองรับ
+5. โหมด **ทดสอบ** → ใส่อีเมลของคุณและพิมพ์ `SEND` → Submit (จะส่งฉบับแรกมาที่คุณ โดยขึ้นหัวเรื่องด้วย `[TEST]`)
+6. โหมด **ส่งจริง** → พิมพ์ `SEND` → Submit
 
-## หมายเหตุ
-- `sendemail` ไม่รองรับ header Reply-To จึงต่อท้ายไว้ในเนื้อหาแทน
-- `MAIL_CONTENT_TYPE=plain` (ค่าเริ่มต้น) ส่งเป็นข้อความธรรมดา; ตั้งเป็น `html` เพื่อส่งตามรูปแบบในหน้าตัวอย่าง
-- ค่าที่ใส่ใน SPL ถูก escape (`\` และ `"`) และตรวจรูปแบบอีเมลฝั่ง server เพื่อป้องกัน SPL injection
-- ตั้ง `API_TOKEN` ถ้าเปิดให้เครื่องอื่นเข้าถึง server นี้ได้
-- ทุกการส่งจะเห็นใน Splunk `_audit` / `_internal` (sendemail logs) ใช้ตรวจสอบย้อนหลังได้
+## การป้องกัน
+- ส่งแยกทีละคน (`map` + `sendemail`) ผู้รับจึงไม่เห็นอีเมลของคนอื่น
+- ต้องเลือกโหมดส่ง**และ**พิมพ์ `SEND` ก่อน แผงส่งจึงจะทำงาน และหลังส่งเสร็จช่องยืนยันจะถูกล้าง
+- **กันส่งซ้ำ:** ทุกฉบับถูกบันทึกใน `notify_log.csv` พร้อมรหัสชุด (md5 ของไฟล์รายชื่อ + หัวเรื่อง + เนื้อหา) ถ้า refresh หน้าหรือกด Submit ซ้ำ ระบบจะส่งเฉพาะคนที่ยังไม่ได้รับ
+- หัวเรื่องและเนื้อหาถูก escape (`\` และ `"`) ก่อนใส่ใน SPL และกรองรูปแบบอีเมลก่อนส่ง
+- Splunk 9.x จะแสดงคำเตือน *risky command* สำหรับ `sendemail`/`map` ซึ่งเป็นการยืนยันอีกชั้นหนึ่ง
+
+## ข้อจำกัด
+- ช่องข้อความของ Simple XML เป็นแบบบรรทัดเดียว จึงต้องใช้ `\n` แทนการขึ้นบรรทัดใหม่
+- สถานะ `submitted` หมายถึง Splunk รับคำสั่งส่งแล้ว ถ้า SMTP ปฏิเสธ ให้ดูที่แผง "ข้อผิดพลาดจาก sendemail" (ต้องมีสิทธิ์อ่าน `_internal`)
+- dropdown รายชื่อไฟล์ใช้คำสั่ง `| rest` ผู้ใช้ต้องมีสิทธิ์มองเห็น lookup นั้น
+- ไม่รองรับ Reply-To (`sendemail` ไม่มีตัวเลือกนี้)
