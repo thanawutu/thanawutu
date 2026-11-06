@@ -1,0 +1,175 @@
+<form version="1.1" theme="dark" hideFilters="true">
+  <label>Imperva IOC Block – detection rules</label>
+  <description>Which ES correlation searches feed the Block pages: findings of searches matching an enabled Include rule and no enabled Exclude rule. '*' = wildcard. Changes apply on the next dashboard search - no code change or app deploy. Every change is written to the audit log.</description>
+  <init>
+    <set token="r_refresh">init</set>
+    <set token="r_exec_pat">-</set>
+    <set token="r_exec_mode">include</set>
+    <set token="r_exec_note">-</set>
+    <set token="r_exec_key">-</set>
+  </init>
+
+  <row>
+    <panel>
+      <html>
+        <div><a href="imperva_ioc_block" style="display:inline-block;padding:6px 14px;border:1px solid #3c444d;border-radius:4px;text-decoration:none;font-weight:600;margin:0 6px 4px 0;color:#c3cbd4">⛔ Block – last 7 days</a>
+        <a href="imperva_ioc_history" style="display:inline-block;padding:6px 14px;border:1px solid #3c444d;border-radius:4px;text-decoration:none;font-weight:600;margin:0 6px 4px 0;color:#c3cbd4">🗂 Older detections</a>
+        <a href="imperva_ioc_blocked" style="display:inline-block;padding:6px 14px;border:1px solid #3c444d;border-radius:4px;text-decoration:none;font-weight:600;margin:0 6px 4px 0;color:#c3cbd4">🔓 Blocked IPs / Unblock</a>
+        <a href="imperva_ioc_rules" style="display:inline-block;padding:6px 14px;border:1px solid #3c444d;border-radius:4px;text-decoration:none;font-weight:600;margin:0 6px 4px 0;background:#1F6F8B;color:#fff;border-color:#1F6F8B">⚙ Detection rules</a>
+        <a href="imperva_ioc_audit" style="display:inline-block;padding:6px 14px;border:1px solid #3c444d;border-radius:4px;text-decoration:none;font-weight:600;margin:0 6px 4px 0;color:#c3cbd4">📄 Audit log</a></div>
+      </html>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Add a rule</title>
+      <input type="dropdown" token="r_es" searchWhenChanged="true">
+        <label>Pick an ES correlation search (findings, 30 days)</label>
+        <fieldForLabel>label</fieldForLabel>
+        <fieldForValue>search_name</fieldForValue>
+        <search>
+          <query>index=notable | stats count BY search_name | sort - count | eval label=search_name." (".count.")"</query>
+          <earliest>-30d@d</earliest>
+          <latest>now</latest>
+        </search>
+        <change>
+          <set token="form.r_pat">$value$</set>
+        </change>
+      </input>
+      <input type="text" token="r_pat" searchWhenChanged="true">
+        <label>… or type a name / pattern (* = wildcard)</label>
+        <default>-</default>
+      </input>
+      <input type="dropdown" token="r_mode" searchWhenChanged="true">
+        <label>Mode</label>
+        <choice value="include">Include</choice>
+        <choice value="exclude">Exclude</choice>
+        <default>include</default>
+      </input>
+      <input type="text" token="r_note" searchWhenChanged="true">
+        <label>Note ("-" if none)</label>
+        <default>-</default>
+      </input>
+      <table>
+        <search>
+          <query>| makeresults
+| eval pattern=trim($r_pat|s$), mode=$r_mode|s$, note=$r_note|s$
+| eval Add=if(pattern="-" OR pattern="", "Pick or type a rule name first", "＋ ADD ".upper(mode)." RULE")
+| table Add pattern mode note</query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">1</option>
+        <option name="drilldown">cell</option>
+        <format type="color" field="Add">
+          <colorPalette type="expression">if(like(value, "＋%"), "#53A051", "#3C444D")</colorPalette>
+        </format>
+        <drilldown>
+          <condition field="Add">
+            <set token="r_exec_pat">$row.pattern$</set>
+            <set token="r_exec_mode">$row.mode$</set>
+            <set token="r_exec_note">$row.note$</set>
+            <set token="r_exec_key">-</set>
+            <set token="r_op">add</set>
+            <set token="form.r_pat">-</set>
+            <set token="form.r_note">-</set>
+          </condition>
+          <condition></condition>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel depends="$r_op$">
+      <title>Rule change result – written to the audit log (click to close)</title>
+      <table>
+        <search>
+          <query>| impervarules action=$r_op|s$ key=$r_exec_key|s$ pattern=$r_exec_pat|s$ mode=$r_exec_mode|s$ note=$r_exec_note|s$
+| `imperva_audit_write`
+| table time action description status detail</query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+          <done>
+            <set token="r_refresh">$job.sid$</set>
+          </done>
+        </search>
+        <option name="count">1</option>
+        <option name="drilldown">cell</option>
+        <drilldown>
+          <unset token="r_op"></unset>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Detection rules (KV store imperva_ioc_rules) – click ⏸ Disable / ▶ Enable / 🗑 Remove</title>
+      <table>
+        <search>
+          <query>| impervarules action=list
+| eval _r=$r_refresh|s$
+| eval Disable=if(enabled="on", "⏸ Disable", "-"), Enable=if(enabled="on", "-", "▶ Enable"), Remove="🗑 Remove", updated=strftime(tonumber(updated_at), "%Y-%m-%d %H:%M")
+| table enabled Disable Enable Remove pattern mode note updated_by updated key</query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">50</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">cell</option>
+        <format type="color" field="enabled">
+          <colorPalette type="map">{"on":#53A051,"off":#708794}</colorPalette>
+        </format>
+        <format type="color" field="mode">
+          <colorPalette type="map">{"include":#53A051,"exclude":#DC4E41}</colorPalette>
+        </format>
+        <drilldown>
+          <condition field="Disable">
+            <set token="r_exec_key">$row.key$</set>
+            <set token="r_op">disable</set>
+          </condition>
+          <condition field="Enable">
+            <set token="r_exec_key">$row.key$</set>
+            <set token="r_op">enable</set>
+          </condition>
+          <condition field="Remove">
+            <set token="r_exec_key">$row.key$</set>
+            <set token="r_op">remove</set>
+          </condition>
+          <condition></condition>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Preview – ES correlation searches with findings in the last 7 days (✔ used = shown on the Block pages)</title>
+      <table>
+        <search>
+          <query>index=notable
+| stats count AS findings_7d BY search_name
+| impervarulecheck field=search_name
+| eval _r=$r_refresh|s$
+| eval used=if(rule_used="yes", "✔ used", "– not used")
+| sort - findings_7d
+| table used search_name findings_7d matched_by</query>
+          <earliest>-7d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">30</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">cell</option>
+        <format type="color" field="used">
+          <colorPalette type="map">{"✔ used":#53A051,"– not used":#708794}</colorPalette>
+        </format>
+        <drilldown>
+          <!-- click a correlation search name to put it in the Add form -->
+          <set token="form.r_pat">$row.search_name$</set>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+</form>
