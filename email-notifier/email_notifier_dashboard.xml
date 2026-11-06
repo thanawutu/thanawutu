@@ -14,12 +14,15 @@
   <fieldset submitButton="true" autoRun="false">
     <input type="dropdown" token="lookup" searchWhenChanged="false">
       <label>1. ไฟล์รายชื่อ (Lookup CSV)</label>
-      <fieldForLabel>title</fieldForLabel>
+      <fieldForLabel>label</fieldForLabel>
       <fieldForValue>title</fieldForValue>
       <search>
         <query><![CDATA[| rest splunk_server=local count=0 /servicesNS/-/-/data/lookup-table-files
+| rename eai:acl.app as app, eai:acl.sharing as sharing
 | search title="*.csv" title!="notify_log.csv"
-| dedup title | sort title | table title]]></query>
+| where app="$env:app$" OR sharing="global"
+| eval label=title." (".app.", ".sharing.")"
+| dedup title | sort title | table title label]]></query>
         <earliest>-1m</earliest>
         <latest>now</latest>
       </search>
@@ -88,9 +91,25 @@
               <pre>| makeresults | eval sent_at=now(), batch="init", sent_by="setup", email="", subject="", status="init" | outputlookup notify_log.csv</pre></li>
             <li>เนื้อหา: ขึ้นบรรทัดใหม่ด้วย <code>\n</code> ใช้ตัวแปรจากชื่อคอลัมน์ เช่น <code>{{name}}</code></li>
           </ol>
-          <p>ถ้า dropdown ไม่มีไฟล์ให้เลือก: ตรวจว่าอัปโหลดแล้ว และ Permissions ของ lookup อนุญาตให้ role ของคุณเห็น</p>
+          <p><b>ถ้า dropdown ไม่มีไฟล์ให้เลือก</b> ดูตารางด้านล่าง: dashboard นี้อยู่ใน app <code>$env:app$</code> จะใช้ได้เฉพาะไฟล์ที่ <b>ใช้ได้ = ✓</b>
+            — ถ้าไฟล์อยู่ app อื่น ให้เปิด Settings → Lookups → Lookup table files → <b>Permissions</b> ของไฟล์นั้น แล้วเลือก <b>All apps (system)</b></p>
         </div>
       </html>
+      <table>
+        <title>ไฟล์ Lookup CSV ที่บัญชีของคุณมองเห็น</title>
+        <search>
+          <query><![CDATA[| rest splunk_server=local count=0 /servicesNS/-/-/data/lookup-table-files
+| rename eai:acl.app as app, eai:acl.sharing as sharing, eai:acl.owner as owner
+| search title="*.csv"
+| eval "ใช้ได้"=if(app="$env:app$" OR sharing="global", "✓", "✕ อยู่ app อื่น (ต้องแชร์ All apps)")
+| table title app sharing owner "ใช้ได้" updated
+| sort - updated]]></query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+      </table>
     </panel>
   </row>
 
@@ -178,7 +197,7 @@
        - กันส่งซ้ำ: ข้ามผู้รับที่เคยส่งข้อความชุดเดียวกัน (batch) สำเร็จแล้ว แม้กด refresh หน้า
   -->
   <row>
-    <panel depends="$show_send$">
+    <panel depends="$show_send$,$lookup$">
       <title>ผลการส่ง ($mode$)</title>
       <table>
         <search>
