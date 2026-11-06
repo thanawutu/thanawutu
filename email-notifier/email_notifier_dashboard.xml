@@ -32,14 +32,18 @@
       <search>
         <query><![CDATA[| rest splunk_server=local count=0 /servicesNS/-/-/data/lookup-table-files
 | rename eai:acl.app as app, eai:acl.sharing as sharing
-| search title="*.csv" title!="notify_log.csv"
+| search title="notify_*.csv" title!="notify_log.csv"
 | where app="$env:app$" OR sharing="global"
-| eval label=title." (".app.", ".sharing.")"
-| dedup title | sort title | table title label]]></query>
+| eval label="📄 ".replace(title, "^notify_|\.csv$$", "")." — อัปเดต ".substr(updated, 1, 10)
+| dedup title | sort - updated | table title label]]></query>
         <earliest>-1m</earliest>
         <latest>now</latest>
       </search>
     </input>
+    <html>
+      <a class="btn btn-primary notifier-upload" href="../../manager/$env:app$/data/lookup-table-files/_new?action=edit&amp;ns=$env:app$" target="_blank">📤 อัปโหลด CSV</a>
+      <div class="notifier-upload-hint">ตั้งชื่อไฟล์ปลายทางขึ้นต้นด้วย <b>notify_</b> เช่น notify_hr_nov.csv — อัปโหลดแล้ว refresh หน้านี้</div>
+    </html>
     <input type="text" token="subject" id="in_subject" searchWhenChanged="false">
       <label>2. หัวเรื่อง (ใช้ {{name}} ได้)</label>
       <default>[แจ้งเตือน] ปิดปรับปรุงระบบ HR Portal</default>
@@ -83,6 +87,8 @@
           #manual_panel .fieldset { display: grid; grid-template-columns: repeat(2, minmax(200px, 340px)); column-gap: 16px; }
           #manual_panel .fieldset .input { width: 100% !important; margin-right: 0; }
           #manual_panel .fieldset .input input { width: 100% !important; }
+          .notifier-upload { margin-top: 22px; display: inline-block; }
+          .notifier-upload-hint { font-size: 12px; color: #677085; max-width: 260px; margin-top: 4px; }
           .notifier-guide { font-size: 14px; line-height: 1.7; }
           .notifier-guide code { background: #f2f4f7; padding: 1px 6px; border-radius: 4px; }
           .notifier-guide pre { background: #f2f4f7; padding: 10px 12px; border-radius: 6px; white-space: pre-wrap; }
@@ -186,25 +192,25 @@
       <html>
         <div class="notifier-guide">
           <ol>
-            <li><b>อัปโหลดรายชื่อ</b> เป็นไฟล์ CSV (UTF-8) ที่มีคอลัมน์ <code>email</code> และ <code>name</code> —
-              <a href="../../manager/search/data/lookup-table-files/_new?action=edit&amp;ns=search" target="_blank">อัปโหลด Lookup ใหม่</a>
-              (หรือ Settings → Lookups → Lookup table files → New) แล้ว refresh หน้านี้</li>
+            <li><b>อัปโหลดรายชื่อ:</b> กดปุ่ม <b>📤 อัปโหลด CSV</b> ด้านบน → Browse เลือกไฟล์ CSV (UTF-8, คอลัมน์ <code>email</code>, <code>name</code>)
+              → ช่อง <b>Destination filename</b> ตั้งชื่อขึ้นต้นด้วย <code>notify_</code> เช่น <code>notify_hr_nov.csv</code> → Save แล้ว refresh หน้านี้.
+              dropdown จะแสดง<b>เฉพาะไฟล์ notify_*.csv</b> เท่านั้น</li>
+            <li>ถ้าต้องให้คนอื่นใช้ไฟล์ด้วย: ตั้ง Permissions ของไฟล์เป็น <b>This app only</b> พร้อมสิทธิ์อ่านของ role นั้น (ค่าเริ่มต้นคือ Private เห็นเฉพาะผู้อัปโหลด)</li>
             <li>เลือกไฟล์ในช่อง <b>1. รายชื่อผู้รับ</b> แล้วกด <b>Submit</b> เพื่อดูตัวอย่าง — หรือเลือก <b>✍️ ใส่รายชื่อเอง</b> เพื่อพิมพ์ชื่อและอีเมลได้สูงสุด 10 คนโดยไม่ต้องอัปโหลดไฟล์</li>
             <li>ถ้ายังไม่เคยใช้ ให้สร้างไฟล์ประวัติครั้งเดียว โดยรันใน Search:
               <pre>| makeresults | eval sent_at=now(), batch="init", sent_by="setup", email="", subject="", status="init" | outputlookup notify_log.csv</pre></li>
             <li>เนื้อหา: ขึ้นบรรทัดใหม่ด้วย <code>\n</code> ใช้ตัวแปรจากชื่อคอลัมน์ เช่น <code>{{name}}</code></li>
           </ol>
-          <p><b>ถ้า dropdown ไม่มีไฟล์ให้เลือก</b> ดูตารางด้านล่าง: dashboard นี้อยู่ใน app <code>$env:app$</code> จะใช้ได้เฉพาะไฟล์ที่ <b>ใช้ได้ = ✓</b>
-            — ถ้าไฟล์อยู่ app อื่น ให้เปิด Settings → Lookups → Lookup table files → <b>Permissions</b> ของไฟล์นั้น แล้วเลือก <b>All apps (system)</b></p>
+          <p><b>ถ้า dropdown ไม่มีไฟล์ที่เพิ่งอัปโหลด</b> ดูตารางด้านล่าง: ชื่อไฟล์ต้องขึ้นต้นด้วย <code>notify_</code> และอยู่ใน app <code>$env:app$</code> (ใช้ได้ = ✓)</p>
         </div>
       </html>
       <table>
-        <title>ไฟล์ Lookup CSV ที่บัญชีของคุณมองเห็น</title>
+        <title>ไฟล์รายชื่อที่อัปโหลดสำหรับหน้านี้ (notify_*.csv)</title>
         <search>
           <query><![CDATA[| rest splunk_server=local count=0 /servicesNS/-/-/data/lookup-table-files
 | rename eai:acl.app as app, eai:acl.sharing as sharing, eai:acl.owner as owner
-| search title="*.csv"
-| eval "ใช้ได้"=if(app="$env:app$" OR sharing="global", "✓", "✕ อยู่ app อื่น (ต้องแชร์ All apps)")
+| search title="notify_*.csv" title!="notify_log.csv"
+| eval "ใช้ได้"=if(app="$env:app$" OR sharing="global", "✓", "✕ อยู่ app อื่น (อัปโหลดผ่านปุ่มในหน้านี้ใหม่)")
 | table title app sharing owner "ใช้ได้" updated
 | sort - updated]]></query>
           <earliest>-1m</earliest>
