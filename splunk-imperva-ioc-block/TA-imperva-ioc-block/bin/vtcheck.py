@@ -34,7 +34,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import splunk.Intersplunk as si  # noqa: E402
 
-import imperva_lib as il         # noqa: E402
 import vt_lib as vt              # noqa: E402
 from backend import get_backend, get_soar_bridge   # noqa: E402
 import json                      # noqa: E402

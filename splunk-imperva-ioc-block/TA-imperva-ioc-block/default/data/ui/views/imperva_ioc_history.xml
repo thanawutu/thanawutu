@@ -126,7 +126,7 @@
 | impervapolicycheck field=ip
 | lookup imperva_block_registry ip OUTPUT status AS _reg
 | eval chk=case(ip="", null(),
-    match(ip, "[^0-9A-Fa-f:./]"), ip." is not an IP / CIDR",
+    NOT (match(ip, "^\d{1,3}(\.\d{1,3}){3}(/\d{1,2})?\z") OR (match(ip, ":") AND match(ip, "^[0-9A-Fa-f:.]+(/\d{1,3})?\z"))), ip." is not an IP / CIDR",
     isnotnull(mvfind(_reg, "^blocked\z")), ip." already blocked from Splunk",
     waf_policy_verdict="ALLOWLISTED", ip." is ALLOWED: ".waf_policies,
     waf_policy_verdict="BLOCKED_ELSEWHERE" OR waf_policy_verdict="BLOCKED_HERE", ip." already BLOCKED: ".waf_policies,
@@ -173,9 +173,6 @@
           <condition></condition>
         </drilldown>
       </table>
-      <html depends="$h_note$">
-        <div style="color:#F8BE34">$h_note$</div>
-      </html>
     </panel>
   </row>
 
@@ -237,7 +234,6 @@
           </condition>
           <condition>
             <!-- click = select / unselect this IP; Ticket is filled from the finding's ITHM note -->
-            <unset token="h_note"></unset>
             <set token="h_sel">$h_sel$,$row.src$,</set>
             <eval token="form.h_tk">if(isnull('form.h_tk') OR 'form.h_tk'=="-" OR 'form.h_tk'=="", 'row.incident_no', 'form.h_tk')</eval>
           </condition>

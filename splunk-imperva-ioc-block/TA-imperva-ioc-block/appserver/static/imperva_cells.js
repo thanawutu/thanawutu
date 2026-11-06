@@ -18,7 +18,7 @@ require([
             var parts = String(cell.value === null || cell.value === undefined ? "" : cell.value).split("/");
             $td.empty().css("white-space", "nowrap");
             if (parts.length !== 2) {
-                $td.text(cell.value);
+                $td.text(cell.value === null || cell.value === undefined ? "" : String(cell.value));
                 return;
             }
             var block = document.createElement("span");

@@ -106,7 +106,7 @@
 
   <row>
     <panel>
-      <title>Detection rules (KV store imperva_ioc_rules) – click ⏸ Disable / ▶ Enable / 🗑 Remove, 🗑 to remove</title>
+      <title>Detection rules (KV store imperva_ioc_rules) – click ⏸ Disable / ▶ Enable / 🗑 Remove</title>
       <table>
         <search>
           <query>| impervarules action=list

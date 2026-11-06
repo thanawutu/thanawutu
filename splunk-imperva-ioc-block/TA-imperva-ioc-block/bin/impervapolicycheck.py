@@ -98,7 +98,9 @@ def main():
                 r["waf_policy_verdict"], r["waf_policies"] = "UNKNOWN", "cannot read WAF policies: %s" % e
             si.outputResults(results)
             return
-        if not any(field in r for r in results):  # no IP field at all: show a summary
+        # summary only when called without data (| makeresults | impervapolicycheck): rows that
+        # carry any regular field (even an empty ip) are annotated and passed through unchanged
+        if not any(k for r in results for k in r if not k.startswith("_")):
             results = [{"policies_ip_rules": len(entries), "read_via": via}]
         for r in results:
             ip = (r.get(field) or "").strip()

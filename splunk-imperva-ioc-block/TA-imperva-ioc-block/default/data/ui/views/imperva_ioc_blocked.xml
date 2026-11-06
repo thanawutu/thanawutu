@@ -163,9 +163,6 @@
           <condition></condition>
         </drilldown>
       </table>
-      <html depends="$b_note$">
-        <div style="color:#F8BE34">$b_note$</div>
-      </html>
     </panel>
   </row>
 
