@@ -186,7 +186,7 @@
       <html>
         <div class="notifier-guide">
           <ol>
-            <li><b>อัปโหลดรายชื่อ</b> เป็นไฟล์ CSV (UTF-8) ที่มีคอลัมน์ <code>email</code> และคอลัมน์อื่นตามต้องการ เช่น <code>name</code>, <code>department</code> —
+            <li><b>อัปโหลดรายชื่อ</b> เป็นไฟล์ CSV (UTF-8) ที่มีคอลัมน์ <code>email</code> และ <code>name</code> —
               <a href="../../manager/search/data/lookup-table-files/_new?action=edit&amp;ns=search" target="_blank">อัปโหลด Lookup ใหม่</a>
               (หรือ Settings → Lookups → Lookup table files → New) แล้ว refresh หน้านี้</li>
             <li>เลือกไฟล์ในช่อง <b>1. รายชื่อผู้รับ</b> แล้วกด <b>Submit</b> เพื่อดูตัวอย่าง — หรือเลือก <b>✍️ ใส่รายชื่อเอง</b> เพื่อพิมพ์ชื่อและอีเมลได้สูงสุด 10 คนโดยไม่ต้องอัปโหลดไฟล์</li>

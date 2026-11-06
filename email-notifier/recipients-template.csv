@@ -1,5 +1,5 @@
-email,name,department,employee_id
-somchai.j@example.com,สมชาย ใจดี,IT,EMP001
-somsri.m@example.com,สมศรี มีสุข,HR,EMP002
-wichai.r@example.com,วิชัย รักงาน,Finance,EMP003
-john.s@example.com,John Smith,Operations,EMP004
+email,name
+somchai.j@example.com,สมชาย ใจดี
+somsri.m@example.com,สมศรี มีสุข
+wichai.r@example.com,วิชัย รักงาน
+john.s@example.com,John Smith
