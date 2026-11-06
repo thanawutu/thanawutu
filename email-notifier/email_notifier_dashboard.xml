@@ -305,7 +305,7 @@
 | eval subject_r=$subject|s$, body_r=$body|s$
 | foreach * [ eval subject_r=replace(subject_r, "\{\{\s*<<FIELD>>\s*\}\}", coalesce('<<FIELD>>', "")), body_r=replace(body_r, "\{\{\s*<<FIELD>>\s*\}\}", coalesce('<<FIELD>>', "")) ]
 | eval subject_r=replace(subject_r, "[\r\n]+", " ")
-| eval body_r=split(replace(replace(body_r, "\\\\n", urldecode("%0A")), "(?m)^\\s*$$", urldecode("%C2%A0")), urldecode("%0A"))
+| eval body_r=split(replace(replace(body_r, "\\\\n", urldecode("%0A")), "(?m)^[ \\t]*$$", urldecode("%C2%A0")), urldecode("%0A"))
 | eval status=case(valid=0, "✕ อีเมลไม่ถูกต้อง", occ>1, "ซ้ำ (ข้าม)", match(subject_r." ".mvjoin(body_r," "), "\{\{"), "⚠ มีตัวแปรที่ไม่มีคอลัมน์", true(), "✓ พร้อมส่ง")
 | rename email as "ถึง", subject_r as "หัวเรื่อง", body_r as "เนื้อหา", status as "สถานะ"
 | fields - valid occ
