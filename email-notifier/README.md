@@ -26,9 +26,10 @@ Dashboard ไฟล์เดียว (Classic / Simple XML) สำหรับ�
 5. โหมด **ทดสอบ** → ใส่อีเมลของคุณและพิมพ์ `SEND` → Submit (จะส่งฉบับแรกมาที่คุณ โดยขึ้นหัวเรื่องด้วย `[TEST]`)
 6. โหมด **ส่งจริง** → พิมพ์ `SEND` → Submit
 
-## ผู้ส่ง (From)
-- ช่อง **ผู้ส่ง (From)** ตั้งค่าเริ่มต้นเป็น `IT Security <itsec_operation@cimbthai.com>` ใส่ `-` เพื่อใช้ผู้ส่ง default ของ Splunk
-- SMTP relay ต้องอนุญาตให้ Splunk ส่งในนามที่อยู่นี้ (send-as / SPF) ไม่งั้นอีเมลอาจถูกปฏิเสธหรือถูกติดป้ายเตือน ให้ลองโหมด **ทดสอบ** ก่อน
+## ผู้ส่ง
+- ใช้ผู้ส่งที่ตั้งไว้ใน Splunk (*Settings → Server settings → Email settings*) เช่น `do-not-reply@cimbthai.com`
+- ใส่ช่องทางติดต่อ (เช่น itsec_operation@cimbthai.com) ไว้ท้ายเนื้อหาอีเมล
+- Splunk แนบ footer “If you believe you've received this email in error…” อัตโนมัติ — แก้ได้ที่ Email settings → *Email footer* (มีผลกับอีเมลทุกฉบับจาก Splunk)
 
 ## การป้องกัน
 - ส่งแยกทีละคน (`map` + `sendemail`) ผู้รับจึงไม่เห็นอีเมลของคนอื่น

@@ -1,4 +1,4 @@
-<form version="1.1" theme="light" hideFilters="false">
+<form version="1.1" theme="light" hideFilters="false" script="notifier_textarea.js">
   <label>Email Notifier — ส่งอีเมลแจ้งเตือนพนักงาน</label>
   <description>อัปโหลดรายชื่อเป็น Lookup → เขียนข้อความ → ดูตัวอย่าง → ทดสอบส่งหาตัวเอง → ส่งจริง (ส่งแยกทีละคนด้วย sendemail ผ่าน SMTP ที่ตั้งค่าไว้ใน Splunk)</description>
 
@@ -49,8 +49,8 @@
       <default>[IT Security] ประกาศสำคัญ: กรุณาเปลี่ยนรหัสผ่านทันที / Urgent: Please Change Your Password Immediately</default>
     </input>
     <input type="text" token="body" id="in_body" searchWhenChanged="false">
-      <label>3. เนื้อหา — ขึ้นบรรทัดใหม่ด้วย \n, ตัวแปร {{คอลัมน์}}</label>
-      <default>เรียน พนักงานทุกท่าน / Dear All Employees,\n\n[ประกาศสำคัญจากฝ่าย IT Security - นี่ไม่ใช่ Phishing Email / This is NOT a Phishing Email]\n\nเนื่องด้วยทางฝ่าย IT Security ได้ตรวจพบกรณีข้อมูลอีเมลรั่วไหล (Email leak) จากผู้ให้บริการภายนอก (signifycrm.com) ซึ่งเหตุการณ์ดังกล่าวอาจส่งผลกระทบต่อความปลอดภัยของข้อมูลบัญชีรายชื่อพนักงานภายในองค์กร\nThe IT Security team has detected an email leak incident from an external service provider (signifycrm.com), which potentially impacts the security of corporate user credentials.\n\nเพื่อความปลอดภัยสูงสุดและเป็นการป้องกันเชิงรุก ทางฝ่าย IT ขอความร่วมมือให้พนักงานทุกท่านปฏิบัติตามมาตรการเร่งด่วน โดย "กรุณาเปลี่ยนรหัสผ่านทันที" ในระบบต่อไปนี้:\nTo ensure maximum security and proactive protection, the IT department requests all employees to immediately comply with urgent measures by "changing your passwords immediately" for the following systems:\n\n* รหัสผ่านเข้าใช้เครื่องคอมพิวเตอร์ (Computer Login Password)\n* รหัสผ่านเข้าใช้งานระบบ YODA (YODA System Password)\n* ระบบอื่นๆ ทั้งหมดที่ท่านใช้ Email ของบริษัทในการ Login (Any other systems or platforms where you use your corporate email to log in)\n\n⚠️ โปรดทราบเพื่อความปลอดภัย (Security Notice):\n\n* ทางฝ่าย IT จะไม่มีการแนบลิงก์ใดๆ ให้ท่านกดเปลี่ยนรหัสผ่านในอีเมลฉบับนี้ เพื่อป้องกันการสับสนกับอีเมลหลอกลวง (Phishing)\n* IT will NOT include any direct links to change your password in this email to prevent any confusion with phishing attempts.\n* กรุณาเปิดเครื่องคอมพิวเตอร์ หรือเข้าหน้าเว็บไซต์ระบบ YODA ด้วยตัวท่านเองตามปกติเพื่อทำการเปลี่ยนรหัสผ่าน\n* Please manually access your computer settings or navigate to the official YODA system portal on your own to perform the password reset.\n\nขออภัยในความไม่สะดวกและขอขอบคุณในความร่วมมืออย่างยิ่ง\nWe apologize for the inconvenience and highly appreciate your prompt cooperation.\n\nฝ่าย IT Security / IT Security Team\nEmail contact: itsec_operation@cimbthai.com</default>
+      <label>3. เนื้อหาอีเมล — ตัวแปร {{name}}, {{email}} (ถ้ายังเป็นช่องบรรทัดเดียว ให้ใช้ \n ขึ้นบรรทัดใหม่)</label>
+      <default>เรียน คุณ{{name}} / Dear {{name}},\n\n[ประกาศสำคัญจากฝ่าย IT Security - นี่ไม่ใช่ Phishing Email / This is NOT a Phishing Email]\n\nเนื่องด้วยทางฝ่าย IT Security ได้ตรวจพบกรณีข้อมูลอีเมลรั่วไหล (Email leak) จากผู้ให้บริการภายนอก (signifycrm.com) และพบว่าอีเมลของท่าน ({{email}}) อยู่ในรายการข้อมูลที่ได้รับผลกระทบ ซึ่งอาจส่งผลต่อความปลอดภัยของบัญชีผู้ใช้งานของท่าน\nThe IT Security team has detected an email leak incident from an external service provider (signifycrm.com), and your email address ({{email}}) was identified in the affected data. This may impact the security of your corporate user credentials.\n\nเพื่อความปลอดภัยสูงสุดและเป็นการป้องกันเชิงรุก ทางฝ่าย IT ขอความร่วมมือให้ท่านปฏิบัติตามมาตรการเร่งด่วน โดย "กรุณาเปลี่ยนรหัสผ่านทันที" ในระบบต่อไปนี้:\nTo ensure maximum security and proactive protection, the IT department requests that you immediately comply with urgent measures by "changing your passwords immediately" for the following systems:\n\n* รหัสผ่านเข้าใช้เครื่องคอมพิวเตอร์ (Computer Login Password)\n* รหัสผ่านเข้าใช้งานระบบ YODA (YODA System Password)\n* ระบบอื่นๆ ทั้งหมดที่ท่านใช้ Email ของบริษัทในการ Login (Any other systems or platforms where you use your corporate email to log in)\n\n⚠️ โปรดทราบเพื่อความปลอดภัย (Security Notice):\n\n* ทางฝ่าย IT จะไม่มีการแนบลิงก์ใดๆ ให้ท่านกดเปลี่ยนรหัสผ่านในอีเมลฉบับนี้ เพื่อป้องกันการสับสนกับอีเมลหลอกลวง (Phishing)\n* IT will NOT include any direct links to change your password in this email to prevent any confusion with phishing attempts.\n* กรุณาเปิดเครื่องคอมพิวเตอร์ หรือเข้าหน้าเว็บไซต์ระบบ YODA ด้วยตัวท่านเองตามปกติเพื่อทำการเปลี่ยนรหัสผ่าน\n* Please manually access your computer settings or navigate to the official YODA system portal on your own to perform the password reset.\n\nขออภัยในความไม่สะดวกและขอขอบคุณในความร่วมมืออย่างยิ่ง\nWe apologize for the inconvenience and highly appreciate your prompt cooperation.\n\nฝ่าย IT Security / IT Security Team\nEmail contact: itsec_operation@cimbthai.com</default>
     </input>
     <input type="radio" token="mode" id="in_mode" searchWhenChanged="false">
       <label>4. การดำเนินการ</label>
@@ -64,9 +64,9 @@
         <condition><set token="show_send">1</set></condition>
       </change>
     </input>
-    <input type="text" token="from_addr" id="in_from" searchWhenChanged="false">
-      <label>ผู้ส่ง (From) — ใส่ - เพื่อใช้ค่า default ของ Splunk</label>
-      <default>IT Security &lt;itsec_operation@cimbthai.com&gt;</default>
+    <input type="text" token="allow_domain" id="in_domain" searchWhenChanged="false">
+      <label>ส่งเฉพาะโดเมน (ใส่ - = ทุกโดเมน)</label>
+      <default>cimbthai.com</default>
     </input>
     <input type="text" token="test_to" id="in_test" searchWhenChanged="false">
       <label>5. อีเมลสำหรับทดสอบ</label>
@@ -245,8 +245,9 @@
 | foreach *name *Name *NAME [ eval name=coalesce(name, '<<FIELD>>') ]
 | eval email=lower(trim(email))
 | eval valid=if(match(email, "^[^\s@<>(),;:\"\\\\|]+@[^\s@<>(),;:\"\\\\|]+\.[^\s@<>(),;:\"\\\\|]+$$"), 1, 0)
+| eval in_domain=if($allow_domain|s$="-" OR like(email, "%@".lower(trim($allow_domain|s$))), 1, 0)
 | streamstats count as occ by email
-| stats count as total sum(eval(if(valid=1 AND occ=1,1,0))) as ready sum(eval(if(valid=0,1,0))) as invalid sum(eval(if(valid=1 AND occ>1,1,0))) as dup]]></query>
+| stats count as total sum(eval(if(valid=1 AND in_domain=1 AND occ=1,1,0))) as ready sum(eval(if(valid=0 OR in_domain=0,1,0))) as invalid sum(eval(if(valid=1 AND in_domain=1 AND occ>1,1,0))) as dup]]></query>
         </search>
         <option name="field">total</option>
         <option name="underLabel">รายการในไฟล์</option>
@@ -266,7 +267,7 @@
       <single>
         <title>อีเมลไม่ถูกต้อง</title>
         <search base="summary"><query>fields invalid</query></search>
-        <option name="underLabel">จะไม่ถูกส่ง</option>
+        <option name="underLabel">ผิดรูปแบบหรือนอกโดเมน — จะไม่ถูกส่ง</option>
         <option name="rangeValues">[0]</option>
         <option name="rangeColors">["0x53a051","0xc0392b"]</option>
         <option name="useColors">1</option>
@@ -303,14 +304,15 @@
 | foreach *name *Name *NAME [ eval name=coalesce(name, '<<FIELD>>') ]
 | eval email=lower(trim(email))
 | eval valid=if(match(email, "^[^\s@<>(),;:\"\\\\|]+@[^\s@<>(),;:\"\\\\|]+\.[^\s@<>(),;:\"\\\\|]+$$"), 1, 0)
+| eval in_domain=if($allow_domain|s$="-" OR like(email, "%@".lower(trim($allow_domain|s$))), 1, 0)
 | streamstats count as occ by email
 | eval subject_r=$subject|s$, body_r=$body|s$
 | foreach * [ eval subject_r=replace(subject_r, "\{\{\s*<<FIELD>>\s*\}\}", coalesce('<<FIELD>>', "")), body_r=replace(body_r, "\{\{\s*<<FIELD>>\s*\}\}", coalesce('<<FIELD>>', "")) ]
 | eval subject_r=replace(subject_r, "[\r\n]+", " ")
 | eval body_r=split(replace(body_r, "\\\\n", urldecode("%0A")), urldecode("%0A"))
-| eval status=case(valid=0, "✕ อีเมลไม่ถูกต้อง", occ>1, "ซ้ำ (ข้าม)", match(subject_r." ".mvjoin(body_r," "), "\{\{"), "⚠ มีตัวแปรที่ไม่มีคอลัมน์", true(), "✓ พร้อมส่ง")
+| eval status=case(valid=0, "✕ อีเมลไม่ถูกต้อง", in_domain=0, "✕ นอกโดเมนบริษัท (ไม่ส่ง)", occ>1, "ซ้ำ (ข้าม)", match(subject_r." ".mvjoin(body_r," "), "\{\{"), "⚠ มีตัวแปรที่ไม่มีคอลัมน์", true(), "✓ พร้อมส่ง")
 | rename email as "ถึง", subject_r as "หัวเรื่อง", body_r as "เนื้อหา", status as "สถานะ"
-| fields - valid occ
+| fields - valid occ in_domain
 | table "สถานะ" "ถึง" * "หัวเรื่อง" "เนื้อหา"]]></query>
         </search>
         <option name="count">10</option>
@@ -318,7 +320,7 @@
         <option name="rowNumbers">true</option>
         <option name="drilldown">none</option>
         <format type="color" field="สถานะ">
-          <colorPalette type="map">{"✓ พร้อมส่ง":#E4F5EB,"✕ อีเมลไม่ถูกต้อง":#FBE9E7,"ซ้ำ (ข้าม)":#FFF4DC,"⚠ มีตัวแปรที่ไม่มีคอลัมน์":#FFF4DC}</colorPalette>
+          <colorPalette type="map">{"✓ พร้อมส่ง":#E4F5EB,"✕ อีเมลไม่ถูกต้อง":#FBE9E7,"✕ นอกโดเมนบริษัท (ไม่ส่ง)":#FBE9E7,"ซ้ำ (ข้าม)":#FFF4DC,"⚠ มีตัวแปรที่ไม่มีคอลัมน์":#FFF4DC}</colorPalette>
         </format>
       </table>
     </panel>
@@ -347,6 +349,7 @@
 | foreach *name *Name *NAME [ eval name=coalesce(name, '<<FIELD>>') ]
 | eval email=lower(trim(email))
 | where match(email, "^[^\s@<>(),;:\"\\\\|]+@[^\s@<>(),;:\"\\\\|]+\.[^\s@<>(),;:\"\\\\|]+$$")
+| where $allow_domain|s$="-" OR like(email, "%@".lower(trim($allow_domain|s$)))
 | dedup email
 | where "$show_send$"="1" AND ("$mode$"="all" OR "$mode$"="test") AND $confirm|s$="SEND"
 | streamstats count as rn
@@ -357,14 +360,11 @@
 | foreach * [ eval subject_r=replace(subject_r, "\{\{\s*<<FIELD>>\s*\}\}", coalesce('<<FIELD>>', "")), body_r=replace(body_r, "\{\{\s*<<FIELD>>\s*\}\}", coalesce('<<FIELD>>', "")) ]
 | eval subject_r=if("$mode$"="test", "[TEST] ", "").replace(subject_r, "[\r\n]+", " ")
 | eval body_r=replace(body_r, "\\\\n", urldecode("%0A"))
-| eval from_in=trim($from_addr|s$)
-| eval from_arg=case(from_in="-" OR from_in="", "", match(from_in, "^([^\"<>\\\\|\x24]{0,80}<)?[^\s@<>(),;:\"\\\\|\x24]+@[^\s@<>(),;:\"\\\\|\x24]+\.[^\s@<>(),;:\"\\\\|\x24]+>?$$"), "from=\"".from_in."\"")
-| where isnotnull(from_arg)
 | eval batch=md5($lookup|s$."|".$subject|s$."|".$body|s$."|$mode$")
 | lookup notify_log.csv batch email as to OUTPUT status as prev_status
 | where "$mode$"="test" OR isnull(prev_status) OR prev_status!="submitted"
 | eval s_esc=replace(replace(subject_r, "\\\\", "\\\\\\\\"), "\"", "\\\\\""), b_esc=replace(replace(body_r, "\\\\", "\\\\\\\\"), "\"", "\\\\\"")
-| map maxsearches=20000 search="| makeresults | sendemail to=\"$$to$$\" $$from_arg$$ subject=\"$$s_esc$$\" message=\"$$b_esc$$\" content_type=plain sendresults=false inline=false | eval email=\"$$to$$\", batch=\"$$batch$$\", subject=\"$$s_esc$$\""
+| map maxsearches=20000 search="| makeresults | sendemail to=\"$$to$$\" subject=\"$$s_esc$$\" message=\"$$b_esc$$\" content_type=plain sendresults=false inline=false | eval email=\"$$to$$\", batch=\"$$batch$$\", subject=\"$$s_esc$$\""
 | eval sent_at=now(), sent_by="$env:user$", status="submitted"
 | table sent_at batch sent_by email subject status
 | outputlookup append=true notify_log.csv
