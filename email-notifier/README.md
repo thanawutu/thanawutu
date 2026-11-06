@@ -17,7 +17,7 @@ Dashboard ไฟล์เดียว (Classic / Simple XML) สำหรับ�
 ## ใช้งาน
 1. **รายชื่อผู้รับ** มี 2 แบบ:
    - **ใส่เอง (สูงสุด 10 คน):** เลือก `✍️ ใส่รายชื่อเอง` ใน dropdown แล้วกรอกชื่อและอีเมลในช่องที่ขึ้นมา ช่องที่ไม่ใช้ให้คง `-` ไว้
-   - **อัปโหลดไฟล์:** *Settings → Lookups → Lookup table files → New Lookup Table File* (CSV UTF-8 ต้องมีคอลัมน์ `email`) ดูตัวอย่างใน `sample-recipients.csv`
+   - **อัปโหลดไฟล์:** *Settings → Lookups → Lookup table files → New Lookup Table File* (CSV UTF-8 ต้องมีคอลัมน์ `email`) ดูตัวอย่างใน `recipients-template.csv`
 2. เปิด dashboard แล้วเลือกไฟล์รายชื่อ
 3. ใส่หัวเรื่องและเนื้อหา:
    - ใช้ตัวแปรจากคอลัมน์ได้ เช่น `{{name}}`, `{{department}}`
