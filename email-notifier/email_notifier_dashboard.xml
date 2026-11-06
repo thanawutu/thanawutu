@@ -32,9 +32,9 @@
       <search>
         <query><![CDATA[| rest splunk_server=local count=0 /servicesNS/-/-/data/lookup-table-files
 | rename eai:acl.app as app, eai:acl.sharing as sharing
-| search title="notify_*.csv" title!="notify_log.csv"
+| search (title="Email-noti*.csv" OR title="notify_*.csv") title!="notify_log.csv"
 | where app="$env:app$" OR sharing="global"
-| eval label="📄 ".replace(title, "^notify_|\.csv$$", "")." — อัปเดต ".substr(updated, 1, 10)
+| eval label="📄 ".title." — อัปเดต ".substr(updated, 1, 10)
 | dedup title | sort - updated | table title label]]></query>
         <earliest>-1m</earliest>
         <latest>now</latest>
@@ -42,7 +42,7 @@
     </input>
     <html>
       <a class="btn btn-primary notifier-upload" href="../../manager/$env:app$/data/lookup-table-files/_new?action=edit&amp;ns=$env:app$" target="_blank">📤 อัปโหลด CSV</a>
-      <div class="notifier-upload-hint">ตั้งชื่อไฟล์ปลายทางขึ้นต้นด้วย <b>notify_</b> เช่น notify_hr_nov.csv — อัปโหลดแล้ว refresh หน้านี้</div>
+      <div class="notifier-upload-hint">ตั้งชื่อไฟล์ปลายทางขึ้นต้นด้วย <b>Email-noti</b> เช่น Email-noti02.csv — อัปโหลดแล้ว refresh หน้านี้</div>
     </html>
     <input type="text" token="subject" id="in_subject" searchWhenChanged="false">
       <label>2. หัวเรื่อง (ใช้ {{name}} ได้)</label>
@@ -193,23 +193,23 @@
         <div class="notifier-guide">
           <ol>
             <li><b>อัปโหลดรายชื่อ:</b> กดปุ่ม <b>📤 อัปโหลด CSV</b> ด้านบน → Browse เลือกไฟล์ CSV (UTF-8, คอลัมน์ <code>email</code>, <code>name</code>)
-              → ช่อง <b>Destination filename</b> ตั้งชื่อขึ้นต้นด้วย <code>notify_</code> เช่น <code>notify_hr_nov.csv</code> → Save แล้ว refresh หน้านี้.
-              dropdown จะแสดง<b>เฉพาะไฟล์ notify_*.csv</b> เท่านั้น</li>
+              → ช่อง <b>Destination filename</b> ตั้งชื่อขึ้นต้นด้วย <code>Email-noti</code> เช่น <code>Email-noti02.csv</code> → Save แล้ว refresh หน้านี้.
+              dropdown จะแสดง<b>เฉพาะไฟล์ Email-noti*.csv</b> เท่านั้น</li>
             <li>ถ้าต้องให้คนอื่นใช้ไฟล์ด้วย: ตั้ง Permissions ของไฟล์เป็น <b>This app only</b> พร้อมสิทธิ์อ่านของ role นั้น (ค่าเริ่มต้นคือ Private เห็นเฉพาะผู้อัปโหลด)</li>
             <li>เลือกไฟล์ในช่อง <b>1. รายชื่อผู้รับ</b> แล้วกด <b>Submit</b> เพื่อดูตัวอย่าง — หรือเลือก <b>✍️ ใส่รายชื่อเอง</b> เพื่อพิมพ์ชื่อและอีเมลได้สูงสุด 10 คนโดยไม่ต้องอัปโหลดไฟล์</li>
             <li>ถ้ายังไม่เคยใช้ ให้สร้างไฟล์ประวัติครั้งเดียว โดยรันใน Search:
               <pre>| makeresults | eval sent_at=now(), batch="init", sent_by="setup", email="", subject="", status="init" | outputlookup notify_log.csv</pre></li>
             <li>เนื้อหา: ขึ้นบรรทัดใหม่ด้วย <code>\n</code> ใช้ตัวแปรจากชื่อคอลัมน์ เช่น <code>{{name}}</code></li>
           </ol>
-          <p><b>ถ้า dropdown ไม่มีไฟล์ที่เพิ่งอัปโหลด</b> ดูตารางด้านล่าง: ชื่อไฟล์ต้องขึ้นต้นด้วย <code>notify_</code> และอยู่ใน app <code>$env:app$</code> (ใช้ได้ = ✓)</p>
+          <p><b>ถ้า dropdown ไม่มีไฟล์ที่เพิ่งอัปโหลด</b> ดูตารางด้านล่าง: ชื่อไฟล์ต้องขึ้นต้นด้วย <code>Email-noti</code> และอยู่ใน app <code>$env:app$</code> (ใช้ได้ = ✓)</p>
         </div>
       </html>
       <table>
-        <title>ไฟล์รายชื่อที่อัปโหลดสำหรับหน้านี้ (notify_*.csv)</title>
+        <title>ไฟล์รายชื่อที่อัปโหลดสำหรับหน้านี้ (Email-noti*.csv)</title>
         <search>
           <query><![CDATA[| rest splunk_server=local count=0 /servicesNS/-/-/data/lookup-table-files
 | rename eai:acl.app as app, eai:acl.sharing as sharing, eai:acl.owner as owner
-| search title="notify_*.csv" title!="notify_log.csv"
+| search (title="Email-noti*.csv" OR title="notify_*.csv") title!="notify_log.csv"
 | eval "ใช้ได้"=if(app="$env:app$" OR sharing="global", "✓", "✕ อยู่ app อื่น (อัปโหลดผ่านปุ่มในหน้านี้ใหม่)")
 | table title app sharing owner "ใช้ได้" updated
 | sort - updated]]></query>
@@ -237,6 +237,8 @@
   | where email!="" AND email!="-" AND "$manual_flag$"="1"
   | head 10
   | fields name email | fields - _time ]
+| foreach *mail *Mail *MAIL [ eval email=coalesce(email, '<<FIELD>>') ]
+| foreach *name *Name *NAME [ eval name=coalesce(name, '<<FIELD>>') ]
 | eval email=lower(trim(email))
 | eval valid=if(match(email, "^[^\s@<>(),;:\"\\\\|]+@[^\s@<>(),;:\"\\\\|]+\.[^\s@<>(),;:\"\\\\|]+$$"), 1, 0)
 | streamstats count as occ by email
@@ -293,6 +295,8 @@
   | where email!="" AND email!="-" AND "$manual_flag$"="1"
   | head 10
   | fields name email | fields - _time ]
+| foreach *mail *Mail *MAIL [ eval email=coalesce(email, '<<FIELD>>') ]
+| foreach *name *Name *NAME [ eval name=coalesce(name, '<<FIELD>>') ]
 | eval email=lower(trim(email))
 | eval valid=if(match(email, "^[^\s@<>(),;:\"\\\\|]+@[^\s@<>(),;:\"\\\\|]+\.[^\s@<>(),;:\"\\\\|]+$$"), 1, 0)
 | streamstats count as occ by email
@@ -335,6 +339,8 @@
   | where email!="" AND email!="-" AND "$manual_flag$"="1"
   | head 10
   | fields name email | fields - _time ]
+| foreach *mail *Mail *MAIL [ eval email=coalesce(email, '<<FIELD>>') ]
+| foreach *name *Name *NAME [ eval name=coalesce(name, '<<FIELD>>') ]
 | eval email=lower(trim(email))
 | where match(email, "^[^\s@<>(),;:\"\\\\|]+@[^\s@<>(),;:\"\\\\|]+\.[^\s@<>(),;:\"\\\\|]+$$")
 | dedup email

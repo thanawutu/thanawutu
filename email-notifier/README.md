@@ -17,7 +17,7 @@ Dashboard ไฟล์เดียว (Classic / Simple XML) สำหรับ�
 ## ใช้งาน
 1. **รายชื่อผู้รับ** มี 2 แบบ:
    - **ใส่เอง (สูงสุด 10 คน):** เลือก `✍️ ใส่รายชื่อเอง` ใน dropdown แล้วกรอกชื่อและอีเมลในช่องที่ขึ้นมา ช่องที่ไม่ใช้ให้คง `-` ไว้
-   - **อัปโหลดไฟล์:** กดปุ่ม **📤 อัปโหลด CSV** บน dashboard → Browse เลือกไฟล์ → ตั้ง *Destination filename* ขึ้นต้นด้วย `notify_` (เช่น `notify_hr_nov.csv`) → Save แล้ว refresh dashboard — dropdown แสดงเฉพาะไฟล์ `notify_*.csv` ใน app เดียวกับ dashboard
+   - **อัปโหลดไฟล์:** กดปุ่ม **📤 อัปโหลด CSV** บน dashboard → Browse เลือกไฟล์ → ตั้ง *Destination filename* ขึ้นต้นด้วย `Email-noti` (เช่น `Email-noti02.csv`) → Save แล้ว refresh dashboard — dropdown แสดงเฉพาะไฟล์ `Email-noti*.csv` (หรือ `notify_*.csv`) ใน app เดียวกับ dashboard
 2. เปิด dashboard แล้วเลือกไฟล์รายชื่อ
 3. ใส่หัวเรื่องและเนื้อหา:
    - ใช้ตัวแปรจากคอลัมน์ได้ เช่น `{{name}}`
