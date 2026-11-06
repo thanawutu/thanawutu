@@ -13,7 +13,20 @@
 
   <fieldset submitButton="true" autoRun="false">
     <input type="dropdown" token="lookup" searchWhenChanged="false">
-      <label>1. ไฟล์รายชื่อ (Lookup CSV)</label>
+      <label>1. รายชื่อผู้รับ (Lookup CSV หรือใส่เอง)</label>
+      <choice value="__manual__">✍️ ใส่รายชื่อเอง (สูงสุด 10 คน)</choice>
+      <change>
+        <condition value="__manual__">
+          <set token="src_spl">| makeresults count=0</set>
+          <set token="manual_flag">1</set>
+          <set token="manual_on">1</set>
+        </condition>
+        <condition>
+          <set token="src_spl">| inputlookup "$value$"</set>
+          <set token="manual_flag">0</set>
+          <unset token="manual_on"></unset>
+        </condition>
+      </change>
       <fieldForLabel>label</fieldForLabel>
       <fieldForValue>title</fieldForValue>
       <search>
@@ -67,12 +80,102 @@
           #in_subject input, #in_body input { width: 100% !important; }
           #in_mode { width: auto !important; min-width: 170px; }
           #in_mode label { white-space: nowrap; }
+          #manual_panel .fieldset { display: grid; grid-template-columns: repeat(2, minmax(200px, 340px)); column-gap: 16px; }
+          #manual_panel .fieldset .input { width: 100% !important; margin-right: 0; }
+          #manual_panel .fieldset .input input { width: 100% !important; }
           .notifier-guide { font-size: 14px; line-height: 1.7; }
           .notifier-guide code { background: #f2f4f7; padding: 1px 6px; border-radius: 4px; }
           .notifier-guide pre { background: #f2f4f7; padding: 10px 12px; border-radius: 6px; white-space: pre-wrap; }
           .notifier-guide ol { margin-left: 20px; }
         </style>
       </html>
+    </panel>
+  </row>
+
+  <!-- ===== ใส่รายชื่อเอง (สูงสุด 10 คน) — แสดงเมื่อเลือก "ใส่รายชื่อเอง" ===== -->
+  <row depends="$manual_on$">
+    <panel id="manual_panel">
+      <title>✍️ ใส่รายชื่อเอง (สูงสุด 10 คน) — ช่องที่ไม่ใช้ให้คงเครื่องหมาย - ไว้ (ถ้าลบจนว่าง Splunk จะรอ input) แล้วกด Submit</title>
+      <input type="text" token="n1" id="mn1" searchWhenChanged="false">
+        <label>1. ชื่อ</label>
+        <default>-</default>
+      </input>
+      <input type="text" token="e1" id="me1" searchWhenChanged="false">
+        <label>1. อีเมล</label>
+        <default>-</default>
+      </input>
+      <input type="text" token="n2" id="mn2" searchWhenChanged="false">
+        <label>2. ชื่อ</label>
+        <default>-</default>
+      </input>
+      <input type="text" token="e2" id="me2" searchWhenChanged="false">
+        <label>2. อีเมล</label>
+        <default>-</default>
+      </input>
+      <input type="text" token="n3" id="mn3" searchWhenChanged="false">
+        <label>3. ชื่อ</label>
+        <default>-</default>
+      </input>
+      <input type="text" token="e3" id="me3" searchWhenChanged="false">
+        <label>3. อีเมล</label>
+        <default>-</default>
+      </input>
+      <input type="text" token="n4" id="mn4" searchWhenChanged="false">
+        <label>4. ชื่อ</label>
+        <default>-</default>
+      </input>
+      <input type="text" token="e4" id="me4" searchWhenChanged="false">
+        <label>4. อีเมล</label>
+        <default>-</default>
+      </input>
+      <input type="text" token="n5" id="mn5" searchWhenChanged="false">
+        <label>5. ชื่อ</label>
+        <default>-</default>
+      </input>
+      <input type="text" token="e5" id="me5" searchWhenChanged="false">
+        <label>5. อีเมล</label>
+        <default>-</default>
+      </input>
+      <input type="text" token="n6" id="mn6" searchWhenChanged="false">
+        <label>6. ชื่อ</label>
+        <default>-</default>
+      </input>
+      <input type="text" token="e6" id="me6" searchWhenChanged="false">
+        <label>6. อีเมล</label>
+        <default>-</default>
+      </input>
+      <input type="text" token="n7" id="mn7" searchWhenChanged="false">
+        <label>7. ชื่อ</label>
+        <default>-</default>
+      </input>
+      <input type="text" token="e7" id="me7" searchWhenChanged="false">
+        <label>7. อีเมล</label>
+        <default>-</default>
+      </input>
+      <input type="text" token="n8" id="mn8" searchWhenChanged="false">
+        <label>8. ชื่อ</label>
+        <default>-</default>
+      </input>
+      <input type="text" token="e8" id="me8" searchWhenChanged="false">
+        <label>8. อีเมล</label>
+        <default>-</default>
+      </input>
+      <input type="text" token="n9" id="mn9" searchWhenChanged="false">
+        <label>9. ชื่อ</label>
+        <default>-</default>
+      </input>
+      <input type="text" token="e9" id="me9" searchWhenChanged="false">
+        <label>9. อีเมล</label>
+        <default>-</default>
+      </input>
+      <input type="text" token="n10" id="mn10" searchWhenChanged="false">
+        <label>10. ชื่อ</label>
+        <default>-</default>
+      </input>
+      <input type="text" token="e10" id="me10" searchWhenChanged="false">
+        <label>10. อีเมล</label>
+        <default>-</default>
+      </input>
     </panel>
   </row>
 
@@ -86,7 +189,7 @@
             <li><b>อัปโหลดรายชื่อ</b> เป็นไฟล์ CSV (UTF-8) ที่มีคอลัมน์ <code>email</code> และคอลัมน์อื่นตามต้องการ เช่น <code>name</code>, <code>department</code> —
               <a href="../../manager/search/data/lookup-table-files/_new?action=edit&amp;ns=search" target="_blank">อัปโหลด Lookup ใหม่</a>
               (หรือ Settings → Lookups → Lookup table files → New) แล้ว refresh หน้านี้</li>
-            <li>เลือกไฟล์ในช่อง <b>1. ไฟล์รายชื่อ</b> แล้วกด <b>Submit</b> เพื่อดูตัวอย่าง</li>
+            <li>เลือกไฟล์ในช่อง <b>1. รายชื่อผู้รับ</b> แล้วกด <b>Submit</b> เพื่อดูตัวอย่าง — หรือเลือก <b>✍️ ใส่รายชื่อเอง</b> เพื่อพิมพ์ชื่อและอีเมลได้สูงสุด 10 คนโดยไม่ต้องอัปโหลดไฟล์</li>
             <li>ถ้ายังไม่เคยใช้ ให้สร้างไฟล์ประวัติครั้งเดียว โดยรันใน Search:
               <pre>| makeresults | eval sent_at=now(), batch="init", sent_by="setup", email="", subject="", status="init" | outputlookup notify_log.csv</pre></li>
             <li>เนื้อหา: ขึ้นบรรทัดใหม่ด้วย <code>\n</code> ใช้ตัวแปรจากชื่อคอลัมน์ เช่น <code>{{name}}</code></li>
@@ -119,7 +222,15 @@
       <single>
         <title>รายชื่อทั้งหมด</title>
         <search id="summary">
-          <query><![CDATA[| inputlookup $lookup|s$
+          <query><![CDATA[$src_spl$
+| append [| makeresults
+  | eval pair=mvappend($n1|s$."|||".$e1|s$, $n2|s$."|||".$e2|s$, $n3|s$."|||".$e3|s$, $n4|s$."|||".$e4|s$, $n5|s$."|||".$e5|s$, $n6|s$."|||".$e6|s$, $n7|s$."|||".$e7|s$, $n8|s$."|||".$e8|s$, $n9|s$."|||".$e9|s$, $n10|s$."|||".$e10|s$)
+  | mvexpand pair
+  | eval name=trim(mvindex(split(pair, "|||"), 0)), email=trim(mvindex(split(pair, "|||"), 1))
+  | eval name=if(name="-", "", name)
+  | where email!="" AND email!="-" AND "$manual_flag$"="1"
+  | head 10
+  | fields name email | fields - _time ]
 | eval email=lower(trim(email))
 | eval valid=if(match(email, "^[^\s@<>(),;:\"\\\\|]+@[^\s@<>(),;:\"\\\\|]+\.[^\s@<>(),;:\"\\\\|]+$$"), 1, 0)
 | streamstats count as occ by email
@@ -167,7 +278,15 @@
       <title>ตัวอย่างอีเมลของผู้รับแต่ละคน</title>
       <table>
         <search>
-          <query><![CDATA[| inputlookup $lookup|s$
+          <query><![CDATA[$src_spl$
+| append [| makeresults
+  | eval pair=mvappend($n1|s$."|||".$e1|s$, $n2|s$."|||".$e2|s$, $n3|s$."|||".$e3|s$, $n4|s$."|||".$e4|s$, $n5|s$."|||".$e5|s$, $n6|s$."|||".$e6|s$, $n7|s$."|||".$e7|s$, $n8|s$."|||".$e8|s$, $n9|s$."|||".$e9|s$, $n10|s$."|||".$e10|s$)
+  | mvexpand pair
+  | eval name=trim(mvindex(split(pair, "|||"), 0)), email=trim(mvindex(split(pair, "|||"), 1))
+  | eval name=if(name="-", "", name)
+  | where email!="" AND email!="-" AND "$manual_flag$"="1"
+  | head 10
+  | fields name email | fields - _time ]
 | eval email=lower(trim(email))
 | eval valid=if(match(email, "^[^\s@<>(),;:\"\\\\|]+@[^\s@<>(),;:\"\\\\|]+\.[^\s@<>(),;:\"\\\\|]+$$"), 1, 0)
 | streamstats count as occ by email
@@ -201,7 +320,15 @@
       <title>ผลการส่ง ($mode$)</title>
       <table>
         <search>
-          <query><![CDATA[| inputlookup $lookup|s$
+          <query><![CDATA[$src_spl$
+| append [| makeresults
+  | eval pair=mvappend($n1|s$."|||".$e1|s$, $n2|s$."|||".$e2|s$, $n3|s$."|||".$e3|s$, $n4|s$."|||".$e4|s$, $n5|s$."|||".$e5|s$, $n6|s$."|||".$e6|s$, $n7|s$."|||".$e7|s$, $n8|s$."|||".$e8|s$, $n9|s$."|||".$e9|s$, $n10|s$."|||".$e10|s$)
+  | mvexpand pair
+  | eval name=trim(mvindex(split(pair, "|||"), 0)), email=trim(mvindex(split(pair, "|||"), 1))
+  | eval name=if(name="-", "", name)
+  | where email!="" AND email!="-" AND "$manual_flag$"="1"
+  | head 10
+  | fields name email | fields - _time ]
 | eval email=lower(trim(email))
 | where match(email, "^[^\s@<>(),;:\"\\\\|]+@[^\s@<>(),;:\"\\\\|]+\.[^\s@<>(),;:\"\\\\|]+$$")
 | dedup email
