@@ -1,6 +1,6 @@
-<form version="1.1" theme="light" hideFilters="false" script="notifier_textarea.js">
+<form version="1.1" theme="light" hideFilters="false" script="email_notifier.js">
   <label>Email Notifier — ส่งอีเมลแจ้งเตือนพนักงาน</label>
-  <description>อัปโหลดรายชื่อเป็น Lookup → เขียนข้อความ → ดูตัวอย่าง → ทดสอบส่งหาตัวเอง → ส่งจริง (ส่งแยกทีละคนด้วย sendemail ผ่าน SMTP ที่ตั้งค่าไว้ใน Splunk)</description>
+  <description>อัปโหลดรายชื่อเป็น Lookup → เขียนข้อความ → ดูตัวอย่าง → กด 📧 Test ส่งหาตัวเอง → ส่งจริง (ส่งแยกทีละคนด้วย sendemail ผ่าน SMTP ที่ตั้งค่าไว้ใน Splunk)</description>
 
   <!--
     วิธีใช้ (ดูรายละเอียดใน README.md):
@@ -55,8 +55,7 @@
     <input type="radio" token="mode" id="in_mode" searchWhenChanged="false">
       <label>4. การดำเนินการ</label>
       <choice value="preview">ดูตัวอย่าง</choice>
-      <choice value="test">ทดสอบ (ส่งหาตัวเอง)</choice>
-      <choice value="all">ส่งจริงทุกคน</choice>
+      <choice value="all">ส่งจริงทุกคนในรายชื่อ</choice>
       <default>preview</default>
       <!-- แผงส่งจะไม่โหลด (และไม่มีการเรียก sendemail) จนกว่าจะเลือกโหมดส่ง -->
       <change>
@@ -64,19 +63,58 @@
         <condition><set token="show_send">1</set></condition>
       </change>
     </input>
-    <input type="text" token="allow_domain" id="in_domain" searchWhenChanged="false">
-      <label>ส่งเฉพาะโดเมน (ใส่ - = ทุกโดเมน)</label>
-      <default>cimbthai.com</default>
-    </input>
     <input type="text" token="test_to" id="in_test" searchWhenChanged="false">
-      <label>5. อีเมลสำหรับทดสอบ</label>
+      <label>5. อีเมลสำหรับทดสอบ (กดปุ่ม 📧 Test)</label>
       <default>-</default>
     </input>
     <input type="text" token="confirm" id="in_confirm" searchWhenChanged="false">
-      <label>6. พิมพ์ SEND เพื่อยืนยัน</label>
+      <label>6. พิมพ์ SEND เพื่อยืนยันการส่งจริง</label>
       <default>-</default>
     </input>
   </fieldset>
+
+  <!-- ===== ปุ่ม 📧 Test (สร้างโดย email_notifier.js) — ส่งฉบับของผู้รับคนแรกไปยังอีเมลทดสอบทันที =====
+       ทำงานเมื่อ JS ตั้ง token run_test เท่านั้น และล้าง token ทันทีที่เสร็จ เพื่อไม่ให้ส่งซ้ำ -->
+  <search id="test_search">
+    <query><![CDATA[$src_spl$
+| append [| makeresults
+  | eval pair=mvappend($n1|s$."|||".$e1|s$, $n2|s$."|||".$e2|s$, $n3|s$."|||".$e3|s$, $n4|s$."|||".$e4|s$, $n5|s$."|||".$e5|s$, $n6|s$."|||".$e6|s$, $n7|s$."|||".$e7|s$, $n8|s$."|||".$e8|s$, $n9|s$."|||".$e9|s$, $n10|s$."|||".$e10|s$)
+  | mvexpand pair
+  | eval name=trim(mvindex(split(pair, "|||"), 0)), email=trim(mvindex(split(pair, "|||"), 1))
+  | eval name=if(name="-", "", name)
+  | where email!="" AND email!="-" AND "$manual_flag$"="1"
+  | head 10
+  | fields name email | fields - _time ]
+| foreach *mail *Mail *MAIL [ eval email=coalesce(email, '<<FIELD>>') ]
+| foreach *name *Name *NAME [ eval name=coalesce(name, '<<FIELD>>') ]
+| eval email=lower(trim(email))
+| where match(email, "^[^\s@<>(),;:\"\\\\|]+@[^\s@<>(),;:\"\\\\|]+\.[^\s@<>(),;:\"\\\\|]+$$")
+| head 1
+| where "$run_test$"!=""
+| eval to=lower(trim($test_to|s$))
+| where match(to, "^[^\s@<>(),;:\"\\\\|]+@[^\s@<>(),;:\"\\\\|]+\.[^\s@<>(),;:\"\\\\|]+$$")
+| eval subject_r=$subject|s$, body_r=$body|s$
+| foreach * [ eval subject_r=replace(subject_r, "\{\{\s*<<FIELD>>\s*\}\}", coalesce('<<FIELD>>', "")), body_r=replace(body_r, "\{\{\s*<<FIELD>>\s*\}\}", coalesce('<<FIELD>>', "")) ]
+| eval subject_r="[TEST] ".replace(subject_r, "[\r\n]+", " ")
+| eval body_r=replace(body_r, "\\\\n", urldecode("%0A"))
+| eval batch="test-".tostring(now())
+| eval s_esc=replace(replace(subject_r, "\\\\", "\\\\\\\\"), "\"", "\\\\\""), b_esc=replace(replace(body_r, "\\\\", "\\\\\\\\"), "\"", "\\\\\"")
+| map maxsearches=1 search="| makeresults | sendemail to=\"$$to$$\" subject=\"$$s_esc$$\" message=\"$$b_esc$$\" content_type=plain sendresults=false inline=false | eval email=\"$$to$$\", batch=\"$$batch$$\", subject=\"$$s_esc$$\""
+| eval sent_at=now(), sent_by="$env:user$", status="test"
+| table sent_at batch sent_by email subject status
+| outputlookup append=true notify_log.csv]]></query>
+    <earliest>-1m</earliest>
+    <latest>now</latest>
+    <done>
+      <unset token="run_test"></unset>
+    </done>
+    <error>
+      <unset token="run_test"></unset>
+    </error>
+    <fail>
+      <unset token="run_test"></unset>
+    </fail>
+  </search>
 
   <!-- ===== CSS: ขยายช่องข้อความ (แถวนี้ซ่อนอยู่เสมอ) ===== -->
   <row depends="$always_hidden_css$">
@@ -245,9 +283,8 @@
 | foreach *name *Name *NAME [ eval name=coalesce(name, '<<FIELD>>') ]
 | eval email=lower(trim(email))
 | eval valid=if(match(email, "^[^\s@<>(),;:\"\\\\|]+@[^\s@<>(),;:\"\\\\|]+\.[^\s@<>(),;:\"\\\\|]+$$"), 1, 0)
-| eval in_domain=if($allow_domain|s$="-" OR like(email, "%@".lower(trim($allow_domain|s$))), 1, 0)
 | streamstats count as occ by email
-| stats count as total sum(eval(if(valid=1 AND in_domain=1 AND occ=1,1,0))) as ready sum(eval(if(valid=0 OR in_domain=0,1,0))) as invalid sum(eval(if(valid=1 AND in_domain=1 AND occ>1,1,0))) as dup]]></query>
+| stats count as total sum(eval(if(valid=1 AND occ=1,1,0))) as ready sum(eval(if(valid=0,1,0))) as invalid sum(eval(if(valid=1 AND occ>1,1,0))) as dup]]></query>
         </search>
         <option name="field">total</option>
         <option name="underLabel">รายการในไฟล์</option>
@@ -267,7 +304,7 @@
       <single>
         <title>อีเมลไม่ถูกต้อง</title>
         <search base="summary"><query>fields invalid</query></search>
-        <option name="underLabel">ผิดรูปแบบหรือนอกโดเมน — จะไม่ถูกส่ง</option>
+        <option name="underLabel">จะไม่ถูกส่ง</option>
         <option name="rangeValues">[0]</option>
         <option name="rangeColors">["0x53a051","0xc0392b"]</option>
         <option name="useColors">1</option>
@@ -304,15 +341,14 @@
 | foreach *name *Name *NAME [ eval name=coalesce(name, '<<FIELD>>') ]
 | eval email=lower(trim(email))
 | eval valid=if(match(email, "^[^\s@<>(),;:\"\\\\|]+@[^\s@<>(),;:\"\\\\|]+\.[^\s@<>(),;:\"\\\\|]+$$"), 1, 0)
-| eval in_domain=if($allow_domain|s$="-" OR like(email, "%@".lower(trim($allow_domain|s$))), 1, 0)
 | streamstats count as occ by email
 | eval subject_r=$subject|s$, body_r=$body|s$
 | foreach * [ eval subject_r=replace(subject_r, "\{\{\s*<<FIELD>>\s*\}\}", coalesce('<<FIELD>>', "")), body_r=replace(body_r, "\{\{\s*<<FIELD>>\s*\}\}", coalesce('<<FIELD>>', "")) ]
 | eval subject_r=replace(subject_r, "[\r\n]+", " ")
 | eval body_r=split(replace(body_r, "\\\\n", urldecode("%0A")), urldecode("%0A"))
-| eval status=case(valid=0, "✕ อีเมลไม่ถูกต้อง", in_domain=0, "✕ นอกโดเมนบริษัท (ไม่ส่ง)", occ>1, "ซ้ำ (ข้าม)", match(subject_r." ".mvjoin(body_r," "), "\{\{"), "⚠ มีตัวแปรที่ไม่มีคอลัมน์", true(), "✓ พร้อมส่ง")
+| eval status=case(valid=0, "✕ อีเมลไม่ถูกต้อง", occ>1, "ซ้ำ (ข้าม)", match(subject_r." ".mvjoin(body_r," "), "\{\{"), "⚠ มีตัวแปรที่ไม่มีคอลัมน์", true(), "✓ พร้อมส่ง")
 | rename email as "ถึง", subject_r as "หัวเรื่อง", body_r as "เนื้อหา", status as "สถานะ"
-| fields - valid occ in_domain
+| fields - valid occ
 | table "สถานะ" "ถึง" * "หัวเรื่อง" "เนื้อหา"]]></query>
         </search>
         <option name="count">10</option>
@@ -320,7 +356,7 @@
         <option name="rowNumbers">true</option>
         <option name="drilldown">none</option>
         <format type="color" field="สถานะ">
-          <colorPalette type="map">{"✓ พร้อมส่ง":#E4F5EB,"✕ อีเมลไม่ถูกต้อง":#FBE9E7,"✕ นอกโดเมนบริษัท (ไม่ส่ง)":#FBE9E7,"ซ้ำ (ข้าม)":#FFF4DC,"⚠ มีตัวแปรที่ไม่มีคอลัมน์":#FFF4DC}</colorPalette>
+          <colorPalette type="map">{"✓ พร้อมส่ง":#E4F5EB,"✕ อีเมลไม่ถูกต้อง":#FBE9E7,"ซ้ำ (ข้าม)":#FFF4DC,"⚠ มีตัวแปรที่ไม่มีคอลัมน์":#FFF4DC}</colorPalette>
         </format>
       </table>
     </panel>
@@ -349,20 +385,17 @@
 | foreach *name *Name *NAME [ eval name=coalesce(name, '<<FIELD>>') ]
 | eval email=lower(trim(email))
 | where match(email, "^[^\s@<>(),;:\"\\\\|]+@[^\s@<>(),;:\"\\\\|]+\.[^\s@<>(),;:\"\\\\|]+$$")
-| where $allow_domain|s$="-" OR like(email, "%@".lower(trim($allow_domain|s$)))
 | dedup email
-| where "$show_send$"="1" AND ("$mode$"="all" OR "$mode$"="test") AND $confirm|s$="SEND"
-| streamstats count as rn
-| where "$mode$"="all" OR rn=1
-| eval to=if("$mode$"="test", lower(trim($test_to|s$)), email)
+| where "$show_send$"="1" AND "$mode$"="all" AND $confirm|s$="SEND"
+| eval to=email
 | where match(to, "^[^\s@<>(),;:\"\\\\|]+@[^\s@<>(),;:\"\\\\|]+\.[^\s@<>(),;:\"\\\\|]+$$")
 | eval subject_r=$subject|s$, body_r=$body|s$
 | foreach * [ eval subject_r=replace(subject_r, "\{\{\s*<<FIELD>>\s*\}\}", coalesce('<<FIELD>>', "")), body_r=replace(body_r, "\{\{\s*<<FIELD>>\s*\}\}", coalesce('<<FIELD>>', "")) ]
-| eval subject_r=if("$mode$"="test", "[TEST] ", "").replace(subject_r, "[\r\n]+", " ")
+| eval subject_r=replace(subject_r, "[\r\n]+", " ")
 | eval body_r=replace(body_r, "\\\\n", urldecode("%0A"))
 | eval batch=md5($lookup|s$."|".$subject|s$."|".$body|s$."|$mode$")
 | lookup notify_log.csv batch email as to OUTPUT status as prev_status
-| where "$mode$"="test" OR isnull(prev_status) OR prev_status!="submitted"
+| where isnull(prev_status) OR prev_status!="submitted"
 | eval s_esc=replace(replace(subject_r, "\\\\", "\\\\\\\\"), "\"", "\\\\\""), b_esc=replace(replace(body_r, "\\\\", "\\\\\\\\"), "\"", "\\\\\"")
 | map maxsearches=20000 search="| makeresults | sendemail to=\"$$to$$\" subject=\"$$s_esc$$\" message=\"$$b_esc$$\" content_type=plain sendresults=false inline=false | eval email=\"$$to$$\", batch=\"$$batch$$\", subject=\"$$s_esc$$\""
 | eval sent_at=now(), sent_by="$env:user$", status="submitted"
