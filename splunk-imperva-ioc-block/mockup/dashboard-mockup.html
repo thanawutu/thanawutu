@@ -101,7 +101,7 @@ tr.off td:not(:first-child){opacity:.45}
   <div class="in">
     <div><span class="label">Apps › Imperva IOC Block</span><h1 id="pageTitle">Imperva WAF – IOC Block</h1></div>
     <div class="chips">
-      <span class="chip sim">Mockup v3.2 · simulated data</span>
+      <span class="chip sim">Mockup v3.3 · simulated data</span>
       <span class="chip">Policy 2169031 · via SOAR</span>
     </div>
   </div>
@@ -116,7 +116,7 @@ tr.off td:not(:first-child){opacity:.45}
 
 <!-- ============ Page 1: dashboard (7 days, search + Block) ============ -->
 <main class="wrap" id="v-dash">
-  <div class="review"><b>Mockup v3.2:</b> ตารางแสดงเฉพาะ IP ที่<b>ยังไม่เคยถูก block / allow</b> ใน WAF policy ที่เปิดใช้งาน (ไม่แสดง ALREADY_BLOCKED / DO_NOT_BLOCK, policy ที่ disabled ไม่นับ) · ช่อง <b>➕ Add IPs manually</b> และ IP ที่เลือก จะแสดง <b>⚠ WAF check</b> ว่า IP ไหน block แล้ว / ถูก allow · แยกเป็น 5 หน้า (แท็บด้านบน) · หน้านี้แสดงเฉพาะ IP ที่ detect ใน <b>7 วันล่าสุด</b> และทำได้แค่ <b>Search + Block</b> · IP ที่เก่ากว่า 7 วันอยู่หน้า <b>Older detections</b> · ตาราง IP ที่ block อยู่บน WAF ย้ายไปหน้า <b>Blocked IPs / Unblock</b> (Search + Unblock)</div>
+  <div class="review"><b>Mockup v3.3:</b> เพิ่มคอลัมน์ <b>WAF blocked 24h / WAF allowed 24h</b> (จำนวน request ของ IP ที่ WAF block / ปล่อยผ่านใน 24 ชม. จาก log Imperva) · ตารางแสดงเฉพาะ IP ที่<b>ยังไม่เคยถูก block / allow</b> ใน WAF policy ที่เปิดใช้งาน (ไม่แสดง ALREADY_BLOCKED / DO_NOT_BLOCK, policy ที่ disabled ไม่นับ) · ช่อง <b>➕ Add IPs manually</b> และ IP ที่เลือก จะแสดง <b>⚠ WAF check</b> ว่า IP ไหน block แล้ว / ถูก allow · แยกเป็น 5 หน้า (แท็บด้านบน) · หน้านี้แสดงเฉพาะ IP ที่ detect ใน <b>7 วันล่าสุด</b> และทำได้แค่ <b>Search + Block</b> · IP ที่เก่ากว่า 7 วันอยู่หน้า <b>Older detections</b> · ตาราง IP ที่ block อยู่บน WAF ย้ายไปหน้า <b>Blocked IPs / Unblock</b> (Search + Unblock)</div>
   <section class="kpis" aria-label="Summary">
     <div class="kpi k-warn"><span class="label">Detected WAF IPs</span><span class="v" id="kDet">0</span><span class="s" id="kDetSub">last 7 days</span></div>
     <div class="kpi k-info"><span class="label">Blocked on WAF now</span><span class="v" id="kWaf">0</span><span class="s">policy 2169031 (live)</span></div>
@@ -148,7 +148,7 @@ tr.off td:not(:first-child){opacity:.45}
       <p>คลิกแถวเพื่อเลือก · Ticket/Incident no. เติมจาก ITHM ใน finding note · IP ที่ block แล้วจะย้ายไปหน้า Blocked IPs</p>
     </div>
     <div class="tbl-wrap"><table>
-      <thead><tr><th></th><th>IP</th><th>Rule</th><th>Incident no.</th><th>Severity</th><th>Last detected</th><th style="text-align:right">Findings</th><th>Suggestion</th><th>VirusTotal</th><th>Location</th></tr></thead>
+      <thead><tr><th></th><th>IP</th><th>Rule</th><th>Incident no.</th><th>Severity</th><th>Last detected</th><th style="text-align:right">Findings</th><th style="text-align:right" title="requests the WAF blocked in the last 24 h">WAF blocked 24h</th><th style="text-align:right" title="requests the WAF let through in the last 24 h">WAF allowed 24h</th><th>Suggestion</th><th>VirusTotal</th><th>Location</th></tr></thead>
       <tbody id="d_tbl"></tbody></table></div>
   </section>
 </main>
@@ -177,7 +177,7 @@ tr.off td:not(:first-child){opacity:.45}
   <section class="panel">
     <div class="panel-head"><h2 id="h_title">IPs detected by WAF rules – 8 to 30 days ago</h2><p>ยังไม่ได้ block · คลิกแถวเพื่อเลือก</p></div>
     <div class="tbl-wrap"><table>
-      <thead><tr><th></th><th>IP</th><th>Rule</th><th>Incident no.</th><th>Severity</th><th>Last detected</th><th style="text-align:right">Findings</th><th>Suggestion</th><th>VirusTotal</th><th>Location</th></tr></thead>
+      <thead><tr><th></th><th>IP</th><th>Rule</th><th>Incident no.</th><th>Severity</th><th>Last detected</th><th style="text-align:right">Findings</th><th style="text-align:right" title="requests the WAF blocked in the last 24 h">WAF blocked 24h</th><th style="text-align:right" title="requests the WAF let through in the last 24 h">WAF allowed 24h</th><th>Suggestion</th><th>VirusTotal</th><th>Location</th></tr></thead>
       <tbody id="h_tbl"></tbody></table></div>
   </section>
 </main>
@@ -303,6 +303,8 @@ const sugPill={BLOCK:"p-block",REVIEW:"p-review",MONITOR:"p-monitor",ALREADY_BLO
 const onWaf=ip=>blocked.some(b=>b.ip===ip);
 const has=(q,...xs)=>!q||xs.join(" ").toLowerCase().includes(q);
 const age=d=>now0-d.last;
+// simulated WAF activity of the last 24 h per IP (Imperva logs: act=REQ_BLOCKED_* / REQ_PASSED)
+const act=ip=>{let h=0; for(const c of ip) h=(h*31+c.charCodeAt(0))%9973; return {b: h%7===0?0:(h%1900)+12, a: h%3===0?(h%140):0};};
 // only IPs that no ENABLED WAF policy blocks or allows yet (disabled policies are ignored)
 const pendingDetected=()=>detected.filter(d=>!onWaf(d.ip)&&ruleUsed(d.rule).use&&d.sug!=="ALREADY_BLOCKED"&&d.sug!=="DO_NOT_BLOCK");
 const WAF_POLICY={"185.220.101.47":"BLOCK in 1000001 Block DDoS policy","35.165.106.69":"BLOCK in 1000003 Block IOC attack","20.20.20.20":"ALLOW in 1000002 Allow partner DC"};
@@ -323,9 +325,9 @@ function renderDet(page){
     return `<tr data-ip="${d.ip}" class="${pg.sel.has(d.ip)?"selected":""}">
     <td>${ok?'<span class="box"></span>':''}</td><td class="ip">${d.ip}</td><td class="small">${esc(d.rule)}</td>
     <td class="mono nw">${esc(d.inc)}</td><td><span class="pill sev-${d.sev}">${d.sev}</span></td><td class="mono nw">${fmt(d.last)}</td>
-    <td class="num">${d.n}</td><td><span class="pill ${sugPill[d.sug]}">${d.sug}</span></td>
+    <td class="num">${d.n}</td><td class="num" style="${act(d.ip).b?"color:var(--crit);font-weight:600":""}">${act(d.ip).b.toLocaleString()}</td><td class="num" style="${act(d.ip).a?"color:var(--warn);font-weight:600":""}">${act(d.ip).a.toLocaleString()}</td><td><span class="pill ${sugPill[d.sug]}">${d.sug}</span></td>
     <td class="mono">${d.vt}/94</td><td class="nw">${esc(d.loc)}</td></tr>`;}).join("")
-    ||`<tr><td colspan="10" class="note">${q?`ไม่พบ IP ที่ตรงกับ “${esc(q)}”`:"ไม่มี IP ที่รอ block ในช่วงเวลานี้"}</td></tr>`;
+    ||`<tr><td colspan="12" class="note">${q?`ไม่พบ IP ที่ตรงกับ “${esc(q)}”`:"ไม่มี IP ที่รอ block ในช่วงเวลานี้"}</td></tr>`;
 }
 function renderBlocked(){
   const pg=P.blocked, q=$("b_q").value.trim().toLowerCase();

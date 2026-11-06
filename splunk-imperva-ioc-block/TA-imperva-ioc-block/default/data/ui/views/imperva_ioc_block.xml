@@ -269,6 +269,12 @@
         <option name="count">20</option>
         <option name="wrap">true</option>
         <option name="drilldown">cell</option>
+        <format type="color" field="waf_blocked_24h">
+          <colorPalette type="expression">if(value > 0, "#8C3B36", "#3C444D")</colorPalette>
+        </format>
+        <format type="color" field="waf_allowed_24h">
+          <colorPalette type="expression">if(value > 0, "#B26B00", "#3C444D")</colorPalette>
+        </format>
         <format type="color" field="suggestion">
           <colorPalette type="map">{"BLOCK":#DC4E41,"REVIEW":#F8BE34,"MONITOR":#5A9BD5,"ALREADY_BLOCKED":#708794,"DO_NOT_BLOCK":#53A051}</colorPalette>
         </format>

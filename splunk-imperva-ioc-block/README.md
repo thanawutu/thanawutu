@@ -192,6 +192,11 @@ search head of the cluster (KV store `imperva_cache`), as is the WAF-policy cach
 saved search **"Imperva - WAF policy cache refresh"** renews every 5 min. "Blocked on WAF" on the
 Block page comes from the registry; only the Blocked IPs page reads the WAF live.
 
+WAF activity per detected IP: columns `waf_blocked_24h` / `waf_allowed_24h` = requests of that IP
+the WAF blocked / let through in the last 24 h (Imperva logs, `act` REQ_BLOCKED_* / REQ_PASSED,
+macro `imperva_waf_action_class`). Computed every 15 min by the saved search
+**"Imperva - WAF activity of detected IPs (24h)"** into KV store `imperva_ip_activity`.
+
 VirusTotal rate limit (HTTP 429): the lookup waits `rate_limit_retry_seconds` (60) and calls
 again for the same IP until all IPs are done or `rate_limit_max_wait_seconds` is used up.
 The scheduled search **"Imperva - VT cache warm-up"** (every 10 min, enabled) has no per-run
