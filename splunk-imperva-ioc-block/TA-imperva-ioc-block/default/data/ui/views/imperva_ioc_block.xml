@@ -269,6 +269,9 @@
         <option name="count">20</option>
         <option name="wrap">true</option>
         <option name="drilldown">cell</option>
+        <format type="color" field="VirusTotal">
+          <colorPalette type="expression">"#2C62B3"</colorPalette>
+        </format>
         <format type="color" field="waf_blocked_24h">
           <colorPalette type="expression">if(value > 0, "#8C3B36", "#3C444D")</colorPalette>
         </format>

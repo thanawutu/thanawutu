@@ -94,6 +94,7 @@ tr.selected .box{background:var(--accent);border-color:var(--accent)}
 .sw::after{content:"";position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:#fff;transition:left .15s}
 .sw[aria-checked="true"]{background:var(--ok)} .sw[aria-checked="true"]::after{left:19px}
 tr.off td:not(:first-child){opacity:.45}
+a.vt{display:inline-block;background:var(--info);color:#fff;border-radius:4px;padding:1px 7px;font-size:11.5px;font-weight:600;text-decoration:none}
 .del{color:var(--crit);border-color:transparent;background:transparent}
 </style>
 
@@ -148,7 +149,7 @@ tr.off td:not(:first-child){opacity:.45}
       <p>คลิกแถวเพื่อเลือก · Ticket/Incident no. เติมจาก ITHM ใน finding note · IP ที่ block แล้วจะย้ายไปหน้า Blocked IPs</p>
     </div>
     <div class="tbl-wrap"><table>
-      <thead><tr><th></th><th>IP</th><th>Rule</th><th>Incident no.</th><th>Severity</th><th>Last detected</th><th style="text-align:right">Findings</th><th style="text-align:right" title="requests the WAF blocked in the last 24 h">WAF blocked 24h</th><th style="text-align:right" title="requests the WAF let through in the last 24 h">WAF allowed 24h</th><th>Suggestion</th><th>VirusTotal</th><th>Location</th></tr></thead>
+      <thead><tr><th></th><th>IP</th><th>VirusTotal</th><th>Rule</th><th>Incident no.</th><th>Severity</th><th>Last detected</th><th style="text-align:right">Findings</th><th style="text-align:right" title="requests the WAF blocked in the last 24 h">WAF blocked 24h</th><th style="text-align:right" title="requests the WAF let through in the last 24 h">WAF allowed 24h</th><th>Suggestion</th><th>Location</th></tr></thead>
       <tbody id="d_tbl"></tbody></table></div>
   </section>
 </main>
@@ -177,7 +178,7 @@ tr.off td:not(:first-child){opacity:.45}
   <section class="panel">
     <div class="panel-head"><h2 id="h_title">IPs detected by WAF rules – 8 to 30 days ago</h2><p>ยังไม่ได้ block · คลิกแถวเพื่อเลือก</p></div>
     <div class="tbl-wrap"><table>
-      <thead><tr><th></th><th>IP</th><th>Rule</th><th>Incident no.</th><th>Severity</th><th>Last detected</th><th style="text-align:right">Findings</th><th style="text-align:right" title="requests the WAF blocked in the last 24 h">WAF blocked 24h</th><th style="text-align:right" title="requests the WAF let through in the last 24 h">WAF allowed 24h</th><th>Suggestion</th><th>VirusTotal</th><th>Location</th></tr></thead>
+      <thead><tr><th></th><th>IP</th><th>VirusTotal</th><th>Rule</th><th>Incident no.</th><th>Severity</th><th>Last detected</th><th style="text-align:right">Findings</th><th style="text-align:right" title="requests the WAF blocked in the last 24 h">WAF blocked 24h</th><th style="text-align:right" title="requests the WAF let through in the last 24 h">WAF allowed 24h</th><th>Suggestion</th><th>Location</th></tr></thead>
       <tbody id="h_tbl"></tbody></table></div>
   </section>
 </main>
@@ -323,10 +324,10 @@ function renderDet(page){
   $(pg.p+"_tbl").innerHTML=rows.map(d=>{
     const ok=d.sug!=="DO_NOT_BLOCK"&&d.sug!=="ALREADY_BLOCKED";
     return `<tr data-ip="${d.ip}" class="${pg.sel.has(d.ip)?"selected":""}">
-    <td>${ok?'<span class="box"></span>':''}</td><td class="ip">${d.ip}</td><td class="small">${esc(d.rule)}</td>
+    <td>${ok?'<span class="box"></span>':''}</td><td class="ip">${d.ip}</td><td class="nw"><a class="vt" href="https://www.virustotal.com/gui/ip-address/${d.ip}" target="_blank" rel="noopener" onclick="event.stopPropagation()">🔗 Open VT</a> <span class="mono">${d.vt}/94</span></td><td class="small">${esc(d.rule)}</td>
     <td class="mono nw">${esc(d.inc)}</td><td><span class="pill sev-${d.sev}">${d.sev}</span></td><td class="mono nw">${fmt(d.last)}</td>
     <td class="num">${d.n}</td><td class="num" style="${act(d.ip).b?"color:var(--crit);font-weight:600":""}">${act(d.ip).b.toLocaleString()}</td><td class="num" style="${act(d.ip).a?"color:var(--warn);font-weight:600":""}">${act(d.ip).a.toLocaleString()}</td><td><span class="pill ${sugPill[d.sug]}">${d.sug}</span></td>
-    <td class="mono">${d.vt}/94</td><td class="nw">${esc(d.loc)}</td></tr>`;}).join("")
+    <td class="nw">${esc(d.loc)}</td></tr>`;}).join("")
     ||`<tr><td colspan="12" class="note">${q?`ไม่พบ IP ที่ตรงกับ “${esc(q)}”`:"ไม่มี IP ที่รอ block ในช่วงเวลานี้"}</td></tr>`;
 }
 function renderBlocked(){
