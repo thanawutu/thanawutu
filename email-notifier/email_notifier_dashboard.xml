@@ -24,19 +24,19 @@
         <latest>now</latest>
       </search>
     </input>
-    <input type="text" token="subject" searchWhenChanged="false">
+    <input type="text" token="subject" id="in_subject" searchWhenChanged="false">
       <label>2. หัวเรื่อง (ใช้ {{name}} ได้)</label>
       <default>[แจ้งเตือน] ปิดปรับปรุงระบบ HR Portal</default>
     </input>
-    <input type="text" token="body" searchWhenChanged="false">
+    <input type="text" token="body" id="in_body" searchWhenChanged="false">
       <label>3. เนื้อหา — ขึ้นบรรทัดใหม่ด้วย \n, ตัวแปร {{คอลัมน์}}</label>
       <default>เรียน คุณ{{name}}\n\nขอแจ้งให้ทราบว่าระบบ HR Portal จะปิดปรับปรุงวันเสาร์ 20:00-23:00 น.\n\nขอบคุณครับ/ค่ะ\nฝ่ายทรัพยากรบุคคล</default>
     </input>
-    <input type="radio" token="mode" searchWhenChanged="false">
+    <input type="radio" token="mode" id="in_mode" searchWhenChanged="false">
       <label>4. การดำเนินการ</label>
-      <choice value="preview">ดูตัวอย่างเท่านั้น</choice>
-      <choice value="test">ทดสอบ: ส่งฉบับแรกหาอีเมลด้านขวา</choice>
-      <choice value="all">ส่งจริงถึงทุกคน</choice>
+      <choice value="preview">ดูตัวอย่าง</choice>
+      <choice value="test">ทดสอบ (ส่งหาตัวเอง)</choice>
+      <choice value="all">ส่งจริงทุกคน</choice>
       <default>preview</default>
       <!-- แผงส่งจะไม่โหลด (และไม่มีการเรียก sendemail) จนกว่าจะเลือกโหมดส่ง -->
       <change>
@@ -44,18 +44,58 @@
         <condition><set token="show_send">1</set></condition>
       </change>
     </input>
-    <input type="text" token="test_to" searchWhenChanged="false">
-      <label>อีเมลสำหรับทดสอบ</label>
+    <input type="text" token="test_to" id="in_test" searchWhenChanged="false">
+      <label>5. อีเมลสำหรับทดสอบ</label>
       <default>-</default>
     </input>
-    <input type="text" token="confirm" searchWhenChanged="false">
-      <label>พิมพ์ SEND เพื่อยืนยันการส่ง</label>
+    <input type="text" token="confirm" id="in_confirm" searchWhenChanged="false">
+      <label>6. พิมพ์ SEND เพื่อยืนยัน</label>
       <default>-</default>
     </input>
   </fieldset>
 
+  <!-- ===== CSS: ขยายช่องข้อความ (แถวนี้ซ่อนอยู่เสมอ) ===== -->
+  <row depends="$always_hidden_css$">
+    <panel>
+      <html>
+        <style>
+          #in_subject { width: 560px !important; max-width: 100%; }
+          #in_body { width: 100% !important; max-width: 1100px; }
+          #in_subject input, #in_body input { width: 100% !important; }
+          #in_mode { width: auto !important; min-width: 170px; }
+          #in_mode label { white-space: nowrap; }
+          .notifier-guide { font-size: 14px; line-height: 1.7; }
+          .notifier-guide code { background: #f2f4f7; padding: 1px 6px; border-radius: 4px; }
+          .notifier-guide pre { background: #f2f4f7; padding: 10px 12px; border-radius: 6px; white-space: pre-wrap; }
+          .notifier-guide ol { margin-left: 20px; }
+        </style>
+      </html>
+    </panel>
+  </row>
+
+  <!-- ===== แสดงจนกว่าจะเลือกไฟล์รายชื่อ ===== -->
+  <row rejects="$lookup$">
+    <panel>
+      <title>เริ่มต้นใช้งาน</title>
+      <html>
+        <div class="notifier-guide">
+          <ol>
+            <li><b>อัปโหลดรายชื่อ</b> เป็นไฟล์ CSV (UTF-8) ที่มีคอลัมน์ <code>email</code> และคอลัมน์อื่นตามต้องการ เช่น <code>name</code>, <code>department</code> —
+              <a href="../../manager/search/data/lookup-table-files/_new?action=edit&amp;ns=search" target="_blank">อัปโหลด Lookup ใหม่</a>
+              (หรือ Settings → Lookups → Lookup table files → New) แล้ว refresh หน้านี้</li>
+            <li>เลือกไฟล์ในช่อง <b>1. ไฟล์รายชื่อ</b> แล้วกด <b>Submit</b> เพื่อดูตัวอย่าง</li>
+            <li>ถ้ายังไม่เคยใช้ ให้สร้างไฟล์ประวัติครั้งเดียว โดยรันใน Search:
+              <pre>| makeresults | eval sent_at=now(), batch="init", sent_by="setup", email="", subject="", status="init" | outputlookup notify_log.csv</pre></li>
+            <li>เนื้อหา: ขึ้นบรรทัดใหม่ด้วย <code>\n</code> ใช้ตัวแปรจากชื่อคอลัมน์ เช่น <code>{{name}}</code></li>
+          </ol>
+          <p>ถ้า dropdown ไม่มีไฟล์ให้เลือก: ตรวจว่าอัปโหลดแล้ว และ Permissions ของ lookup อนุญาตให้ role ของคุณเห็น</p>
+        </div>
+      </html>
+    </panel>
+  </row>
+
   <!-- ===== สรุปรายชื่อ ===== -->
-  <row>
+  <row depends="$lookup$">
     <panel>
       <single>
         <title>รายชื่อทั้งหมด</title>
@@ -103,7 +143,7 @@
   </row>
 
   <!-- ===== ตัวอย่างก่อนส่ง ===== -->
-  <row>
+  <row depends="$lookup$">
     <panel>
       <title>ตัวอย่างอีเมลของผู้รับแต่ละคน</title>
       <table>
