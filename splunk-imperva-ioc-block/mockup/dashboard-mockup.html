@@ -324,7 +324,7 @@ function renderDet(page){
   $(pg.p+"_tbl").innerHTML=rows.map(d=>{
     const ok=d.sug!=="DO_NOT_BLOCK"&&d.sug!=="ALREADY_BLOCKED";
     return `<tr data-ip="${d.ip}" class="${pg.sel.has(d.ip)?"selected":""}">
-    <td>${ok?'<span class="box"></span>':''}</td><td class="ip">${d.ip}</td><td class="nw"><a class="vt" href="https://www.virustotal.com/gui/ip-address/${d.ip}" target="_blank" rel="noopener" onclick="event.stopPropagation()">🔗 Open VT</a> <span class="mono">${d.vt}/94</span></td><td class="small">${esc(d.rule)}</td>
+    <td>${ok?'<span class="box"></span>':''}</td><td class="ip">${d.ip}</td><td class="nw"><a class="vt" href="https://www.virustotal.com/gui/ip-address/${d.ip}" target="_blank" rel="noopener" onclick="event.stopPropagation()">🔗</a> <span class="mono">${d.vt}/94</span></td><td class="small">${esc(d.rule)}</td>
     <td class="mono nw">${esc(d.inc)}</td><td><span class="pill sev-${d.sev}">${d.sev}</span></td><td class="mono nw">${fmt(d.last)}</td>
     <td class="num">${d.n}</td><td class="num" style="${act(d.ip).b?"color:var(--crit);font-weight:600":""}">${act(d.ip).b.toLocaleString()}</td><td class="num" style="${act(d.ip).a?"color:var(--warn);font-weight:600":""}">${act(d.ip).a.toLocaleString()}</td><td><span class="pill ${sugPill[d.sug]}">${d.sug}</span></td>
     <td class="nw">${esc(d.loc)}</td></tr>`;}).join("")
