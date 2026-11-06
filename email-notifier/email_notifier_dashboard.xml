@@ -1,6 +1,6 @@
-<form version="1.1" theme="light" hideFilters="false" script="email_notifier.js">
+<form version="1.1" theme="light" hideFilters="false">
   <label>Email Notifier — ส่งอีเมลแจ้งเตือนพนักงาน</label>
-  <description>อัปโหลดรายชื่อเป็น Lookup → เขียนข้อความ → ดูตัวอย่าง → กด 📧 Test ส่งหาตัวเอง → ส่งจริง (ส่งแยกทีละคนด้วย sendemail ผ่าน SMTP ที่ตั้งค่าไว้ใน Splunk)</description>
+  <description>อัปโหลดรายชื่อเป็น Lookup → เขียนข้อความ → ดูตัวอย่าง → Test ส่งหาตัวเอง → ส่งจริง (ส่งแยกทีละคนด้วย sendemail ผ่าน SMTP ที่ตั้งค่าไว้ใน Splunk)</description>
 
   <!--
     วิธีใช้ (ดูรายละเอียดใน README.md):
@@ -49,72 +49,32 @@
       <default>[IT Security] ประกาศสำคัญ: กรุณาเปลี่ยนรหัสผ่านทันที / Urgent: Please Change Your Password Immediately</default>
     </input>
     <input type="text" token="body" id="in_body" searchWhenChanged="false">
-      <label>3. เนื้อหาอีเมล — ตัวแปร {{name}}, {{email}} (ถ้ายังเป็นช่องบรรทัดเดียว ให้ใช้ \n ขึ้นบรรทัดใหม่)</label>
+      <label>3. เนื้อหาอีเมล — ขึ้นบรรทัดใหม่ด้วย \n, ตัวแปร {{name}}, {{email}}</label>
       <default>เรียน คุณ{{name}} / Dear {{name}},\n\n[ประกาศสำคัญจากฝ่าย IT Security - นี่ไม่ใช่ Phishing Email / This is NOT a Phishing Email]\n\nเนื่องด้วยทางฝ่าย IT Security ได้ตรวจพบกรณีข้อมูลอีเมลรั่วไหล (Email leak) จากผู้ให้บริการภายนอก (signifycrm.com) และพบว่าอีเมลของท่าน ({{email}}) อยู่ในรายการข้อมูลที่ได้รับผลกระทบ ซึ่งอาจส่งผลต่อความปลอดภัยของบัญชีผู้ใช้งานของท่าน\nThe IT Security team has detected an email leak incident from an external service provider (signifycrm.com), and your email address ({{email}}) was identified in the affected data. This may impact the security of your corporate user credentials.\n\nเพื่อความปลอดภัยสูงสุดและเป็นการป้องกันเชิงรุก ทางฝ่าย IT ขอความร่วมมือให้ท่านปฏิบัติตามมาตรการเร่งด่วน โดย "กรุณาเปลี่ยนรหัสผ่านทันที" ในระบบต่อไปนี้:\nTo ensure maximum security and proactive protection, the IT department requests that you immediately comply with urgent measures by "changing your passwords immediately" for the following systems:\n\n* รหัสผ่านเข้าใช้เครื่องคอมพิวเตอร์ (Computer Login Password)\n* รหัสผ่านเข้าใช้งานระบบ YODA (YODA System Password)\n* ระบบอื่นๆ ทั้งหมดที่ท่านใช้ Email ของบริษัทในการ Login (Any other systems or platforms where you use your corporate email to log in)\n\n⚠️ โปรดทราบเพื่อความปลอดภัย (Security Notice):\n\n* ทางฝ่าย IT จะไม่มีการแนบลิงก์ใดๆ ให้ท่านกดเปลี่ยนรหัสผ่านในอีเมลฉบับนี้ เพื่อป้องกันการสับสนกับอีเมลหลอกลวง (Phishing)\n* IT will NOT include any direct links to change your password in this email to prevent any confusion with phishing attempts.\n* กรุณาเปิดเครื่องคอมพิวเตอร์ หรือเข้าหน้าเว็บไซต์ระบบ YODA ด้วยตัวท่านเองตามปกติเพื่อทำการเปลี่ยนรหัสผ่าน\n* Please manually access your computer settings or navigate to the official YODA system portal on your own to perform the password reset.\n\nขออภัยในความไม่สะดวกและขอขอบคุณในความร่วมมืออย่างยิ่ง\nWe apologize for the inconvenience and highly appreciate your prompt cooperation.\n\nฝ่าย IT Security / IT Security Team\nEmail contact: itsec_operation@cimbthai.com</default>
     </input>
     <input type="radio" token="mode" id="in_mode" searchWhenChanged="false">
       <label>4. การดำเนินการ</label>
       <choice value="preview">ดูตัวอย่าง</choice>
+      <choice value="test">Test (ส่งไปที่อีเมลสำหรับทดสอบ)</choice>
       <choice value="all">ส่งจริงทุกคนในรายชื่อ</choice>
       <default>preview</default>
       <!-- แผงส่งจะไม่โหลด (และไม่มีการเรียก sendemail) จนกว่าจะเลือกโหมดส่ง -->
       <change>
-        <condition value="preview"><unset token="show_send"></unset></condition>
-        <condition><set token="show_send">1</set></condition>
+        <condition value="test"><set token="show_test">1</set><unset token="show_send"></unset></condition>
+        <condition value="all"><set token="show_send">1</set><unset token="show_test"></unset></condition>
+        <condition><unset token="show_send"></unset><unset token="show_test"></unset></condition>
       </change>
     </input>
     <input type="text" token="test_to" id="in_test" searchWhenChanged="false">
-      <label>5. อีเมลสำหรับทดสอบ (กดปุ่ม 📧 Test)</label>
+      <label>5. อีเมลสำหรับทดสอบ (ใช้เมื่อเลือก Test)</label>
       <default>-</default>
     </input>
     <input type="text" token="confirm" id="in_confirm" searchWhenChanged="false">
-      <label>6. พิมพ์ SEND เพื่อยืนยันการส่งจริง</label>
+      <label>6. พิมพ์ SEND (เฉพาะส่งจริง)</label>
       <default>-</default>
     </input>
   </fieldset>
 
-  <!-- ===== ปุ่ม 📧 Test (สร้างโดย email_notifier.js) — ส่งฉบับของผู้รับคนแรกไปยังอีเมลทดสอบทันที =====
-       ทำงานเมื่อ JS ตั้ง token run_test เท่านั้น และล้าง token ทันทีที่เสร็จ เพื่อไม่ให้ส่งซ้ำ -->
-  <search id="test_search">
-    <query><![CDATA[$src_spl$
-| append [| makeresults
-  | eval pair=mvappend($n1|s$."|||".$e1|s$, $n2|s$."|||".$e2|s$, $n3|s$."|||".$e3|s$, $n4|s$."|||".$e4|s$, $n5|s$."|||".$e5|s$, $n6|s$."|||".$e6|s$, $n7|s$."|||".$e7|s$, $n8|s$."|||".$e8|s$, $n9|s$."|||".$e9|s$, $n10|s$."|||".$e10|s$)
-  | mvexpand pair
-  | eval name=trim(mvindex(split(pair, "|||"), 0)), email=trim(mvindex(split(pair, "|||"), 1))
-  | eval name=if(name="-", "", name)
-  | where email!="" AND email!="-" AND "$manual_flag$"="1"
-  | head 10
-  | fields name email | fields - _time ]
-| foreach *mail *Mail *MAIL [ eval email=coalesce(email, '<<FIELD>>') ]
-| foreach *name *Name *NAME [ eval name=coalesce(name, '<<FIELD>>') ]
-| eval email=lower(trim(email))
-| where match(email, "^[^\s@<>(),;:\"\\\\|]+@[^\s@<>(),;:\"\\\\|]+\.[^\s@<>(),;:\"\\\\|]+$$")
-| head 1
-| where "$run_test$"!=""
-| eval to=lower(trim($test_to|s$))
-| where match(to, "^[^\s@<>(),;:\"\\\\|]+@[^\s@<>(),;:\"\\\\|]+\.[^\s@<>(),;:\"\\\\|]+$$")
-| eval subject_r=$subject|s$, body_r=$body|s$
-| foreach * [ eval subject_r=replace(subject_r, "\{\{\s*<<FIELD>>\s*\}\}", coalesce('<<FIELD>>', "")), body_r=replace(body_r, "\{\{\s*<<FIELD>>\s*\}\}", coalesce('<<FIELD>>', "")) ]
-| eval subject_r="[TEST] ".replace(subject_r, "[\r\n]+", " ")
-| eval body_r=replace(body_r, "\\\\n", urldecode("%0A"))
-| eval batch="test-".tostring(now())
-| eval s_esc=replace(replace(subject_r, "\\\\", "\\\\\\\\"), "\"", "\\\\\""), b_esc=replace(replace(body_r, "\\\\", "\\\\\\\\"), "\"", "\\\\\"")
-| map maxsearches=1 search="| makeresults | sendemail to=\"$$to$$\" subject=\"$$s_esc$$\" message=\"$$b_esc$$\" content_type=plain sendresults=false inline=false | eval email=\"$$to$$\", batch=\"$$batch$$\", subject=\"$$s_esc$$\""
-| eval sent_at=now(), sent_by="$env:user$", status="test"
-| table sent_at batch sent_by email subject status
-| outputlookup append=true notify_log.csv]]></query>
-    <earliest>-1m</earliest>
-    <latest>now</latest>
-    <done>
-      <unset token="run_test"></unset>
-    </done>
-    <error>
-      <unset token="run_test"></unset>
-    </error>
-    <fail>
-      <unset token="run_test"></unset>
-    </fail>
-  </search>
 
   <!-- ===== CSS: ขยายช่องข้อความ (แถวนี้ซ่อนอยู่เสมอ) ===== -->
   <row depends="$always_hidden_css$">
@@ -362,7 +322,54 @@
     </panel>
   </row>
 
-  <!-- ===== ส่ง (ทำงานเฉพาะโหมด test/all และพิมพ์ SEND) =====
+  <!-- ===== Test: ส่งฉบับของผู้รับคนแรกไปที่อีเมลสำหรับทดสอบ (เลือก Test แล้วกด Submit) ===== -->
+  <row>
+    <panel depends="$show_test$,$lookup$">
+      <title>ผลการส่งทดสอบ (Test)</title>
+      <table>
+        <search>
+          <query><![CDATA[$src_spl$
+| append [| makeresults
+  | eval pair=mvappend($n1|s$."|||".$e1|s$, $n2|s$."|||".$e2|s$, $n3|s$."|||".$e3|s$, $n4|s$."|||".$e4|s$, $n5|s$."|||".$e5|s$, $n6|s$."|||".$e6|s$, $n7|s$."|||".$e7|s$, $n8|s$."|||".$e8|s$, $n9|s$."|||".$e9|s$, $n10|s$."|||".$e10|s$)
+  | mvexpand pair
+  | eval name=trim(mvindex(split(pair, "|||"), 0)), email=trim(mvindex(split(pair, "|||"), 1))
+  | eval name=if(name="-", "", name)
+  | where email!="" AND email!="-" AND "$manual_flag$"="1"
+  | head 10
+  | fields name email | fields - _time ]
+| foreach *mail *Mail *MAIL [ eval email=coalesce(email, '<<FIELD>>') ]
+| foreach *name *Name *NAME [ eval name=coalesce(name, '<<FIELD>>') ]
+| eval email=lower(trim(email))
+| where match(email, "^[^\s@<>(),;:\"\\\\|]+@[^\s@<>(),;:\"\\\\|]+\.[^\s@<>(),;:\"\\\\|]+$$")
+| head 1
+| where "$show_test$"="1" AND "$mode$"="test"
+| eval to=lower(trim($test_to|s$))
+| where match(to, "^[^\s@<>(),;:\"\\\\|]+@[^\s@<>(),;:\"\\\\|]+\.[^\s@<>(),;:\"\\\\|]+$$")
+| eval subject_r=$subject|s$, body_r=$body|s$
+| foreach * [ eval subject_r=replace(subject_r, "\{\{\s*<<FIELD>>\s*\}\}", coalesce('<<FIELD>>', "")), body_r=replace(body_r, "\{\{\s*<<FIELD>>\s*\}\}", coalesce('<<FIELD>>', "")) ]
+| eval subject_r="[TEST] ".replace(subject_r, "[\r\n]+", " ")
+| eval body_r=replace(body_r, "\\\\n", urldecode("%0A"))
+| eval batch="test-".tostring(now())
+| eval s_esc=replace(replace(subject_r, "\\\\", "\\\\\\\\"), "\"", "\\\\\""), b_esc=replace(replace(body_r, "\\\\", "\\\\\\\\"), "\"", "\\\\\"")
+| map maxsearches=1 search="| makeresults | sendemail to=\"$$to$$\" subject=\"$$s_esc$$\" message=\"$$b_esc$$\" content_type=plain sendresults=false inline=false | eval email=\"$$to$$\", batch=\"$$batch$$\", subject=\"$$s_esc$$\""
+| eval sent_at=now(), sent_by="$env:user$", status="test"
+| table sent_at batch sent_by email subject status
+| outputlookup append=true notify_log.csv
+| eval sent_at=strftime(sent_at, "%Y-%m-%d %H:%M:%S")]]></query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">5</option>
+        <option name="drilldown">none</option>
+      </table>
+      <html>
+        <p style="color:#677085">ส่งอีเมลของผู้รับคนแรกในรายชื่อ (ใช้ชื่อ/อีเมลของคนนั้นแทนค่าตัวแปร) ไปที่ <b>อีเมลสำหรับทดสอบ</b> หัวเรื่องขึ้นต้นด้วย <code>[TEST]</code>.
+        กด Submit อีกครั้งเพื่อส่งทดสอบซ้ำ. ถ้าตารางว่าง: ตรวจว่าใส่อีเมลทดสอบถูกต้อง และในรายชื่อมีอีเมลที่ถูกต้องอย่างน้อย 1 รายการ.</p>
+      </html>
+    </panel>
+  </row>
+
+  <!-- ===== ส่ง (ทำงานเฉพาะโหมดส่งจริง และพิมพ์ SEND) =====
        - ส่งแยกทีละคนด้วย map + sendemail ผู้รับไม่เห็นอีเมลกันและกัน
        - ค่าในหัวเรื่อง/เนื้อหาถูก escape (\ และ ") ก่อนใส่ใน SPL
        - กันส่งซ้ำ: ข้ามผู้รับที่เคยส่งข้อความชุดเดียวกัน (batch) สำเร็จแล้ว แม้กด refresh หน้า
@@ -412,7 +419,7 @@
         <option name="drilldown">none</option>
       </table>
       <html>
-        <p style="color:#677085">ส่วนนี้จะทำงานเมื่อเลือก <b>ทดสอบ</b> หรือ <b>ส่งจริง</b> และพิมพ์ <code>SEND</code> แล้วกด Submit เท่านั้น — หลังส่งเสร็จช่องยืนยันจะถูกล้างอัตโนมัติ.
+        <p style="color:#677085">ส่วนนี้จะทำงานเมื่อเลือก <b>ส่งจริงทุกคนในรายชื่อ</b> และพิมพ์ <code>SEND</code> แล้วกด Submit เท่านั้น — หลังส่งเสร็จช่องยืนยันจะถูกล้างอัตโนมัติ.
         Splunk อาจแสดงคำเตือน “risky command” (sendemail/map) ให้กด Run เพื่อยืนยันอีกชั้น.
         ถ้ามีฉบับที่ล้มเหลว กด Submit ซ้ำได้ ระบบจะส่งเฉพาะคนที่ยังไม่ได้รับ.</p>
       </html>
