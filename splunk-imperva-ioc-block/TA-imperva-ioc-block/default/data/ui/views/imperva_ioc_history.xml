@@ -1,4 +1,4 @@
-<form version="1.1" theme="dark" hideFilters="true">
+<form version="1.1" theme="dark" hideFilters="true" script="imperva_cells.js">
   <label>Imperva IOC Block – older detections</label>
   <description>IPs whose last detection is older than 7 days and that are not blocked yet. Same as the Block page: click rows to select, fill Ticket / Incident no. and Description, click ⛔ BLOCK.</description>
   <init>
@@ -213,7 +213,7 @@
   <row>
     <panel>
       <title>IPs detected by WAF rules – older than 7 days, not blocked yet (click a row to select / unselect it)</title>
-      <table>
+      <table id="det_table">
         <search base="det">
           <query>| eval _q=lower(trim(replace($h_q|s$, "[*]", "")))
 | where _q="" OR like(lower(src." ".incident_no." ".rule_name), "%"._q."%")
@@ -224,12 +224,6 @@
         <option name="drilldown">cell</option>
         <format type="color" field="VirusTotal">
           <colorPalette type="expression">"#2C62B3"</colorPalette>
-        </format>
-        <format type="color" field="waf_blocked_24h">
-          <colorPalette type="expression">if(value > 0, "#8C3B36", "#3C444D")</colorPalette>
-        </format>
-        <format type="color" field="waf_allowed_24h">
-          <colorPalette type="expression">if(value > 0, "#B26B00", "#3C444D")</colorPalette>
         </format>
         <format type="color" field="suggestion">
           <colorPalette type="map">{"BLOCK":#DC4E41,"REVIEW":#F8BE34,"MONITOR":#5A9BD5,"ALREADY_BLOCKED":#708794,"DO_NOT_BLOCK":#53A051}</colorPalette>
