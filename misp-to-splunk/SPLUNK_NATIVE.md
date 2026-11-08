@@ -23,11 +23,46 @@ index=main sourcetype=misp_events earliest=-30d
 
 ## ติดตั้ง (ทั้ง 2 วิธี)
 
+ถ้าเจอ error `macro 'tbcert_misp_src' cannot be found` แปลว่ายังไม่ได้ติดตั้งแอปบน Search Head นั้น
+
+**ทางที่ 1 — หน้าเว็บ:** Apps → Manage Apps → Install app from file → เลือก `dist/TA-tbcert-misp-1.1.0.tgz` → restart
+(Splunk Cloud ต้องผ่าน AppInspect / private app vetting)
+
+**ทางที่ 2 — บนเครื่อง Search Head:**
 ```bash
-cp -r splunk_app/TA-tbcert-misp $SPLUNK_HOME/etc/apps/
+tar xzf TA-tbcert-misp-1.1.0.tgz -C $SPLUNK_HOME/etc/apps/
+```
+```bash
 $SPLUNK_HOME/bin/splunk restart
 ```
+Search Head Cluster: วางใน `$SPLUNK_HOME/etc/shcluster/apps/` บน deployer แล้ว `splunk apply shcluster-bundle`
+
+**ทุก saved search ปิด schedule ไว้** — ทดสอบก่อน แล้วค่อยเปิดใน Settings → Searches, reports, and alerts
+
 แก้ allowlist ที่ `lookups/tbcert_allowlist_ip.csv` (CIDR) และ `lookups/tbcert_allowlist_domain.csv` (match sub-domain ด้วย)
+
+## นโยบาย block vs detect
+
+ถ้าทุก event เป็น `threat_level_id=1` และ `to_ids=true` แสดงว่าตัวดึงข้อมูลกรองมาแล้ว — **ถ้าต้องการ Medium/Low ต้องแก้ที่ตัวดึง**
+และ IOC จาก feed ชุมชนต่างประเทศจำนวนมากไม่ได้เจาะจงภาคการเงินไทย จึงไม่ควรส่งไป block ทั้งหมด
+
+KV store จึงมี field **`action`**
+
+| action | เงื่อนไข (ปรับใน macro) |
+|---|---|
+| `block` | hash ทุกตัว / IOC จาก org ที่เชื่อถือ (`tbcert_block_org_regex`) / ip-domain-url-email ที่อายุไม่เกิน `tbcert_block_max_age_days` (14 วัน) |
+| `detect` | ที่เหลือ — ใช้หา hit ใน log แต่ไม่ส่งไป firewall |
+
+`export_edl.py` และ `TBCERT - Build Blocklist` ส่งออกเฉพาะ `action=block`
+
+ทดสอบหลังติดตั้ง (ยังไม่เขียนลง KV store)
+```spl
+`tbcert_misp_src` earliest=-30d | `tbcert_misp_events_normalize` | stats count by indicator_type status action
+```
+```spl
+index=main sourcetype=misp_events earliest=-30d | stats dc(value) as ioc dc(event_id) as events by org | sort - ioc
+```
+แล้วเลือก org ที่ไว้ใจใส่ใน `tbcert_block_org_regex` (ค่าเริ่มต้นเป็นตัวอย่าง: TB-CERT, NCSA, ThaiCERT, ชื่อที่มี bank)
 
 ## วิธี A — ใช้ index เดิม
 

@@ -60,7 +60,8 @@ def fetch_all(cfg) -> list[dict]:
     now, out, skip = int(time.time()), [], 0
     while True:
         r = s.get(base, timeout=120, params={
-            "query": json.dumps({"expires": {"$gt": now}}),
+            # action=detect = เก็บไว้ detect เท่านั้น ไม่ส่งไป block
+            "query": json.dumps({"expires": {"$gt": now}, "action": {"$ne": "detect"}}),
             "fields": "indicator,indicator_type,last_seen",
             "sort": "last_seen:-1", "limit": 10000, "skip": skip})
         r.raise_for_status()
