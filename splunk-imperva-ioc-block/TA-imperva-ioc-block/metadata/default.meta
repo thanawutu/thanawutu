@@ -37,9 +37,11 @@ export = system
 
 [macros/imperva_ioc_notables]
 access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = system
 
 [macros/imperva_ioc_fields]
 access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = system
 
 [commands/impervarules]
 access = read : [ admin, imperva_blocker ], write : [ admin ]
@@ -79,8 +81,10 @@ export = system
 access = read : [ admin, imperva_blocker ], write : [ admin, imperva_blocker ]
 export = system
 
+# export = system: the macros also work from the Search app (troubleshooting / ad-hoc SPL)
 [macros]
 access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = system
 
 [savedsearches]
 access = read : [ admin, imperva_blocker ], write : [ admin ]
