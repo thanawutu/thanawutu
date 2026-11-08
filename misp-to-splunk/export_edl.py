@@ -18,6 +18,7 @@ export_edl.py — อ่าน IOC จาก Splunk KV Store แล้วเข�
 from __future__ import annotations
 
 import argparse
+import configparser
 import json
 import logging
 import os
@@ -26,10 +27,27 @@ import time
 
 import requests
 
-from misp_to_splunk import load_settings
-
 LOG = logging.getLogger("export_edl")
 MAX_PER_LIST = {"ip": 150000, "domain": 150000, "url": 100000}  # ขีดจำกัดทั่วไปของ EDL
+# ส่งออกเฉพาะชนิดที่เครื่องมือ block รองรับ (ชนิดอื่นเช่น filename, mutex ใช้ detect ใน Splunk)
+BLOCKABLE = {"ip", "domain", "url", "md5", "sha1", "sha256", "sha512", "email"}
+
+
+def load_splunk(path: str) -> argparse.Namespace:
+    """อ่านเฉพาะ [splunk] — ใช้ได้ทั้งกับวิธี script, index เดิม และ MISP42Splunk"""
+    cp = configparser.ConfigParser(inline_comment_prefixes=(";",), interpolation=None)
+    if not cp.read(path, encoding="utf-8"):
+        raise SystemExit(f"อ่านไฟล์ config ไม่ได้: {path}")
+    s = cp["splunk"]
+    v = s.get("verify_tls", "true").strip()
+    verify = True if v.lower() in ("true", "yes", "1") else False if v.lower() in ("false", "no", "0") else v
+    token = os.environ.get("SPLUNK_TOKEN") or s.get("token", "")
+    if not token:
+        raise SystemExit("ไม่พบ Splunk token (config [splunk] token หรือ env SPLUNK_TOKEN)")
+    return argparse.Namespace(splunk_url=s["url"].rstrip("/"), splunk_token=token,
+                              splunk_app=s.get("app", "TA-tbcert-misp"),
+                              collection=s.get("collection", "tbcert_misp_ioc"),
+                              splunk_verify=verify)
 
 
 def fetch_all(cfg) -> list[dict]:
@@ -67,7 +85,7 @@ def main() -> None:
     ap.add_argument("-o", "--outdir", default="edl_out")
     a = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    cfg = load_settings(a.config)
+    cfg = load_splunk(a.config)
     os.makedirs(a.outdir, exist_ok=True)
 
     lists: dict[str, list[str]] = {}
@@ -76,7 +94,7 @@ def main() -> None:
         t, v = row.get("indicator_type", ""), row.get("indicator", "")
         if t == "url":
             v = v.split("://", 1)[-1]  # PAN-OS URL list ไม่รับ http:// / https://
-        if not v or (t, v) in seen:
+        if t not in BLOCKABLE or not v or (t, v) in seen:
             continue
         seen.add((t, v))
         lists.setdefault(t, []).append(v)

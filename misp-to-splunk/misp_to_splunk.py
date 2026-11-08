@@ -340,6 +340,7 @@ def normalize(attr: dict, cfg: Settings, allow: Allowlist, stats: Stats,
             "last_seen": ts,
             "updated": now,
             "expires": expires,
+            "status": "active",
         })
     return recs, drop
 

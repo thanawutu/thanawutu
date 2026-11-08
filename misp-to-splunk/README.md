@@ -28,6 +28,8 @@
 | **Splunk ES Threat Intelligence Framework** | มี Enterprise Security | ES จะ match กับ data model อัตโนมัติ (Threat Activity) | ต้องแปลงรูปแบบให้ตรง (STIX/TAXII หรือ CSV) |
 | **สคริปต์ในโฟลเดอร์นี้** (REST → KV Store) | ต้องการควบคุม filter/allowlist/อายุ IOC และ export ไป block | ควบคุมได้ทุกขั้น, ลบ IOC ที่ถูกเพิกถอนอัตโนมัติ, ใช้แค่ Python + requests | ต้องดูแลสคริปต์เอง |
 
+> **ถ้ามีข้อมูล MISP อยู่ใน Splunk แล้ว หรืออยากใช้ MISP42Splunk แทนสคริปต์ → ดู [SPLUNK_NATIVE.md](SPLUNK_NATIVE.md)** (รองรับกรองตามความรุนแรงและ Event ID)
+>
 > สามารถใช้ร่วมกันได้ เช่น ใช้สคริปต์นี้ทำ blocklist และใช้ MISP42Splunk สำหรับ analyst ค้นหา/ส่ง sighting กลับไป TB-CERT
 
 ## สิ่งที่ต้องขอจาก TB-CERT / ทีมภายใน
