@@ -109,7 +109,8 @@ def diagnose_non_json(r) -> tuple[str, str]:
     low = (title + " " + snippet + " " + final).lower()
     proxyish = any(h in hdrs for h in ("via", "proxy-agent", "x-squid-error", "x-cache")) or any(
         w in low for w in ("proxy", "websense", "forcepoint", "zscaler", "bluecoat", "fortiguard", "web filter",
-                           "blocked", "access denied", "category", "policy", "squid", "palo alto", "url filtering"))
+                           "blocked", "access denied", "category", "policy", "squid", "palo alto", "url filtering",
+                           "fortinet", "fortiproxy", "fortigate", "web filter violation", "authentication required"))
     if "/users/login" in final.lower() or ("login" in low and "misp" in low):
         hint = ("MISP ส่งไปหน้า login = ไม่รับ API key: key ผิด/หมดอายุ/ถูกปิด, key จำกัด IP (Allowed IPs ของ auth key) "
                 "ไม่รวม IP ขาออกของ Splunk/proxy, หรือ proxy ตัด header Authorization ทิ้ง")
