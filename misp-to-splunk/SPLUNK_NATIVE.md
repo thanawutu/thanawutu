@@ -25,12 +25,12 @@ index=main sourcetype=misp_events earliest=-30d
 
 ถ้าเจอ error `macro 'tbcert_misp_src' cannot be found` แปลว่ายังไม่ได้ติดตั้งแอปบน Search Head นั้น
 
-**ทางที่ 1 — หน้าเว็บ:** Apps → Manage Apps → Install app from file → เลือก `dist/TA-tbcert-misp-1.1.0.tgz` → restart
+**ทางที่ 1 — หน้าเว็บ:** Apps → Manage Apps → Install app from file → เลือก `dist/TA-tbcert-misp-1.2.0.tgz` → restart
 (Splunk Cloud ต้องผ่าน AppInspect / private app vetting)
 
 **ทางที่ 2 — บนเครื่อง Search Head:**
 ```bash
-tar xzf TA-tbcert-misp-1.1.0.tgz -C $SPLUNK_HOME/etc/apps/
+tar xzf TA-tbcert-misp-1.2.0.tgz -C $SPLUNK_HOME/etc/apps/
 ```
 ```bash
 $SPLUNK_HOME/bin/splunk restart
@@ -50,8 +50,13 @@ KV store จึงมี field **`action`**
 
 | action | เงื่อนไข (ปรับใน macro) |
 |---|---|
-| `block` | hash ทุกตัว / IOC จาก org ที่เชื่อถือ (`tbcert_block_org_regex`) / ip-domain-url-email ที่อายุไม่เกิน `tbcert_block_max_age_days` (14 วัน) |
-| `detect` | ที่เหลือ — ใช้หา hit ใน log แต่ไม่ส่งไป firewall |
+| `block` | org มี `trust=block` → ทุกชนิด / org มี `trust=recent` → hash ทุกตัว + ip-domain-url-email ที่อายุไม่เกิน `tbcert_block_max_age_days` (14 วัน) |
+| `detect` | org มี `trust=detect` หรือ IOC ที่ไม่เข้าเงื่อนไขข้างบน — ใช้หา hit ใน log แต่ไม่ส่งไป firewall |
+
+ความเชื่อถือของ org กำหนดใน `lookups/tbcert_org_trust.csv` (คอลัมน์ `org,trust,note`, แก้ผ่าน Lookup Editor ได้)
+org ที่ไม่อยู่ในไฟล์ใช้ค่า macro `tbcert_org_default_trust` (ค่าเริ่มต้น `recent`)
+แนวทางจัดระดับ: หน่วยงานไทย/ภาคการเงิน = `block`, national CERT และ vendor ที่รู้จัก = `recent`,
+บุคคลหรือ org ที่ไม่รู้จัก และ feed ขนาดใหญ่ที่ไม่ได้คัดกรอง = `detect`
 
 `export_edl.py` และ `TBCERT - Build Blocklist` ส่งออกเฉพาะ `action=block`
 
@@ -62,7 +67,7 @@ KV store จึงมี field **`action`**
 ```spl
 index=main sourcetype=misp_events earliest=-30d | stats dc(value) as ioc dc(event_id) as events by org | sort - ioc
 ```
-แล้วเลือก org ที่ไว้ใจใส่ใน `tbcert_block_org_regex` (ค่าเริ่มต้นเป็นตัวอย่าง: TB-CERT, NCSA, ThaiCERT, ชื่อที่มี bank)
+แล้วจัดระดับ org ใน `tbcert_org_trust.csv`
 
 ## วิธี A — ใช้ index เดิม
 
