@@ -25,12 +25,12 @@ index=main sourcetype=misp_events earliest=-30d
 
 ถ้าเจอ error `macro 'tbcert_misp_src' cannot be found` แปลว่ายังไม่ได้ติดตั้งแอปบน Search Head นั้น
 
-**ทางที่ 1 — หน้าเว็บ:** Apps → Manage Apps → Install app from file → เลือก `dist/TA-tbcert-misp-1.4.0.tgz` → restart
+**ทางที่ 1 — หน้าเว็บ:** Apps → Manage Apps → Install app from file → เลือก `dist/TA-tbcert-misp-1.5.0.tgz` → restart
 (Splunk Cloud ต้องผ่าน AppInspect / private app vetting)
 
 **ทางที่ 2 — บนเครื่อง Search Head:**
 ```bash
-tar xzf TA-tbcert-misp-1.4.0.tgz -C $SPLUNK_HOME/etc/apps/
+tar xzf TA-tbcert-misp-1.5.0.tgz -C $SPLUNK_HOME/etc/apps/
 ```
 ```bash
 $SPLUNK_HOME/bin/splunk restart
@@ -117,37 +117,63 @@ IOC ที่ใส่แบบนี้ **ไม่ผ่านตัวกร�
 
 1. ติดตั้ง **MISP42Splunk** จาก Splunkbase บน Search Head
 2. **MISP42Splunk → Configuration → MISP instances → Add**
-   - Name: `tbcert` (ต้องตรงกับ macro `tbcert_misp_instance`)
+   - Name: `MISP_TBCERT` (ชื่อที่ตั้งไว้แล้ว — ต้องตรงกับ macro `tbcert_misp_instance`)
    - URL: `https://<misp ของ TB-CERT>` (ต้องเป็น https)
    - Auth key: key ของ service account ธนาคาร (แอปเก็บแบบเข้ารหัสใน passwords.conf)
    - Check certificate: เปิด และใส่ CA path ถ้าใช้ CA ภายใน / Proxy: ตั้งใน tab Proxy ถ้าออกเน็ตผ่าน proxy
 3. ทดสอบ
    ```spl
-   | mispgetioc misp_instance=tbcert last=1d to_ids=t limit=20
+   | mispgetioc misp_instance=MISP_TBCERT last=1d to_ids=t limit=20
    ```
 4. **ปิด** saved search ของวิธี A แล้ว **เปิด** `TBCERT - MISP42Splunk Pull - Incremental` และ `... - Rebuild Nightly`
 
 ### ทุกชนิด / ความรุนแรง / Event ID ด้วย mispgetioc
 
 ```spl
-| mispgetioc misp_instance=tbcert last=7d to_ids=t pipesplit=f expand_object=t
+| mispgetioc misp_instance=MISP_TBCERT last=7d to_ids=t pipesplit=f expand_object=t
 | `tbcert_misp_normalize`
 ```
 ไม่ใส่ `type=` = ได้ทุกชนิด (หรือใช้ `type=`tbcert_misp_types`` ซึ่งรวม IOC หลักไว้แล้ว)
 
 ```spl
-| mispgetioc misp_instance=tbcert last=7d threat_level_id=1 to_ids=t pipesplit=f expand_object=t
+| mispgetioc misp_instance=MISP_TBCERT last=7d threat_level_id=1 to_ids=t pipesplit=f expand_object=t
 ```
 `threat_level_id=` รับได้ค่าเดียว ถ้าต้องการหลายระดับใช้ `json_request` (ใส่ช่วงเวลาไว้ใน JSON เพราะใช้คู่กับ `last=` ไม่ได้)
 ```spl
-| mispgetioc misp_instance=tbcert json_request="{\"publish_timestamp\":\"7d\",\"threat_level_id\":[\"1\",\"2\"]}" to_ids=t pipesplit=f expand_object=t
+| mispgetioc misp_instance=MISP_TBCERT json_request="{\"publish_timestamp\":\"7d\",\"threat_level_id\":[\"1\",\"2\"]}" to_ids=t pipesplit=f expand_object=t
 ```
 ระบุ event (ID หรือ UUID คั่นด้วย `,`)
 ```spl
-| mispgetioc misp_instance=tbcert eventid="558822,2b4aa4c6-896e-4a3f-bb9f-5b76ebc05b9d" to_ids=t pipesplit=f expand_object=t
+| mispgetioc misp_instance=MISP_TBCERT eventid="558822,2b4aa4c6-896e-4a3f-bb9f-5b76ebc05b9d" to_ids=t pipesplit=f expand_object=t
 ```
 
 > ต้องใช้ `pipesplit=f expand_object=t` กับ macro `tbcert_misp_normalize` เสมอ — เพราะถ้า `pipesplit=t` แอปจะรวม attribute แบบ `domain|ip` หรือ object ไว้แถวเดียว และ `misp_value` จะเหลือค่าเดียว
+
+### mispfetch — หลาย threat level / หลาย event ID โดยไม่ต้อง escape JSON
+
+`mispfetch` สร้าง HTTP body จาก field ด้วย `tojson` (ค่าหลายค่าจาก `split()` กลายเป็น JSON array อัตโนมัติ)
+และให้ผลแบบเดียวกับ `mispgetioc` จึงใช้กับ `tbcert_misp_normalize` ได้ทันที — แอปมี macro ให้แล้ว
+
+```spl
+| `tbcert_mispfetch_levels("1,2", 7d)` | `tbcert_misp_normalize` | stats count by indicator_type action
+```
+```spl
+| `tbcert_mispfetch_events("558822,558900")` | `tbcert_misp_normalize` | table indicator indicator_type event_info status action
+```
+เขียนเองแบบเต็ม:
+```spl
+| makeresults
+| eval misp_instance="MISP_TBCERT", misp_restsearch="attributes", publish_timestamp="7d", threat_level_id=split("1,2", ","), to_ids="true"
+| tojson publish_timestamp threat_level_id to_ids output_field=misp_http_body
+| mispfetch pipesplit=f expand_object=t limit=1000
+```
+saved search: `TBCERT - mispfetch - By Threat Level`, `TBCERT - mispfetch - Specific Event IDs` (ปิด schedule ไว้)
+
+### ค่าใน MISP42Splunk ที่ควรปรับ
+- **Check MISP certificate** ควรเปิด — ถ้าปิด Splunk จะไม่ตรวจว่าคุยกับ MISP ของ TB-CERT จริง (เสี่ยง MITM ขโมย API key)
+  ถ้า proxy ขององค์กรถอด TLS ให้ใส่ CA ของ proxy ใน *MISP CA path*
+- ชื่อ instance ต้องตรงกับ macro `tbcert_misp_instance` (ค่าเริ่มต้น `MISP_TBCERT`)
+- `preflight.py --only misp42splunk` ตรวจทั้งสองข้อนี้ และทดสอบ `mispgetioc` / `mispfetch` จากฝั่ง Splunk (ผ่าน proxy จริง)
 
 ### ส่ง Sighting กลับ TB-CERT (option)
 `TBCERT - Sighting to TB-CERT` ใช้ alert action `misp_alert_sighting` (mode `byvalue`) — ปิดไว้ ต้องได้รับอนุมัติก่อนเปิด

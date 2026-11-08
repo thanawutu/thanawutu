@@ -54,8 +54,9 @@ python3 preflight.py -c config.ini --only misp,splunk,spl --json preflight.json
 |---|---|
 | misp | เชื่อมต่อ, API key, user/org/role ที่ key ผูกอยู่, ค้น attribute ได้ |
 | splunk | REST API, เวอร์ชัน 8.0+, roles/capabilities, KV store, index ปลายทาง, แอปที่ติดตั้งอยู่ |
-| data | `sourcetype=misp_events` มีข้อมูลล่าสุดและมี field ที่แอปต้องใช้ (รวม `event_tags{}`) |
+| data | `sourcetype=misp_events` มีข้อมูลล่าสุด มาจาก source/host ไหน และมี field ที่แอปต้องใช้ (รวม `event_tags{}`) |
 | spl | **รัน SPL ของแอปกับข้อมูลจริงโดยไม่ต้องติดตั้ง** — ขยาย macro จาก `macros.conf` ในเครื่อง ตัด lookup ของแอปออกชั่วคราว ไม่เขียนข้อมูล แสดงจำนวน block/detect/revoked |
+| misp42splunk | config instance ใน MISP42Splunk (URL, ตรวจ certificate, proxy) และรัน `mispgetioc` / `mispfetch` จากฝั่ง Splunk |
 | hec | HEC health และ token |
 | sentinelone / imperva / proofpoint | อ่าน Blocklist / สถานะ site และ ACL / list ของ PTR หรือสิทธิ์เขียนโฟลเดอร์ CSV (เฉพาะที่ `enabled = true`) |
 

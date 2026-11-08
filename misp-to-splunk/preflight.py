@@ -11,6 +11,8 @@ preflight.py — ทดสอบการเชื่อมต่อและค
   data        : sourcetype=misp_events มีข้อมูลและมี field ที่แอปต้องใช้
   spl         : รัน SPL ของแอป (macro ขยายจาก splunk_app/.../macros.conf) กับข้อมูลจริง
                 โดยไม่ต้องติดตั้งแอป และไม่เขียนอะไรลง Splunk -> เจอ SPL error ก่อนติดตั้ง
+  misp42splunk: อ่าน config instance ในแอป MISP42Splunk (URL, ตรวจ certificate, proxy)
+                แล้วรัน | mispgetioc จากฝั่ง Splunk (ทดสอบเส้นทาง Splunk → proxy → MISP)
   hec         : HEC health และ token (เขียนจริงเฉพาะ --allow-write)
   sentinelone : อ่าน Blocklist ได้ (สิทธิ์ของ API token)
   imperva     : อ่านสถานะ site และ ACL blacklisted IPs ได้
@@ -274,6 +276,9 @@ def check_data(cp) -> None:
     record("data.volume", "PASS", f"7 วัน: {int(row['count']):,} event / {int(row['uniq']):,} attr_uuid · ล่าสุด {age_h:.1f} ชม.ที่แล้ว")
     if age_h > 24:
         record("data.fresh", "WARN", "ไม่มีข้อมูลใหม่เกิน 24 ชม.", "ตรวจตัวดึงข้อมูล MISP → Splunk")
+    rows = splunk_search(cp, "data.origin", f"search {src} | stats count by source host | sort - count | head 5", earliest="-7d")
+    if rows:
+        record("data.origin", "PASS", "มาจาก " + " · ".join(f"{r.get('source')} @ {r.get('host')} ({int(r['count']):,})" for r in rows))
     rows = splunk_search(cp, "data.fields", f"search {src} | head 200 | fieldsummary | fields field count", earliest="-7d")
     if rows is None:
         return
@@ -316,6 +321,71 @@ def check_spl(cp) -> None:
             revoked[r["status"]] = revoked.get(r["status"], 0) + int(r["count"])
     if revoked:
         print("           ถูกตัด: " + " · ".join(f"{k} {v}" for k, v in revoked.items()))
+
+def check_misp42splunk(cp) -> None:
+    print("\n▶ MISP42Splunk (จากฝั่ง Splunk)")
+    sec = cp["misp42splunk"] if cp.has_section("misp42splunk") else {}
+    name = sec.get("instance", "MISP_TBCERT").strip() if sec else "MISP_TBCERT"
+    app = sec.get("app", "misp42splunk").strip() if sec else "misp42splunk"
+    url, kw, _ = splunk_kw(cp)
+    q = {"output_mode": "json"}
+    try:
+        r = requests.get(f"{url}/servicesNS/nobody/{app}/misp42splunk_instances/{name}", params=q, timeout=30, **kw)
+    except requests.RequestException as e:
+        return record("misp42splunk.instance", "FAIL", type(e).__name__, explain(e, "splunk"))
+    if r.status_code == 404:
+        return record("misp42splunk.instance", "FAIL", f"ไม่พบ instance {name} หรือไม่ได้ติดตั้งแอป {app}",
+                      "ตรวจชื่อใน MISP42Splunk > Configuration และ [misp42splunk] instance / macro tbcert_misp_instance")
+    if r.status_code == 403:
+        record("misp42splunk.instance", "WARN", "token ไม่มีสิทธิ์อ่าน config ของ MISP42Splunk", "ข้ามการตรวจ config — ทดสอบ mispgetioc ต่อ")
+    elif r.status_code >= 400:
+        record("misp42splunk.instance", "FAIL", f"HTTP {r.status_code}", http_hint(r.status_code, "splunk"))
+    else:
+        c = r.json()["entry"][0]["content"]
+        verify = str(c.get("misp_verifycert", "0")).lower() in ("1", "true")
+        proxy = str(c.get("misp_use_proxy", "0")).lower() in ("1", "true")
+        record("misp42splunk.instance", "PASS", f"{name} → {c.get('misp_url', '?')} · proxy {'เปิด' if proxy else 'ปิด'}")
+        if not verify:
+            record("misp42splunk.tls", "WARN", "ปิด Check MISP certificate อยู่",
+                   "เปิด Check MISP certificate (ถ้าใช้ CA ภายในหรือ proxy ที่ถอด TLS ให้ใส่ MISP CA path) เพื่อกัน MITM ขโมย API key")
+        else:
+            record("misp42splunk.tls", "PASS", "ตรวจ certificate ของ MISP")
+        mu = cp.get("misp", "url", fallback="").rstrip("/")
+        if mu and c.get("misp_url", "").rstrip("/") != mu:
+            record("misp42splunk.url", "WARN", f"URL ไม่ตรงกับ [misp] url ({mu})", "สคริปต์และ MISP42Splunk ควรชี้ MISP เดียวกัน")
+        if proxy:
+            try:
+                pr = requests.get(f"{url}/servicesNS/nobody/{app}/misp42splunk_settings/proxy", params=q, timeout=30, **kw)
+                if pr.ok:
+                    pc = pr.json()["entry"][0]["content"]
+                    on = str(pc.get("proxy_enabled", "0")).lower() in ("1", "true")
+                    record("misp42splunk.proxy", "PASS" if on else "WARN",
+                           f"proxy {pc.get('proxy_type', '')}://{pc.get('proxy_hostname', '?')}:{pc.get('proxy_port', '?')}" + ("" if on else " (ยังไม่ได้เปิด Enable)"),
+                           "instance ใช้ proxy แต่ tab Proxy ยังไม่เปิด" if not on else "")
+                    if not cp.get("misp", "proxy", fallback="").strip():
+                        record("misp.proxy", "WARN", "[misp] proxy ของสคริปต์ว่าง แต่ Splunk ออกผ่าน proxy",
+                               "ถ้าสคริปต์รันบนเครื่องที่ต้องผ่าน proxy เดียวกัน ให้ตั้ง [misp] proxy")
+            except requests.RequestException:
+                pass
+    rows = splunk_search(cp, "misp42splunk.mispgetioc",
+                         f"| mispgetioc misp_instance={name} last=1d to_ids=t limit=5 page=1 | stats count",
+                         earliest="-1h", timeout=300)
+    if rows is not None:
+        n = int(rows[0].get("count", 0)) if rows else 0
+        record("misp42splunk.mispgetioc", "PASS" if n else "WARN",
+               f"mispgetioc จาก Splunk ได้ {n} รายการ (ตัวอย่างสูงสุด 5)" if n else "mispgetioc รันได้แต่ไม่มี IOC ใน 1 วัน",
+               "ลอง last=7d หรือตรวจสิทธิ์ของ API key")
+    spl = (f'| makeresults | eval misp_instance="{name}", misp_restsearch="attributes", publish_timestamp="7d", '
+           'threat_level_id=split("1,2,3,4", ","), to_ids="true" '
+           '| tojson publish_timestamp threat_level_id to_ids output_field=misp_http_body '
+           '| mispfetch pipesplit=f expand_object=t limit=5 page=1 '
+           '| where isnotnull(misp_attribute_uuid) | stats count dc(misp_type) as types')
+    rows = splunk_search(cp, "misp42splunk.mispfetch", spl, earliest="-1h", timeout=300)
+    if rows is not None:
+        n = int(rows[0].get("count", 0)) if rows else 0
+        record("misp42splunk.mispfetch", "PASS" if n else "WARN",
+               f"mispfetch (tojson, หลาย threat level) ได้ {n} รายการ" if n else "mispfetch รันได้แต่ไม่มีผลใน 7 วัน",
+               "ตรวจสิทธิ์ของ API key หรือขยาย publish_timestamp")
 
 
 def check_hec(cp, allow_write: bool) -> None:
@@ -417,7 +487,7 @@ def check_proofpoint(cp) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description="Pre-install connectivity and readiness checks for TA-tbcert-misp")
     ap.add_argument("-c", "--config", default="config.ini")
-    ap.add_argument("--only", help="เลือก: misp,splunk,data,spl,hec,sentinelone,imperva,proofpoint")
+    ap.add_argument("--only", help="เลือก: misp,splunk,misp42splunk,data,spl,hec,sentinelone,imperva,proofpoint")
     ap.add_argument("--allow-write", action="store_true", help="อนุญาตส่ง HEC test event 1 รายการ")
     ap.add_argument("--json", help="บันทึกผลเป็น JSON")
     a = ap.parse_args()
@@ -435,6 +505,8 @@ def main() -> None:
     if want("splunk"):
         check_splunk(cp)
     if cp.has_section("splunk"):
+        if want("misp42splunk"):
+            check_misp42splunk(cp)
         if want("data"):
             check_data(cp)
         if want("spl"):
