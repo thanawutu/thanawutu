@@ -3,3 +3,6 @@ allowlist.txt
 edl_out/
 __pycache__/
 *.log
+push_state.json
+push_plan.csv
+proofpoint_out/

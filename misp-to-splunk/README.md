@@ -93,6 +93,26 @@ saved search ที่ให้มา: `TBCERT - IOC Match - Network Traffic / W
 
 วาง `edl_out/` บน web server ภายใน (HTTPS, จำกัด IP เฉพาะอุปกรณ์ security, มี basic auth/cert) — อย่าเปิดสู่อินเทอร์เน็ต
 
+## ส่งตรงเข้าเครื่องมือของธนาคาร (push_blocklists.py)
+
+| IOC | ปลายทาง | วิธี |
+|---|---|---|
+| hash (sha1, sha256) | **SentinelOne** Blocklist | API `/web/api/v2.1/restrictions` (type `black_hash`) 1 รายการต่อ OS — md5 ใช้ blocklist ไม่ได้ |
+| ip | **Imperva Cloud WAF** ACL *Blacklisted IPs* | API `/api/prov/v1/sites/configure/acl` — อ่านรายการเดิมก่อนแล้วรวม จึงไม่ทับ IP ที่ SOC ใส่เอง |
+| email, domain | **Proofpoint** | `mode=csv` ไฟล์สำหรับ import (ใช้ได้ทุกรุ่น) หรือ `mode=ptr` ผ่าน list ของ Proofpoint Threat Response |
+
+```bash
+python3 push_blocklists.py -c config.ini                        # dry-run ทุกปลายทาง → push_plan.csv
+python3 push_blocklists.py -c config.ini --target sentinelone   # ทดสอบทีละปลายทาง
+python3 push_blocklists.py -c config.ini --apply                # ส่งจริง
+```
+- ค่าเริ่มต้นทุกปลายทาง `enabled = false` และทุกครั้งเป็น dry-run จนกว่าจะใส่ `--apply`
+- ลบเฉพาะรายการที่สคริปต์เพิ่มเอง (จำไว้ใน `push_state.json` — ห้ามลบไฟล์นี้)
+- safety limit `max_add_per_run` / `max_remove_per_run` และขนาดสูงสุดต่อปลายทาง `max_entries` (เก็บตัวใหม่สุด)
+- API ของแต่ละ vendor ต่างกันตามรุ่นและ license — **ทดสอบกับ site/tenant ทดสอบก่อน**: S1 ตรวจว่ารองรับ SHA256 ใน Blocklist,
+  Imperva ตรวจขีดจำกัดจำนวน IP ใน ACL, Proofpoint ตรวจว่าใช้ PoD/PPS และมี PTR หรือไม่
+- ถ้ามี Splunk SOAR ใช้แอป SentinelOne / Imperva / Proofpoint ของ SOAR แทนสคริปต์นี้ได้ โดยใช้ lookup เดียวกันเป็น input
+
 ## ข้อควรระวังสำหรับธนาคาร (สำคัญกว่าโค้ด)
 - **กัน False positive ก่อน block จริง**: เปิด `enforce_warninglist`, ใช้ `to_ids_only`, มี allowlist (IP ของธนาคารเอง, ITMX/NITMX, SWIFT, BOT, ผู้ให้บริการ cloud/CDN ที่ใช้งาน) และตัด private/reserved IP อัตโนมัติ
 - **เริ่มจาก monitor → block**: ช่วงแรกใช้ saved search อย่างเดียว 2–4 สัปดาห์ ดูปริมาณ hit และ FP แล้วจึงเปิด policy deny
@@ -106,6 +126,7 @@ saved search ที่ให้มา: `TBCERT - IOC Match - Network Traffic / W
 ```
 misp_to_splunk.py      ดึงจาก MISP → กรอง → upsert/ลบใน Splunk KV store
 export_edl.py          อ่าน KV store → ip/domain/url/hash/email .txt + rpz.zone
+push_blocklists.py     ส่ง IOC action=block → SentinelOne / Imperva WAF / Proofpoint
 config.example.ini     ตัวอย่าง config
 allowlist.example.txt  ตัวอย่าง allowlist
 test_normalize.py      unit test ของ logic การกรอง
