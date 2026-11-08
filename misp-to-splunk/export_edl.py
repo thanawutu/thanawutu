@@ -28,7 +28,8 @@ import time
 import requests
 
 LOG = logging.getLogger("export_edl")
-MAX_PER_LIST = {"ip": 150000, "domain": 150000, "url": 100000}  # ขีดจำกัดทั่วไปของ EDL
+# ค่าเริ่มต้นแบบระวัง — ตรวจขีดจำกัด EDL ของรุ่น firewall จริงแล้วปรับด้วย --max ip=... domain=...
+MAX_PER_LIST = {"ip": 150000, "domain": 150000, "url": 100000}
 # ส่งออกเฉพาะชนิดที่เครื่องมือ block รองรับ (ชนิดอื่นเช่น filename, mutex ใช้ detect ใน Splunk)
 BLOCKABLE = {"ip", "domain", "url", "md5", "sha1", "sha256", "sha512", "email"}
 
@@ -83,8 +84,13 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("-c", "--config", default="config.ini")
     ap.add_argument("-o", "--outdir", default="edl_out")
+    ap.add_argument("--max", nargs="*", default=[], metavar="TYPE=N",
+                    help="ขีดจำกัดต่อไฟล์ เช่น --max domain=500000 url=0 (0 = ไม่จำกัด)")
     a = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    for item in a.max:
+        t, _, n = item.partition("=")
+        MAX_PER_LIST[t.strip()] = int(n)
     cfg = load_splunk(a.config)
     os.makedirs(a.outdir, exist_ok=True)
 
