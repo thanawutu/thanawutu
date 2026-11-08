@@ -118,13 +118,13 @@
       <table>
         <search>
           <query>| makeresults
-| eval ip=split(trim($b_sel|s$, ","), ",")
+| eval ip=split("-,".trim($b_sel|s$, ","), ",")
 | mvexpand ip
 | where ip!="" AND ip!="-"
 | stats count BY ip
 | where count%2=1
 | stats count AS _c values(ip) AS ip
-| eval ips=coalesce(mvjoin(ip, ","), ""), n=if(ips="", 0, mvcount(split(ips, ",")))
+| eval ips=coalesce(mvjoin(ip, ","), ""), n=if(ips="", 0, coalesce(mvcount(split(ips, ",")), 0))
 | eval Action=if(n=0, "Click rows below to select IPs", "🔓 UNBLOCK ".n." IP".if(n=1, "", "s")), Clear=if(n=0, "-", "✖ Clear selection")
 | eval selected_ips=if(n=0, "-", replace(ips, ",", ", ")), ticket=$b_tk|s$, description=$b_desc|s$
 | table Action Clear selected_ips ticket description</query>

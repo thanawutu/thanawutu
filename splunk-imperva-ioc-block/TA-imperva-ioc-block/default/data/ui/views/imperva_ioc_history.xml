@@ -112,28 +112,29 @@
 | head 50
 | stats count AS shown_n values(src) AS shown
 | eval SelectAll=if(shown_n>0, "☑ Select all ".shown_n." shown: ".mvjoin(shown, ","), "-")
-| eval ip=split(",".replace(trim($h_sel|s$, ","), "☑ Select all \d+ shown: ", ""), ",")
+| eval ip=split("-,".replace(trim($h_sel|s$, ","), "☑ Select all \d+ shown: ", ""), ",")
 | mvexpand ip
 | eventstats count AS _c BY ip
 | eval ip=if(ip!="" AND ip!="-" AND _c%2=1, ip, null())
 | stats first(SelectAll) AS SelectAll values(ip) AS ip
-| eval ips=coalesce(mvjoin(ip, ","), ""), n=if(ips="", 0, mvcount(split(ips, ",")))
+| eval ips=coalesce(mvjoin(ip, ","), ""), n=if(ips="", 0, coalesce(mvcount(split(ips, ",")), 0))
 | eval nb_ips=ips, nb_n=n
 | eval _add=trim(replace($h_add|s$, "[\s;]+", ","), ","), _add=if(_add="-", "", _add)
-| eval ips=trim(ips.",".replace(_add, ",+", ","), ","), ips=mvjoin(mvdedup(split(ips, ",")), ",")
-| eval ips=if(ips=",", "", ips), n=if(ips="", 0, mvcount(split(ips, ",")))
-| eval ip=if(n=0, "", split(ips, ","))
+| eval ips=trim(coalesce(ips, "").",".replace(_add, ",+", ","), ","), ips=coalesce(mvjoin(mvdedup(split(ips, ",")), ","), "")
+| eval ips=if(ips=",", "", ips), n=if(ips="", 0, coalesce(mvcount(split(ips, ",")), 0))
+| eval ip=if(n=0, "-", split(ips, ","))
 | mvexpand ip
 | impervapolicycheck field=ip
 | lookup imperva_block_registry ip OUTPUT status AS _reg
-| eval chk=case(ip="", null(),
+| eval chk=case(ip="-" OR ip="", null(),
     NOT (match(ip, "^\d{1,3}(\.\d{1,3}){3}(/\d{1,2})?\z") OR (match(ip, ":") AND match(ip, "^[0-9A-Fa-f:.]+(/\d{1,3})?\z"))), ip." is not an IP / CIDR",
     isnotnull(mvfind(_reg, "^blocked\z")), ip." already blocked from Splunk",
     waf_policy_verdict="ALLOWLISTED", ip." is ALLOWED: ".waf_policies,
     waf_policy_verdict="BLOCKED_ELSEWHERE" OR waf_policy_verdict="BLOCKED_HERE", ip." already BLOCKED: ".waf_policies,
     waf_policy_verdict="UNKNOWN", ip." WAF check unavailable",
     true(), null())
-| stats first(ips) AS ips first(n) AS n first(nb_ips) AS nb_ips first(nb_n) AS nb_n values(chk) AS waf_check
+| stats first(SelectAll) AS SelectAll first(ips) AS ips first(n) AS n first(nb_ips) AS nb_ips first(nb_n) AS nb_n values(chk) AS waf_check
+| eval ips=coalesce(ips, ""), n=coalesce(n, 0), nb_ips=coalesce(nb_ips, ""), nb_n=coalesce(nb_n, 0)
 | eval waf_check=coalesce(mvjoin(waf_check, " | "), if(n=0, "-", "✔ none blocked / allowed on WAF"))
 | eval nb_n=coalesce(nb_n, 0), NotBlock=if(nb_n>0, "✖ NOT BLOCK ".nb_n." IP".if(nb_n=1, "", "s").": ".replace(nb_ips, ",", ", "), "-")
 | eval Action=if(n=0, "Click rows below or add IPs manually", "⛔ BLOCK ".n." IP".if(n=1, "", "s")), Clear=if(n=0, "-", "✖ Clear selection")
