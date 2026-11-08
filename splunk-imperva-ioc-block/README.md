@@ -192,10 +192,17 @@ search head of the cluster (KV store `imperva_cache`), as is the WAF-policy cach
 saved search **"Imperva - WAF policy cache refresh"** renews every 5 min. "Blocked on WAF" on the
 Block page comes from the registry; only the Blocked IPs page reads the WAF live.
 
-WAF activity per detected IP (last 24 h, Imperva logs): column **Block / Allow** = requests the WAF
-blocked / let through, **Web Block / Allow** = websites (`dest_name`) on which the IP was blocked /
-let through, e.g. `500 / 18` and `5 / 2` (block number red, allow number green - cell renderer
-`appserver/static/imperva_cells.js`). Classification: macro `imperva_waf_action_class`. Computed every 15 min by the saved search
+WAF activity per detected IP (Imperva logs): column **Block / Allow** = requests the WAF blocked / let
+through, **Web Block / Allow** = websites (`dest_name`) on which the IP was blocked / let through, e.g.
+`500 / 18` and `5 / 2` (block number red, allow number green - cell renderer
+`appserver/static/imperva_cells.js`). Block page: last 24 h (saved search
+"Imperva - WAF activity of detected IPs (24h)", every 15 min, KV `imperva_ip_activity`).
+Older detections page: last 30 days + **WAF last seen** (saved search "... (30d)", hourly, KV
+`imperva_ip_activity_30d`). Classification: macro `imperva_waf_action_class`.
+
+**✖ Not block** (Block / Older detections pages): hides the clicked IPs until they are detected again
+(KV `imperva_ioc_dismissed`, command `impervadismiss`); nothing is sent to the WAF. The list with
+**↩ Restore** is at the bottom of the Older detections page; both actions go to the audit CSV. Computed every 15 min by the saved search
 **"Imperva - WAF activity of detected IPs (24h)"** into KV store `imperva_ip_activity`.
 
 VirusTotal rate limit (HTTP 429): the lookup waits `rate_limit_retry_seconds` (60) and calls

@@ -69,6 +69,26 @@ export = system
 access = read : [ admin, imperva_blocker ], write : [ admin, imperva_blocker ]
 export = system
 
+[commands/impervadismiss]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = system
+
+[collections/imperva_ioc_dismissed]
+access = read : [ admin, imperva_blocker ], write : [ admin, imperva_blocker ]
+export = system
+
+[transforms/imperva_ioc_dismissed]
+access = read : [ admin, imperva_blocker ], write : [ admin, imperva_blocker ]
+export = system
+
+[collections/imperva_ip_activity_30d]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = system
+
+[transforms/imperva_ip_activity_30d]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = system
+
 [collections/imperva_ip_activity]
 access = read : [ admin, imperva_blocker ], write : [ admin ]
 export = system

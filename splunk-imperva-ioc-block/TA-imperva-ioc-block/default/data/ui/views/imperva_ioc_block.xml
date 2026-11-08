@@ -165,6 +165,7 @@
 | eval ip=if(ip!="" AND ip!="-" AND _c%2=1, ip, null())
 | stats first(SelectAll) AS SelectAll values(ip) AS ip
 | eval ips=coalesce(mvjoin(ip, ","), ""), n=if(ips="", 0, mvcount(split(ips, ",")))
+| eval nb_ips=ips, nb_n=n
 | eval _add=trim(replace($d_add|s$, "[\s;]+", ","), ","), _add=if(_add="-", "", _add)
 | eval ips=trim(ips.",".replace(_add, ",+", ","), ","), ips=mvjoin(mvdedup(split(ips, ",")), ",")
 | eval ips=if(ips=",", "", ips), n=if(ips="", 0, mvcount(split(ips, ",")))
@@ -179,18 +180,22 @@
     waf_policy_verdict="BLOCKED_ELSEWHERE" OR waf_policy_verdict="BLOCKED_HERE", ip." already BLOCKED: ".waf_policies,
     waf_policy_verdict="UNKNOWN", ip." WAF check unavailable",
     true(), null())
-| stats first(ips) AS ips first(n) AS n values(chk) AS waf_check
+| stats first(ips) AS ips first(n) AS n first(nb_ips) AS nb_ips first(nb_n) AS nb_n values(chk) AS waf_check
 | eval waf_check=coalesce(mvjoin(waf_check, " | "), if(n=0, "-", "✔ none blocked / allowed on WAF"))
+| eval nb_n=coalesce(nb_n, 0), NotBlock=if(nb_n>0, "✖ NOT BLOCK ".nb_n." IP".if(nb_n=1, "", "s").": ".replace(nb_ips, ",", ", "), "-")
 | eval Action=if(n=0, "Click rows below or add IPs manually", "⛔ BLOCK ".n." IP".if(n=1, "", "s")), Clear=if(n=0, "-", "✖ Clear selection")
 | eval selected_ips=if(n=0, "-", replace(ips, ",", ", ")), ticket=$d_tk|s$, description=$d_desc|s$
 | eval ticket=if(ticket="-" AND match($d_q|s$, "(?i)^\s*ITHM"), upper(trim($d_q|s$)), ticket)
-| table Action Clear SelectAll selected_ips waf_check ticket description</query>
+| table Action NotBlock Clear SelectAll selected_ips waf_check ticket description</query>
         </search>
         <option name="count">1</option>
         <option name="wrap">true</option>
         <option name="drilldown">cell</option>
         <format type="color" field="Action">
           <colorPalette type="expression">if(like(value, "⛔%"), "#DC4E41", "#3C444D")</colorPalette>
+        </format>
+        <format type="color" field="NotBlock">
+          <colorPalette type="expression">if(like(value, "✖%"), "#5C6773", "#3C444D")</colorPalette>
         </format>
         <format type="color" field="SelectAll">
           <colorPalette type="expression">if(like(value, "☑%"), "#1F6F8B", "#3C444D")</colorPalette>
@@ -208,6 +213,14 @@
             <set token="form.d_tk">-</set>
             <set token="form.d_desc">-</set>
             <set token="form.d_add">-</set>
+          </condition>
+          <condition field="NotBlock">
+            <set token="d_nb_exec">$click.value2$</set>
+            <set token="d_nb_tk">$row.ticket$</set>
+            <set token="d_nb_desc">$row.description$</set>
+            <set token="d_sel">,</set>
+            <set token="form.d_tk">-</set>
+            <set token="form.d_desc">-</set>
           </condition>
           <condition field="SelectAll">
             <!-- replaces the selection with every IP that matches the search box -->
@@ -242,13 +255,43 @@
         <option name="wrap">true</option>
         <option name="drilldown">cell</option>
         <format type="color" field="status">
-          <colorPalette type="map">{"blocked":#DC4E41,"unblocked":#53A051,"no_change":#708794,"rejected":#AF575A,"error":#B6488E}</colorPalette>
+          <colorPalette type="map">{"blocked":#DC4E41,"unblocked":#53A051,"no_change":#708794,"rejected":#AF575A,"error":#B6488E,"dismissed":#5C6773,"restored":#5A9BD5}</colorPalette>
         </format>
         <format type="color" field="verified">
           <colorPalette type="map">{"yes":#53A051,"no":#DC4E41,"unknown":#F8BE34}</colorPalette>
         </format>
         <drilldown>
           <unset token="d_exec_ips"></unset>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel depends="$d_nb_exec$">
+      <title>Not block result – hidden until detected again, nothing sent to the WAF (click a row to close)</title>
+      <table>
+        <search>
+          <query>| impervadismiss action=add ip=$d_nb_exec|s$ incident_no=$d_nb_tk|s$ description=$d_nb_desc|s$
+| `imperva_audit_write`
+| table time ip action status ticket description detail</query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+          <done>
+            <set token="d_refresh">$job.sid$</set>
+          </done>
+        </search>
+        <option name="count">50</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">cell</option>
+        <format type="color" field="status">
+          <colorPalette type="map">{"blocked":#DC4E41,"unblocked":#53A051,"no_change":#708794,"rejected":#AF575A,"error":#B6488E,"dismissed":#5C6773,"restored":#5A9BD5}</colorPalette>
+        </format>
+        <format type="color" field="verified">
+          <colorPalette type="map">{"yes":#53A051,"no":#DC4E41,"unknown":#F8BE34}</colorPalette>
+        </format>
+        <drilldown>
+          <unset token="d_nb_exec"></unset>
         </drilldown>
       </table>
     </panel>

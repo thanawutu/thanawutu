@@ -1,6 +1,6 @@
 /*
  * Imperva IOC Block - table cell renderer for the detections table (id="det_table").
- * "Block / Allow" (WAF requests, last 24 h) and "Web Block / Allow" (websites):
+ * "Block / Allow (24h|30d)" (WAF requests) and "Web Block / Allow (24h|30d)" (websites):
  * the block number is shown red, the allow number green, e.g. 500 / 18.
  */
 require([
@@ -8,11 +8,14 @@ require([
     "splunkjs/mvc/tableview",
     "splunkjs/mvc/simplexml/ready!"
 ], function (mvc, TableView) {
-    var FIELDS = { "Block / Allow": true, "Web Block / Allow": true };
+    function isBlockAllow(field) {
+        field = String(field || "");
+        return field.indexOf("Block / Allow") === 0 || field.indexOf("Web Block / Allow") === 0;
+    }
 
     var BlockAllowRenderer = TableView.BaseCellRenderer.extend({
         canRender: function (cell) {
-            return FIELDS.hasOwnProperty(cell.field);
+            return isBlockAllow(cell.field);
         },
         render: function ($td, cell) {
             var parts = String(cell.value === null || cell.value === undefined ? "" : cell.value).split("/");
