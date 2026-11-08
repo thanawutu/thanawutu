@@ -113,6 +113,30 @@ python3 push_blocklists.py -c config.ini --apply                # ส่งจ�
   Imperva ตรวจขีดจำกัดจำนวน IP ใน ACL, Proofpoint ตรวจว่าใช้ PoD/PPS และมี PTR หรือไม่
 - ถ้ามี Splunk SOAR ใช้แอป SentinelOne / Imperva / Proofpoint ของ SOAR แทนสคริปต์นี้ได้ โดยใช้ lookup เดียวกันเป็น input
 
+## ตรวจความครบถ้วน MISP เทียบ Splunk (reconcile_misp_splunk.py)
+
+ดึง attribute จาก MISP API โดยตรง แล้วเทียบกับ `sourcetype=misp_events` ด้วย `attr_uuid`
+
+```bash
+python3 reconcile_misp_splunk.py -c config.ini                       # 30 วัน ทุกระดับ
+python3 reconcile_misp_splunk.py -c config.ini --window 7d --levels 1 --to-ids true
+```
+
+| ผลลัพธ์ | ความหมาย |
+|---|---|
+| `missing_in_splunk.csv` | มีใน MISP แต่ไม่มีใน Splunk |
+| `missing_by_event.csv` | event ที่ขาด เรียงตามจำนวนที่ขาด |
+| `extra_in_splunk.csv` | มีใน Splunk แต่ไม่พบใน MISP ช่วงเดียวกัน (ถูกลบ/ปลด to_ids/อยู่นอกช่วง) |
+| `mismatched.csv` | uuid ตรงแต่ value/type/to_ids ต่าง หรือ MISP แก้ไขหลัง Splunk นำเข้า (`stale`) |
+| `summary.json` | สรุป รวม `missing_by_threat_level`, `missing_by_to_ids`, `splunk_duplicate_factor` |
+
+อ่านผล
+- ขาดเฉพาะ medium/low หรือ `to_ids=false` → ตัวดึงข้อมูลเดิมกรองไว้ (ตั้งใจ) ถ้าต้องการให้ตรง ใช้ `--levels 1 --to-ids true`
+- ขาดทั้ง event → ตัวดึงข้อมูลพลาด event นั้น (เช่น ดึงตาม publish time แต่ event ถูก publish ซ้ำ)
+- ขาดบางส่วนของ event → มักเป็น attribute ใน object หรือ attribute ที่เพิ่มหลัง publish
+- `splunk_duplicate_factor` สูง → ตัวดึงข้อมูล index ซ้ำทุกรอบ (เปลืองไลเซนส์ Splunk)
+- ตั้ง `hec_url` ใน `[splunk]` แล้วเปิด alert `TBCERT - MISP Reconcile - Missing IOC` เพื่อแจ้งเตือนรายวัน; exit code 2 เมื่อขาดเกิน `max_missing_pct`
+
 ## ข้อควรระวังสำหรับธนาคาร (สำคัญกว่าโค้ด)
 - **กัน False positive ก่อน block จริง**: เปิด `enforce_warninglist`, ใช้ `to_ids_only`, มี allowlist (IP ของธนาคารเอง, ITMX/NITMX, SWIFT, BOT, ผู้ให้บริการ cloud/CDN ที่ใช้งาน) และตัด private/reserved IP อัตโนมัติ
 - **เริ่มจาก monitor → block**: ช่วงแรกใช้ saved search อย่างเดียว 2–4 สัปดาห์ ดูปริมาณ hit และ FP แล้วจึงเปิด policy deny
@@ -127,6 +151,7 @@ python3 push_blocklists.py -c config.ini --apply                # ส่งจ�
 misp_to_splunk.py      ดึงจาก MISP → กรอง → upsert/ลบใน Splunk KV store
 export_edl.py          อ่าน KV store → ip/domain/url/hash/email .txt + rpz.zone
 push_blocklists.py     ส่ง IOC action=block → SentinelOne / Imperva WAF / Proofpoint
+reconcile_misp_splunk.py  เทียบ MISP API กับ sourcetype=misp_events ว่าครบหรือไม่
 config.example.ini     ตัวอย่าง config
 allowlist.example.txt  ตัวอย่าง allowlist
 test_normalize.py      unit test ของ logic การกรอง
