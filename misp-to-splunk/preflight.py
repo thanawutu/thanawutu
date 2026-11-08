@@ -54,6 +54,10 @@ def record(check: str, status: str, msg: str, hint: str = "") -> None:
 
 def explain(e: Exception, what: str) -> str:
     if isinstance(e, requests.exceptions.SSLError):
+        if "self signed certificate in certificate chain" in str(e) or "self-signed certificate in certificate chain" in str(e):
+            return (f"proxy ขององค์กรถอด TLS (SSL inspection) แล้วเซ็น cert ใหม่ด้วย CA ภายใน — "
+                    f"ขอยกเว้น SSL inspection ให้โฮสต์ MISP (แนะนำ) หรือใส่ path CA ของ proxy ใน verify_tls ของ [{what}] "
+                    "และใน MISP CA path ของ MISP42Splunk (อย่าปิด verify)")
         return f"TLS ไม่ผ่าน — ใส่ path CA bundle ขององค์กรใน verify_tls ของ [{what}] (อย่าปิด verify)"
     if isinstance(e, requests.exceptions.ProxyError):
         return "proxy ปฏิเสธ — ตรวจค่า proxy / ขออนุญาต proxy ให้ไปยังปลายทางนี้"

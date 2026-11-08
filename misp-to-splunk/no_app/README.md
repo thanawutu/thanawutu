@@ -36,6 +36,7 @@
 | proxy/web filter ขององค์กรบล็อก หรือต้อง login | tab **Proxy** ใน MISP42Splunk (host, port, user/password) · ขอทีม network อนุญาตโฮสต์ MISP ของ TB-CERT ไม่ถอด TLS |
 | MISP ไม่รับ API key → redirect ไปหน้า login | key ผิด/หมดอายุ · auth key ใน MISP ตั้ง *Allowed IPs* ไว้ไม่รวม IP ขาออก · proxy ตัด header `Authorization` |
 | WAF ฝั่ง TB-CERT ไม่อนุญาต IP ต้นทาง | แจ้ง TB-CERT ให้ whitelist IP ขาออกของธนาคาร (IP ของ proxy ถ้าออกผ่าน proxy) |
+| proxy ทำ SSL inspection (curl: `self signed certificate in certificate chain`) | proxy ถอด TLS แล้วเซ็นใหม่ด้วย CA ภายใน — ขอ **ยกเว้น SSL inspection** ให้โฮสต์ MISP (แนะนำ) หรือใส่ CA ของ proxy ใน *MISP CA path* แล้วเปิด *Check MISP certificate* |
 
 ทดสอบจากเครื่อง Splunk (search head) ให้เห็นหน้าที่ได้จริง — แทน `<proxy>` และใส่ key ในตัวแปร `MISP_KEY` ก่อน (ไม่พิมพ์ key ลงคำสั่งตรง ๆ):
 ```bash
