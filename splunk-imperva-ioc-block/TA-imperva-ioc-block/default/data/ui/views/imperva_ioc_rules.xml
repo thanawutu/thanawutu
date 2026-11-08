@@ -26,6 +26,8 @@
       <title>Add a rule</title>
       <input type="dropdown" token="r_es" searchWhenChanged="true">
         <label>Pick an ES correlation search (findings, 30 days)</label>
+        <choice value="-">– or type a pattern on the right –</choice>
+        <default>-</default>
         <fieldForLabel>label</fieldForLabel>
         <fieldForValue>search_name</fieldForValue>
         <search>
@@ -33,12 +35,9 @@
           <earliest>-30d@d</earliest>
           <latest>now</latest>
         </search>
-        <change>
-          <set token="form.r_pat">$value$</set>
-        </change>
       </input>
       <input type="text" token="r_pat" searchWhenChanged="true">
-        <label>… or type a name / pattern (* = wildcard)</label>
+        <label>… or type a name / pattern (* = wildcard, used if not "-")</label>
         <default>-</default>
       </input>
       <input type="dropdown" token="r_mode" searchWhenChanged="true">
@@ -54,7 +53,7 @@
       <table>
         <search>
           <query>| makeresults
-| eval pattern=trim($r_pat|s$), mode=$r_mode|s$, note=$r_note|s$
+| eval pattern=trim(if(trim($r_pat|s$)!="-" AND trim($r_pat|s$)!="", $r_pat|s$, $r_es|s$)), mode=$r_mode|s$, note=$r_note|s$
 | eval Add=if(pattern="-" OR pattern="", "Pick or type a rule name first", "＋ ADD ".upper(mode)." RULE")
 | table Add pattern mode note</query>
           <earliest>-1m</earliest>
@@ -73,6 +72,7 @@
             <set token="r_exec_key">-</set>
             <set token="r_op">add</set>
             <set token="form.r_pat">-</set>
+            <set token="form.r_es">-</set>
             <set token="form.r_note">-</set>
           </condition>
           <condition></condition>
