@@ -7,3 +7,4 @@ push_state.json
 push_plan.csv
 proofpoint_out/
 reconcile_out/
+preflight.json

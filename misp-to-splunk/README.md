@@ -38,6 +38,31 @@
 3. **Splunk token** ของ service account ที่มี role เขียน KV store ของ app `TA-tbcert-misp` (role `tbcert_ti_writer` ใน `metadata/default.meta`)
 4. ข้อตกลงเรื่อง **TLP** — ใช้ IOC TLP:AMBER ภายในได้ แต่ห้ามส่งต่อนอกองค์กร (เช่น อัปโหลดขึ้น cloud ของ vendor ที่แชร์ข้อมูลข้ามลูกค้า)
 
+## ทดสอบก่อนติดตั้ง (preflight.py) — ทำก่อนทุกครั้ง
+
+ทดสอบการเชื่อมต่อและความพร้อมทั้งหมดโดยไม่ต้องติดตั้งแอป จะได้ไม่ต้องติดตั้งซ้ำระหว่างแก้ปัญหา
+ทุกการทดสอบอ่านอย่างเดียว (ยกเว้น `--allow-write` ที่ส่ง HEC test event 1 รายการ)
+
+```bash
+python3 preflight.py -c config.ini
+```
+```bash
+python3 preflight.py -c config.ini --only misp,splunk,spl --json preflight.json
+```
+
+| กลุ่ม | ตรวจอะไร |
+|---|---|
+| misp | เชื่อมต่อ, API key, user/org/role ที่ key ผูกอยู่, ค้น attribute ได้ |
+| splunk | REST API, เวอร์ชัน 8.0+, roles/capabilities, KV store, index ปลายทาง, แอปที่ติดตั้งอยู่ |
+| data | `sourcetype=misp_events` มีข้อมูลล่าสุดและมี field ที่แอปต้องใช้ (รวม `event_tags{}`) |
+| spl | **รัน SPL ของแอปกับข้อมูลจริงโดยไม่ต้องติดตั้ง** — ขยาย macro จาก `macros.conf` ในเครื่อง ตัด lookup ของแอปออกชั่วคราว ไม่เขียนข้อมูล แสดงจำนวน block/detect/revoked |
+| hec | HEC health และ token |
+| sentinelone / imperva / proofpoint | อ่าน Blocklist / สถานะ site และ ACL / list ของ PTR หรือสิทธิ์เขียนโฟลเดอร์ CSV (เฉพาะที่ `enabled = true`) |
+
+แต่ละรายการเป็น PASS / WARN / FAIL / SKIP พร้อมคำแนะนำ (เช่น TLS ต้องใส่ CA bundle, 403 = สิทธิ์หรือ IP ไม่ได้รับอนุญาต)
+exit code 1 เมื่อมี FAIL — ติดตั้งแอปเมื่อไม่มี FAIL แล้ว
+ถ้าแก้ `macros.conf` ในเครื่อง ให้รัน `--only spl` ซ้ำได้ทันทีโดยไม่ต้องติดตั้งแอปใหม่
+
 ## ติดตั้ง
 
 ```bash
@@ -158,6 +183,7 @@ misp_to_splunk.py      ดึงจาก MISP → กรอง → upsert/ล�
 export_edl.py          อ่าน KV store → ip/domain/url/hash/email .txt + rpz.zone
 push_blocklists.py     ส่ง IOC action=block → SentinelOne / Imperva WAF / Proofpoint
 reconcile_misp_splunk.py  เทียบ MISP API กับ sourcetype=misp_events ว่าครบหรือไม่
+preflight.py           ทดสอบการเชื่อมต่อ MISP / Splunk / HEC / S1 / Imperva / Proofpoint และ SPL ก่อนติดตั้ง
 config.example.ini     ตัวอย่าง config
 allowlist.example.txt  ตัวอย่าง allowlist
 test_normalize.py      unit test ของ logic การกรอง
