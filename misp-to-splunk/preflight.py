@@ -87,8 +87,42 @@ def secret(sec, key: str, env: str) -> str:
     return os.environ.get(env) or sec.get(key, "").strip()
 
 
-def call(check, what, method, url, **kw):
-    """คืน response หรือ None (บันทึก FAIL ให้แล้ว)"""
+def diagnose_non_json(r) -> tuple[str, str]:
+    """ปลายทางตอบ 2xx แต่ไม่ใช่ JSON — เดาว่าเป็นหน้าอะไร จาก URL สุดท้าย, header และ <title>"""
+    body = (r.text or "")[:4000]
+    m = re.search(r"<title[^>]*>(.*?)</title>", body, re.I | re.S)
+    title = re.sub(r"\s+", " ", m.group(1)).strip()[:80] if m else ""
+    hdrs = {k.lower(): v for k, v in r.headers.items()}
+    ctype = hdrs.get("content-type", "?")
+    hops = " → ".join(str(h.status_code) for h in r.history)
+    final = r.url
+    snippet = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", body)).strip()[:120]
+    info = (f"HTTP {r.status_code} แต่ไม่ใช่ JSON · content-type {ctype}"
+            + (f" · redirect {hops} → {final}" if hops else "")
+            + (f" · title \"{title}\"" if title else "")
+            + (f" · \"{snippet}\"" if snippet and not title else "")
+            + (" · body ว่าง" if not body.strip() else ""))
+    low = (title + " " + snippet + " " + final).lower()
+    proxyish = any(h in hdrs for h in ("via", "proxy-agent", "x-squid-error", "x-cache")) or any(
+        w in low for w in ("proxy", "websense", "forcepoint", "zscaler", "bluecoat", "fortiguard", "web filter",
+                           "blocked", "access denied", "category", "policy", "squid", "palo alto", "url filtering"))
+    if "/users/login" in final.lower() or ("login" in low and "misp" in low):
+        hint = ("MISP ส่งไปหน้า login = ไม่รับ API key: key ผิด/หมดอายุ/ถูกปิด, key จำกัด IP (Allowed IPs ของ auth key) "
+                "ไม่รวม IP ขาออกของ Splunk/proxy, หรือ proxy ตัด header Authorization ทิ้ง")
+    elif proxyish:
+        hint = ("หน้าจาก proxy/web filter ขององค์กร: ขอให้ทีม network อนุญาต HTTPS ไปยังโฮสต์ MISP ของ TB-CERT "
+                "(ไม่ถอด TLS และไม่ตัด header Authorization) หรือ proxy ต้องการ username/password ใน tab Proxy")
+    elif any(w in low for w in ("request rejected", "attention required", "forbidden", "not acceptable", "waf", "cloudflare", "incapsula")):
+        hint = "WAF/หน้ากั้นของฝั่ง TB-CERT ปฏิเสธ: แจ้ง TB-CERT ให้ whitelist IP ขาออกของธนาคาร (IP ของ proxy ถ้าออกผ่าน proxy)"
+    elif not body.strip():
+        hint = "ตอบว่าง: URL อาจไม่ใช่ base URL ของ MISP หรือ proxy ตัดการเชื่อมต่อ"
+    else:
+        hint = "ตรวจว่า URL เป็น base URL ของ MISP (เช่น https://host ไม่ต่อท้าย path) และลองเปิดด้วย curl จากเครื่อง Splunk"
+    return info, hint
+
+
+def call(check, what, method, url, expect_json=False, **kw):
+    """คืน response หรือ None (บันทึก FAIL ให้แล้ว); expect_json=True ตรวจว่าเป็น JSON และเก็บไว้ที่ r.data"""
     kw.setdefault("timeout", 30)
     try:
         r = requests.request(method, url, **kw)
@@ -96,8 +130,18 @@ def call(check, what, method, url, **kw):
         record(check, "FAIL", type(e).__name__, explain(e, what))
         return None
     if r.status_code >= 400:
-        record(check, "FAIL", f"HTTP {r.status_code}", http_hint(r.status_code, what))
+        extra = ""
+        if "json" not in r.headers.get("content-type", "") and r.text.strip():
+            extra = " · " + diagnose_non_json(r)[0].split(" · ", 1)[-1]
+        record(check, "FAIL", f"HTTP {r.status_code}{extra}", http_hint(r.status_code, what))
         return None
+    if expect_json:
+        try:
+            r.data = r.json()
+        except ValueError:
+            info, hint = diagnose_non_json(r)
+            record(check, "FAIL", info, hint)
+            return None
     return r
 
 
@@ -151,23 +195,33 @@ def check_misp(cp) -> None:
     kw = {"headers": {"Authorization": key, "Accept": "application/json", "Content-Type": "application/json"},
           "verify": verify_of(m.get("verify_tls")), "proxies": {"https": proxy, "http": proxy} if proxy else None}
     t = time.time()
-    r = call("misp.connect", "misp", "GET", f"{url}/servers/getVersion", **kw)
+    r = call("misp.connect", "misp", "GET", f"{url}/servers/getVersion", expect_json=True, **kw)
     if not r:
+        if proxy:
+            print("           ลองใหม่แบบไม่ผ่าน proxy เพื่อเปรียบเทียบ …")
+            kw2 = dict(kw, proxies={"https": "", "http": ""})
+            r2 = call("misp.connect.direct", "misp", "GET", f"{url}/servers/getVersion", expect_json=True, **kw2)
+            if r2:
+                record("misp.connect.direct", "PASS", f"ไม่ผ่าน proxy ได้ MISP {r2.data.get('version', '?')}",
+                       "ปัญหาอยู่ที่ proxy — ตรวจ proxy ใน MISP42Splunk หรือขอ bypass proxy ไปยังโฮสต์ MISP")
+        else:
+            print("           ↳ ถ้า Splunk ออกเน็ตผ่าน proxy ให้ใส่ [misp] proxy เท่ากับใน MISP42Splunk แล้วรันใหม่ (จะทดสอบทั้งผ่าน/ไม่ผ่าน proxy)")
         return
-    ver = r.json().get("version", "?")
+    ver = r.data.get("version", "?")
     record("misp.connect", "PASS", f"MISP {ver} ({(time.time() - t) * 1000:.0f} ms)")
-    r = call("misp.user", "misp", "GET", f"{url}/users/view/me", **kw)
+    r = call("misp.user", "misp", "GET", f"{url}/users/view/me", expect_json=True, **kw)
     if r:
-        b = r.json()
+        b = r.data
         role = (b.get("Role") or {})
         record("misp.user", "PASS", f"{(b.get('User') or {}).get('email', '?')} · org {(b.get('Organisation') or {}).get('name', '?')}"
                f" · role {role.get('name', '?')}")
         if not role.get("perm_auth", True):
             record("misp.role", "WARN", "role ไม่มี perm_auth", "ขอ role ที่ใช้ API ได้จาก TB-CERT")
-    body = {"returnFormat": "json", "limit": 1, "page": 1, "publish_timestamp": "30d", "to_ids": True}
-    r = call("misp.search", "misp", "POST", f"{url}/attributes/restSearch", data=json.dumps(body), timeout=120, **kw)
+    body = {"returnFormat": "json", "limit": 1, "page": 1, "last": "30d", "to_ids": True}
+    r = call("misp.search", "misp", "POST", f"{url}/attributes/restSearch", data=json.dumps(body), timeout=120,
+             expect_json=True, **kw)
     if r:
-        n = len(r.json().get("response", {}).get("Attribute", []))
+        n = len(r.data.get("response", {}).get("Attribute", []))
         record("misp.search", "PASS" if n else "WARN",
                "ค้น attribute ได้" if n else "ค้นได้แต่ไม่พบ attribute ใน 30 วัน",
                "key อาจเห็นเฉพาะบาง event — ตรวจ sharing group / สิทธิ์ org กับ TB-CERT")
@@ -376,6 +430,16 @@ def check_misp42splunk(cp) -> None:
                    "เวอร์ชันก่อน 5.0 ไม่มี publish_timestamp= / timestamp= ใน mispgetioc — ใช้ last= หรือ mispfetch (คู่มือใช้ last= แล้ว)")
     except requests.RequestException:
         pass
+    logs = splunk_search(cp, "misp42splunk.log",
+                         'search index=_internal source=*misp42splunk* ("failed" OR "error" OR "MC5*") '
+                         '| rex field=_raw "error=(?<err>[^\\n]{0,160})" | stats count latest(_time) as last by err | sort - last | head 3',
+                         earliest="-24h")
+    if logs:
+        for row in logs:
+            record("misp42splunk.log", "WARN", f"log 24 ชม.: {row.get('err') or '?'} ({row.get('count')} ครั้ง)",
+                   "Expecting value = MISP ตอบเป็น HTML ไม่ใช่ JSON (proxy/login/WAF) — ดู misp.connect ของ preflight หรือทดสอบ curl จากเครื่อง Splunk")
+    elif logs is not None:
+        record("misp42splunk.log", "PASS", "ไม่พบ error ใน misp42splunk log 24 ชม.")
     rows = splunk_search(cp, "misp42splunk.mispgetioc",
                          f"| mispgetioc misp_instance={name} last=1d to_ids=t getuuid=t geteventtag=t pipesplit=f expand_object=t limit=5 page=1 "
                          "| stats count dc(misp_attribute_uuid) as uuids",

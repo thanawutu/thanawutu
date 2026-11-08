@@ -23,6 +23,34 @@
 
 ---
 
+## 0. ตรวจการเชื่อมต่อ Splunk → MISP ก่อน
+
+```spl
+| mispgetioc misp_instance=MISP_TBCERT last=1d to_ids=t getuuid=t limit=10
+```
+ถ้าได้ event เดียวข้อความ `[MC503] ... POST request failed error=Expecting value: line 1 column ...`
+แปลว่า **MISP ตอบกลับเป็นหน้า HTML ไม่ใช่ JSON** (คำสั่งถูกต้องแล้ว ปัญหาอยู่ที่เส้นทางเชื่อมต่อ) สาเหตุที่พบบ่อย:
+
+| สาเหตุ | วิธีตรวจ / แก้ |
+|---|---|
+| proxy/web filter ขององค์กรบล็อก หรือต้อง login | tab **Proxy** ใน MISP42Splunk (host, port, user/password) · ขอทีม network อนุญาตโฮสต์ MISP ของ TB-CERT ไม่ถอด TLS |
+| MISP ไม่รับ API key → redirect ไปหน้า login | key ผิด/หมดอายุ · auth key ใน MISP ตั้ง *Allowed IPs* ไว้ไม่รวม IP ขาออก · proxy ตัด header `Authorization` |
+| WAF ฝั่ง TB-CERT ไม่อนุญาต IP ต้นทาง | แจ้ง TB-CERT ให้ whitelist IP ขาออกของธนาคาร (IP ของ proxy ถ้าออกผ่าน proxy) |
+
+ทดสอบจากเครื่อง Splunk (search head) ให้เห็นหน้าที่ได้จริง — แทน `<proxy>` และใส่ key ในตัวแปร `MISP_KEY` ก่อน (ไม่พิมพ์ key ลงคำสั่งตรง ๆ):
+```bash
+curl -sS -x http://<proxy>:<port> -H "Authorization: $MISP_KEY" -H "Accept: application/json" https://<misp-host>/servers/getVersion -w "\nHTTP %{http_code} -> %{url_effective}\n" | head -c 600
+```
+```bash
+curl -sS --noproxy '*' -H "Authorization: $MISP_KEY" -H "Accept: application/json" https://<misp-host>/servers/getVersion -w "\nHTTP %{http_code} -> %{url_effective}\n" | head -c 600
+```
+ผลที่ถูกต้องคือ `{"version":"2.4.x"...}` · หรือรัน `preflight.py --only misp,misp42splunk` บนเครื่องเดียวกัน (ตั้ง `[misp] proxy` ให้ตรง) จะบอกว่าเป็นหน้าแบบไหน
+
+ดู log ของ MISP42Splunk (ตั้ง Logging เป็น DEBUG ใน tab Logging ก่อน):
+```spl
+index=_internal source=*misp42splunk* earliest=-1h | table _time _raw
+```
+
 ## 1. Lookup (Settings → Lookups)
 
 **Lookup table files → New Lookup Table File** อัปโหลด 3 ไฟล์จาก `generated/lookups/` (แก้ค่าให้เป็นของธนาคารก่อน)
