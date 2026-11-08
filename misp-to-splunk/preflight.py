@@ -75,7 +75,10 @@ def http_hint(code: int, what: str) -> str:
             403: f"{what}: key/token ไม่มีสิทธิ์ (role/permission) หรือ IP ต้นทางไม่ได้รับอนุญาต",
             404: f"{what}: ไม่พบ endpoint/object — ตรวจ URL หรือ id",
             405: f"{what}: method ไม่รองรับ — อาจเป็นเวอร์ชัน API ต่างกัน",
-            429: f"{what}: ถูกจำกัดอัตราการเรียก (rate limit)"}.get(code, f"{what}: HTTP {code}")
+            429: f"{what}: ถูกจำกัดอัตราการเรียก (rate limit)",
+            502: f"{what}: proxy ต่อปลายทางไม่ได้ (bad gateway) — ตรวจ DNS/route จาก proxy ไปปลายทาง",
+            504: (f"{what}: proxy ต่อปลายทางไม่ได้ (timeout) — ปลายทางอาจ whitelist เฉพาะ IP ที่ลงทะเบียน (IP ขาออกของ proxy ยังไม่อยู่ในรายการ), "
+                  "หรือโฮสต์อยู่บนเครือข่ายเฉพาะ/VPN ที่ proxy ไปไม่ถึง (ตรวจว่า DNS ได้ IP ภายในหรือไม่ แล้วให้ต่อตรงไม่ผ่าน proxy)")}.get(code, f"{what}: HTTP {code}")
 
 
 def verify_of(v: str):
@@ -111,7 +114,10 @@ def diagnose_non_json(r) -> tuple[str, str]:
         w in low for w in ("proxy", "websense", "forcepoint", "zscaler", "bluecoat", "fortiguard", "web filter",
                            "blocked", "access denied", "category", "policy", "squid", "palo alto", "url filtering",
                            "fortinet", "fortiproxy", "fortigate", "web filter violation", "authentication required"))
-    if "/users/login" in final.lower() or ("login" in low and "misp" in low):
+    if "gateway timeout" in low or "did not respond to the proxy" in low or "bad gateway" in low:
+        hint = ("proxy ต่อไปยัง MISP ไม่ได้ (504/502) — ไม่ใช่ปัญหา API key: ให้ TB-CERT whitelist IP ขาออกของ proxy, "
+                "หรือถ้า DNS ของโฮสต์ MISP เป็น IP ภายใน/ผ่านลิงก์เฉพาะ ให้ปิด proxy สำหรับ instance นี้และเปิด route ตรง")
+    elif "/users/login" in final.lower() or ("login" in low and "misp" in low):
         hint = ("MISP ส่งไปหน้า login = ไม่รับ API key: key ผิด/หมดอายุ/ถูกปิด, key จำกัด IP (Allowed IPs ของ auth key) "
                 "ไม่รวม IP ขาออกของ Splunk/proxy, หรือ proxy ตัด header Authorization ทิ้ง")
     elif proxyish:
