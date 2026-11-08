@@ -25,12 +25,12 @@ index=main sourcetype=misp_events earliest=-30d
 
 ถ้าเจอ error `macro 'tbcert_misp_src' cannot be found` แปลว่ายังไม่ได้ติดตั้งแอปบน Search Head นั้น
 
-**ทางที่ 1 — หน้าเว็บ:** Apps → Manage Apps → Install app from file → เลือก `dist/TA-tbcert-misp-1.5.0.tgz` → restart
+**ทางที่ 1 — หน้าเว็บ:** Apps → Manage Apps → Install app from file → เลือก `dist/TA-tbcert-misp-1.5.1.tgz` → restart
 (Splunk Cloud ต้องผ่าน AppInspect / private app vetting)
 
 **ทางที่ 2 — บนเครื่อง Search Head:**
 ```bash
-tar xzf TA-tbcert-misp-1.5.0.tgz -C $SPLUNK_HOME/etc/apps/
+tar xzf TA-tbcert-misp-1.5.1.tgz -C $SPLUNK_HOME/etc/apps/
 ```
 ```bash
 $SPLUNK_HOME/bin/splunk restart
@@ -123,31 +123,32 @@ IOC ที่ใส่แบบนี้ **ไม่ผ่านตัวกร�
    - Check certificate: เปิด และใส่ CA path ถ้าใช้ CA ภายใน / Proxy: ตั้งใน tab Proxy ถ้าออกเน็ตผ่าน proxy
 3. ทดสอบ
    ```spl
-   | mispgetioc misp_instance=MISP_TBCERT last=1d to_ids=t limit=20
+   | mispgetioc misp_instance=MISP_TBCERT last=1d to_ids=t getuuid=t limit=20
    ```
 4. **ปิด** saved search ของวิธี A แล้ว **เปิด** `TBCERT - MISP42Splunk Pull - Incremental` และ `... - Rebuild Nightly`
 
 ### ทุกชนิด / ความรุนแรง / Event ID ด้วย mispgetioc
 
 ```spl
-| mispgetioc misp_instance=MISP_TBCERT last=7d to_ids=t pipesplit=f expand_object=t
+| mispgetioc misp_instance=MISP_TBCERT last=7d to_ids=t getuuid=t geteventtag=t pipesplit=f expand_object=t limit=0
 | `tbcert_misp_normalize`
 ```
 ไม่ใส่ `type=` = ได้ทุกชนิด (หรือใช้ `type=`tbcert_misp_types`` ซึ่งรวม IOC หลักไว้แล้ว)
 
 ```spl
-| mispgetioc misp_instance=MISP_TBCERT last=7d threat_level_id=1 to_ids=t pipesplit=f expand_object=t
+| mispgetioc misp_instance=MISP_TBCERT last=7d threat_level_id=1 to_ids=t getuuid=t geteventtag=t pipesplit=f expand_object=t limit=0   (5.x เท่านั้น)
 ```
 `threat_level_id=` รับได้ค่าเดียว ถ้าต้องการหลายระดับใช้ `json_request` (ใส่ช่วงเวลาไว้ใน JSON เพราะใช้คู่กับ `last=` ไม่ได้)
 ```spl
-| mispgetioc misp_instance=MISP_TBCERT json_request="{\"publish_timestamp\":\"7d\",\"threat_level_id\":[\"1\",\"2\"]}" to_ids=t pipesplit=f expand_object=t
+| mispgetioc misp_instance=MISP_TBCERT json_request="{\"returnFormat\":\"json\",\"publish_timestamp\":\"7d\",\"threat_level_id\":[\"1\",\"2\"],\"to_ids\":true}" getuuid=t geteventtag=t pipesplit=f expand_object=t limit=0
 ```
 ระบุ event (ID หรือ UUID คั่นด้วย `,`)
 ```spl
-| mispgetioc misp_instance=MISP_TBCERT eventid="558822,2b4aa4c6-896e-4a3f-bb9f-5b76ebc05b9d" to_ids=t pipesplit=f expand_object=t
+| mispgetioc misp_instance=MISP_TBCERT eventid="558822,2b4aa4c6-896e-4a3f-bb9f-5b76ebc05b9d" to_ids=t getuuid=t geteventtag=t pipesplit=f expand_object=t limit=0
 ```
 
-> ต้องใช้ `pipesplit=f expand_object=t` กับ macro `tbcert_misp_normalize` เสมอ — เพราะถ้า `pipesplit=t` แอปจะรวม attribute แบบ `domain|ip` หรือ object ไว้แถวเดียว และ `misp_value` จะเหลือค่าเดียว
+> ต้องใช้ `getuuid=t geteventtag=t pipesplit=f expand_object=t limit=0` กับ macro `tbcert_misp_normalize` เสมอ
+> (4.x: ไม่มี `getuuid=t` = ไม่มี uuid, ไม่มี `limit=0` = ได้แค่ 1,000 รายการแรก; `threat_level_id=` มีเฉพาะ 5.x) — เพราะถ้า `pipesplit=t` แอปจะรวม attribute แบบ `domain|ip` หรือ object ไว้แถวเดียว และ `misp_value` จะเหลือค่าเดียว
 
 ### mispfetch — หลาย threat level / หลาย event ID โดยไม่ต้อง escape JSON
 

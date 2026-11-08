@@ -14,7 +14,10 @@
 
 > **ตรวจเวอร์ชัน MISP42Splunk ก่อน** — `| rest /services/apps/local/misp42splunk splunk_server=local | table title version`
 > `mispgetioc` ต้องมีอาร์กิวเมนต์ช่วงเวลา/ event อย่างใดอย่างหนึ่งเสมอ: `last=` / `date=` / `eventid=` / `json_request=`
-> (5.x เพิ่ม `publish_timestamp=` และ `timestamp=`) เช่น `| mispgetioc misp_instance=MISP_TBCERT last=1d to_ids=t`
+> (5.x เพิ่ม `publish_timestamp=` และ `timestamp=`) เช่น `| mispgetioc misp_instance=MISP_TBCERT last=1d to_ids=t getuuid=t limit=0`
+>
+> **MISP42Splunk 4.x:** ไม่มี `threat_level_id` (ใช้ `json_request` หรือ mispfetch), ต้องใส่ `getuuid=t` เพื่อให้มี attribute uuid,
+> `geteventtag=t` เพื่อให้มี tag ของ event และ `limit=0` เพื่อดึงครบ (ค่าเริ่มต้น limit 1000 + page 1 = ได้แค่ 1,000 รายการแรก)
 
 ทุกขั้นตอนทำใน app context **misp42splunk** (เลือกแอปจากเมนู Apps ก่อน) และตั้ง Permissions เป็น *This app only* หรือ *All apps* ตามที่ต้องการ
 
@@ -127,14 +130,15 @@ IOC ที่ถูกลบ/ปลด to_ids/เข้า allowlist จะไ�
 
 **TBCERT Recon 1 - MISP** · ทุกวัน 07:05
 ```spl
-| mispgetioc misp_instance=MISP_TBCERT last=30d threat_level_id=1 to_ids=t pipesplit=f expand_object=t
+| mispgetioc misp_instance=MISP_TBCERT json_request="{\"returnFormat\":\"json\",\"last\":\"30d\",\"threat_level_id\":\"1\",\"to_ids\":true,\"published\":true}" getuuid=t geteventtag=t pipesplit=f expand_object=t limit=0
 | rename misp_attribute_uuid AS attr_uuid
 | table attr_uuid misp_event_id misp_event_info misp_type misp_value misp_to_ids misp_timestamp
 | outputlookup tbcert_recon_misp.csv
 ```
 
-`last=30d` = event ที่ publish ใน 30 วัน (ใช้ได้ทุกเวอร์ชัน — `publish_timestamp=` / `timestamp=` มีเฉพาะ MISP42Splunk 5.x)
-ถ้าเวอร์ชันที่ติดตั้งไม่รู้จัก `threat_level_id` ใช้ mispfetch แทน:
+MISP42Splunk 4.x ไม่มีอาร์กิวเมนต์ `threat_level_id` จึงใส่เงื่อนไขทั้งหมดใน `json_request` (body ของ MISP API โดยตรง)
+`getuuid=t` จำเป็น (ไม่ใส่จะไม่มี `misp_attribute_uuid`) และ `limit=0` เพื่อดึงครบทุกรายการ (ค่าเริ่มต้นได้แค่ 1,000)
+หรือใช้ mispfetch แทน:
 ```spl
 | makeresults
 | eval misp_instance="MISP_TBCERT", misp_restsearch="attributes", publish_timestamp="30d", threat_level_id="1", to_ids="true", published="true"

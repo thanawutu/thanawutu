@@ -377,10 +377,14 @@ def check_misp42splunk(cp) -> None:
     except requests.RequestException:
         pass
     rows = splunk_search(cp, "misp42splunk.mispgetioc",
-                         f"| mispgetioc misp_instance={name} last=1d to_ids=t limit=5 page=1 | stats count",
+                         f"| mispgetioc misp_instance={name} last=1d to_ids=t getuuid=t geteventtag=t pipesplit=f expand_object=t limit=5 page=1 "
+                         "| stats count dc(misp_attribute_uuid) as uuids",
                          earliest="-1h", timeout=300)
     if rows is not None:
         n = int(rows[0].get("count", 0)) if rows else 0
+        if n and rows and int(rows[0].get("uuids", 0)) == 0:
+            record("misp42splunk.uuid", "FAIL", "ผลของ mispgetioc ไม่มี misp_attribute_uuid",
+                   "ชื่อ field ในเวอร์ชันนี้อาจต่างจาก 5.x — รัน | mispgetioc ... getuuid=t limit=10 | fieldsummary แล้วปรับ macro")
         record("misp42splunk.mispgetioc", "PASS" if n else "WARN",
                f"mispgetioc จาก Splunk ได้ {n} รายการ (ตัวอย่างสูงสุด 5)" if n else "mispgetioc รันได้แต่ไม่มี IOC ใน 1 วัน",
                "ลอง last=7d หรือตรวจสิทธิ์ของ API key")
