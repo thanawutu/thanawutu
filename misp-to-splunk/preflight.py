@@ -367,6 +367,15 @@ def check_misp42splunk(cp) -> None:
                                "ถ้าสคริปต์รันบนเครื่องที่ต้องผ่าน proxy เดียวกัน ให้ตั้ง [misp] proxy")
             except requests.RequestException:
                 pass
+    try:
+        vr = requests.get(f"{url}/services/apps/local/{app}", params=q, timeout=30, **kw)
+        if vr.ok:
+            ver = vr.json()["entry"][0]["content"].get("version", "?")
+            major = int(re.match(r"(\d+)", ver).group(1)) if re.match(r"(\d+)", ver) else 0
+            record("misp42splunk.version", "PASS" if major >= 5 else "WARN", f"MISP42Splunk v{ver}",
+                   "เวอร์ชันก่อน 5.0 ไม่มี publish_timestamp= / timestamp= ใน mispgetioc — ใช้ last= หรือ mispfetch (คู่มือใช้ last= แล้ว)")
+    except requests.RequestException:
+        pass
     rows = splunk_search(cp, "misp42splunk.mispgetioc",
                          f"| mispgetioc misp_instance={name} last=1d to_ids=t limit=5 page=1 | stats count",
                          earliest="-1h", timeout=300)

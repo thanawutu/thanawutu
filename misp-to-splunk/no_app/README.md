@@ -12,6 +12,10 @@
 | ส่ง sighting กลับ TB-CERT | alert action ของ MISP42Splunk |
 | ส่งไป SentinelOne / Imperva / Proofpoint | **MISP42Splunk ทำไม่ได้** (คุยกับ MISP เท่านั้น) → `push_blocklists.py` ตั้ง `ioc_source = csv` หรือ Splunk SOAR |
 
+> **ตรวจเวอร์ชัน MISP42Splunk ก่อน** — `| rest /services/apps/local/misp42splunk splunk_server=local | table title version`
+> `mispgetioc` ต้องมีอาร์กิวเมนต์ช่วงเวลา/ event อย่างใดอย่างหนึ่งเสมอ: `last=` / `date=` / `eventid=` / `json_request=`
+> (5.x เพิ่ม `publish_timestamp=` และ `timestamp=`) เช่น `| mispgetioc misp_instance=MISP_TBCERT last=1d to_ids=t`
+
 ทุกขั้นตอนทำใน app context **misp42splunk** (เลือกแอปจากเมนู Apps ก่อน) และตั้ง Permissions เป็น *This app only* หรือ *All apps* ตามที่ต้องการ
 
 ---
@@ -123,7 +127,20 @@ IOC ที่ถูกลบ/ปลด to_ids/เข้า allowlist จะไ�
 
 **TBCERT Recon 1 - MISP** · ทุกวัน 07:05
 ```spl
-| mispgetioc misp_instance=MISP_TBCERT publish_timestamp=30d threat_level_id=1 to_ids=t pipesplit=f expand_object=t include_sightings=f geteventtag=f
+| mispgetioc misp_instance=MISP_TBCERT last=30d threat_level_id=1 to_ids=t pipesplit=f expand_object=t
+| rename misp_attribute_uuid AS attr_uuid
+| table attr_uuid misp_event_id misp_event_info misp_type misp_value misp_to_ids misp_timestamp
+| outputlookup tbcert_recon_misp.csv
+```
+
+`last=30d` = event ที่ publish ใน 30 วัน (ใช้ได้ทุกเวอร์ชัน — `publish_timestamp=` / `timestamp=` มีเฉพาะ MISP42Splunk 5.x)
+ถ้าเวอร์ชันที่ติดตั้งไม่รู้จัก `threat_level_id` ใช้ mispfetch แทน:
+```spl
+| makeresults
+| eval misp_instance="MISP_TBCERT", misp_restsearch="attributes", publish_timestamp="30d", threat_level_id="1", to_ids="true", published="true"
+| tojson publish_timestamp threat_level_id to_ids published output_field=misp_http_body
+| mispfetch pipesplit=f expand_object=t limit=1000
+| where isnotnull(misp_attribute_uuid)
 | rename misp_attribute_uuid AS attr_uuid
 | table attr_uuid misp_event_id misp_event_info misp_type misp_value misp_to_ids misp_timestamp
 | outputlookup tbcert_recon_misp.csv
