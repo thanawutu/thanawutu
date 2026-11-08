@@ -1,0 +1,6 @@
+[]
+access = read : [ * ], write : [ admin, sc_admin ]
+export = system
+
+[collections/tbcert_misp_ioc]
+access = read : [ * ], write : [ admin, sc_admin, tbcert_ti_writer ]

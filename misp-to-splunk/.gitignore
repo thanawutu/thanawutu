@@ -1,0 +1,5 @@
+config.ini
+allowlist.txt
+edl_out/
+__pycache__/
+*.log

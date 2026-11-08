@@ -1,0 +1,13 @@
+# ค่าในไฟล์นี้จะไม่ถูกนำไป block แม้ MISP จะแชร์มา (1 บรรทัด/ค่า, รองรับ CIDR สำหรับ IP)
+# ตัวอย่าง — แก้เป็นของธนาคาร
+10.0.0.0/8
+172.16.0.0/12
+192.168.0.0/16
+127.0.0.0/8
+# โดเมนของธนาคาร (จะ match sub-domain ด้วย)
+examplebank.co.th
+# บริการสำคัญที่ห้าม block
+bot.or.th
+itmx.co.th
+microsoft.com
+windowsupdate.com
