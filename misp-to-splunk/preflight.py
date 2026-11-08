@@ -58,6 +58,9 @@ def explain(e: Exception, what: str) -> str:
             return (f"proxy ขององค์กรถอด TLS (SSL inspection) แล้วเซ็น cert ใหม่ด้วย CA ภายใน — "
                     f"ขอยกเว้น SSL inspection ให้โฮสต์ MISP (แนะนำ) หรือใส่ path CA ของ proxy ใน verify_tls ของ [{what}] "
                     "และใน MISP CA path ของ MISP42Splunk (อย่าปิด verify)")
+        if "unable to get local issuer certificate" in str(e):
+            return (f"ไม่มี root CA ที่ออก certificate ของปลายทางในเครื่อง (เช่น Thailand National Root CA - G1 ที่ไม่อยู่ใน bundle มาตรฐาน) — "
+                    f"ทำไฟล์ PEM รวม root + intermediate แล้วใส่ path ใน verify_tls ของ [{what}] และ MISP CA path ของ MISP42Splunk")
         return f"TLS ไม่ผ่าน — ใส่ path CA bundle ขององค์กรใน verify_tls ของ [{what}] (อย่าปิด verify)"
     if isinstance(e, requests.exceptions.ProxyError):
         return "proxy ปฏิเสธ — ตรวจค่า proxy / ขออนุญาต proxy ให้ไปยังปลายทางนี้"
