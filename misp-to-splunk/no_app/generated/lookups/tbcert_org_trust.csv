@@ -1,0 +1,4 @@
+org,trust,note
+TB-CERT,block,ตัวอย่าง - ศูนย์ประสานภาคธนาคาร (ใส่ชื่อ org ให้ตรงกับใน MISP)
+NCSA_Intel,block,ตัวอย่าง - สกมช.
+ThaiCERT,block,ตัวอย่าง

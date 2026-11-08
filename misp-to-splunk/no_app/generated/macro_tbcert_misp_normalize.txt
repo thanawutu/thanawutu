@@ -1,0 +1,40 @@
+eval misp_type=lower(misp_type), now_ts=now() 
+| eval comp=case(
+    in(misp_type,"ip-dst","ip-src","ip-dst|port","ip-src|port"), "ip:0:0",
+    in(misp_type,"domain","hostname","hostname|port"), "domain:0:0",
+    misp_type="domain|ip", mvappend("domain:0:0","ip:1:1"),
+    misp_type="url", "url:0:0",
+    in(misp_type,"md5","sha1","sha256","sha512"), misp_type.":0:0",
+    in(misp_type,"filename|md5","filename|sha1","filename|sha256","filename|sha512"), mvindex(split(misp_type,"|"),1).":1:0",
+    misp_type="email-src", "email:0:0",
+    true(), misp_type.":-1:0") 
+| mvexpand comp 
+| eval c=split(comp,":"), indicator_type=mvindex(c,0), vidx=tonumber(mvindex(c,1)), kidx=mvindex(c,2) 
+| eval indicator=trim(if(vidx>=0 AND like(misp_type,"%|%"), mvindex(split(misp_value,"|"),vidx), misp_value)) 
+| eval indicator=if(in(indicator_type,"domain","email","md5","sha1","sha256","sha512"), replace(lower(indicator),"\.$",""), indicator) 
+| where isnotnull(indicator) AND indicator!="" 
+| eval _key=misp_attribute_uuid.":".kidx 
+| eval tags=misp_tag 
+| eval tlp=lower(mvindex(mvfilter(match(tags,"(?i)^tlp:")),0)) 
+| eval excluded=if(isnotnull(mvfind(tags, "(?i)^(tlp:red|false-positive|workflow:state=.incomplete.)$")),1,0) 
+| eval tlp_ok=if(isnull(tlp) OR match(tlp, "^(tlp:clear|tlp:white|tlp:green|tlp:amber|tlp:amber\+strict)$"),1,0) 
+| eval private=if(indicator_type="ip" AND (cidrmatch("10.0.0.0/8",indicator) OR cidrmatch("172.16.0.0/12",indicator) OR cidrmatch("192.168.0.0/16",indicator) OR cidrmatch("127.0.0.0/8",indicator) OR cidrmatch("169.254.0.0/16",indicator) OR cidrmatch("100.64.0.0/10",indicator) OR cidrmatch("0.0.0.0/8",indicator) OR cidrmatch("224.0.0.0/3",indicator)),1,0) 
+| lookup tbcert_allowlist_ip cidr AS indicator OUTPUT note AS allow_ip 
+| eval host=case(indicator_type="domain", indicator, indicator_type="url", replace(lower(indicator),"^(?:[a-z][a-z0-9+.-]*://)?([^/:?#]+).*$","\1"), indicator_type="email", mvindex(split(indicator,"@"),-1)) 
+| eval labels=split(host,"."), nl=mvcount(labels), li=mvrange(0,nl) 
+| eval suffixes=mvmap(li, mvjoin(mvindex(labels, li, nl-1), ".")) 
+| lookup tbcert_allowlist_domain domain AS suffixes OUTPUT note AS allow_dom 
+| eval last_seen=coalesce(strptime(substr(misp_last_seen,1,19),"%Y-%m-%dT%H:%M:%S"), tonumber(misp_timestamp), now_ts) 
+| eval first_seen=strptime(substr(misp_first_seen,1,19),"%Y-%m-%dT%H:%M:%S") 
+| eval ttl_days=case(indicator_type="ip",30, indicator_type="domain",90, indicator_type="url",90, indicator_type="email",90, in(indicator_type,"md5","sha1","sha256","sha512"),1825, true(),90) 
+| eval expires=round(last_seen + ttl_days*86400) 
+| eval is_deleted=if(in(lower(tostring(misp_deleted)),"true","1"),1,0), is_ids=if(in(lower(tostring(misp_to_ids)),"true","1"),1,0) 
+| eval status=case(is_deleted=1,"revoked:deleted", is_ids=0,"revoked:to_ids_off", excluded=1,"revoked:excluded_tag", tlp_ok=0,"revoked:tlp", private=1 OR isnotnull(allow_ip) OR isnotnull(allow_dom),"revoked:allowlist", expires<now_ts,"revoked:expired", true(),"active") 
+| eval expires=if(status="active", expires, now_ts-1) 
+| eval severity=case(threat_level_id=1,"high", threat_level_id=2,"medium", threat_level_id=3,"low", threat_level_id=4,"undefined") 
+| lookup tbcert_org_trust org OUTPUT trust 
+| eval trust=lower(coalesce(trust, "recent")) 
+| eval action=case(status!="active","none", trust="detect","detect", trust="block","block", in(indicator_type,"md5","sha1","sha256","sha512"),"block", in(indicator_type,"ip","domain","url","email") AND now_ts-last_seen <= 14*86400,"block", true(),"detect") 
+| eval updated=now_ts, source="TB-CERT MISP", category=misp_category, event_id=misp_event_id, event_uuid=misp_event_uuid, event_info=misp_event_info, attribute_uuid=misp_attribute_uuid, comment=misp_comment 
+| dedup _key 
+| table _key indicator indicator_type misp_type category event_id event_uuid event_info attribute_uuid comment tags tlp threat_level_id severity org trust source first_seen last_seen updated expires status action

@@ -28,6 +28,8 @@
 | **Splunk ES Threat Intelligence Framework** | มี Enterprise Security | ES จะ match กับ data model อัตโนมัติ (Threat Activity) | ต้องแปลงรูปแบบให้ตรง (STIX/TAXII หรือ CSV) |
 | **สคริปต์ในโฟลเดอร์นี้** (REST → KV Store) | ต้องการควบคุม filter/allowlist/อายุ IOC และ export ไป block | ควบคุมได้ทุกขั้น, ลบ IOC ที่ถูกเพิกถอนอัตโนมัติ, ใช้แค่ Python + requests | ต้องดูแลสคริปต์เอง |
 
+> **ไม่อยากติดตั้งแอปใหม่ → ใช้ MISP42Splunk ที่มีอยู่ + knowledge object ใน UI: [no_app/README.md](no_app/README.md)**
+>
 > **ถ้ามีข้อมูล MISP อยู่ใน Splunk แล้ว หรืออยากใช้ MISP42Splunk แทนสคริปต์ → ดู [SPLUNK_NATIVE.md](SPLUNK_NATIVE.md)** (รองรับกรองตามความรุนแรงและ Event ID)
 >
 > สามารถใช้ร่วมกันได้ เช่น ใช้สคริปต์นี้ทำ blocklist และใช้ MISP42Splunk สำหรับ analyst ค้นหา/ส่ง sighting กลับไป TB-CERT
@@ -184,6 +186,8 @@ misp_to_splunk.py      ดึงจาก MISP → กรอง → upsert/ล�
 export_edl.py          อ่าน KV store → ip/domain/url/hash/email .txt + rpz.zone
 push_blocklists.py     ส่ง IOC action=block → SentinelOne / Imperva WAF / Proofpoint
 reconcile_misp_splunk.py  เทียบ MISP API กับ sourcetype=misp_events ว่าครบหรือไม่
+build_no_app.py        สร้างไฟล์สำหรับโหมดไม่ติดตั้งแอป (macro/lookup) จากไฟล์ของแอป → no_app/generated/
+no_app/                คู่มือ + dashboard สำหรับใช้ MISP42Splunk โดยไม่ติดตั้งแอปใหม่
 preflight.py           ทดสอบการเชื่อมต่อ MISP / Splunk / HEC / S1 / Imperva / Proofpoint และ SPL ก่อนติดตั้ง
 config.example.ini     ตัวอย่าง config
 allowlist.example.txt  ตัวอย่าง allowlist

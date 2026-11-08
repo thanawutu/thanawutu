@@ -1,0 +1,158 @@
+<form version="1.1" theme="light">
+  <label>TB-CERT MISP ↔ Splunk Reconcile (MISP42Splunk)</label>
+  <description>เทียบ IOC จาก MISP (mispgetioc) กับ sourcetype=misp_events — ข้อมูลจาก saved search "TBCERT Recon 1/2/3" (ไม่ต้องติดตั้งแอปเพิ่ม)</description>
+
+  <fieldset submitButton="false" autoRun="true">
+    <input type="dropdown" token="state" searchWhenChanged="true">
+      <label>สถานะ</label>
+      <choice value="missing">ขาดใน Splunk</choice>
+      <choice value="stale">ค่าเก่า (MISP แก้ไขภายหลัง)</choice>
+      <choice value="value">ค่าไม่ตรง</choice>
+      <choice value="*">ทั้งหมด</choice>
+      <default>missing</default>
+    </input>
+    <input type="text" token="ev" searchWhenChanged="true">
+      <label>Event ID (คลิกในตารางได้)</label>
+      <default>*</default>
+    </input>
+  </fieldset>
+
+  <search id="recon">
+    <query>| inputlookup tbcert_recon_misp.csv
+| lookup tbcert_recon_splunk.csv attr_uuid OUTPUT copies s_value s_type s_ts
+| eval state=case(isnull(copies),"missing", misp_timestamp&gt;s_ts,"stale", lower(misp_value)!=lower(s_value),"value", true(),"ok")</query>
+    <earliest>-1m</earliest>
+    <latest>now</latest>
+  </search>
+
+  <row>
+    <panel>
+      <single>
+        <title>IOC ใน MISP</title>
+        <search base="recon"><query>stats count</query></search>
+        <option name="numberPrecision">0</option>
+        <option name="underLabel">ตามเงื่อนไขของ TBCERT Recon 1</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>ขาดใน Splunk</title>
+        <search base="recon"><query>stats count(eval(state="missing")) as m count as t | eval pct=round(m/t*100,2) | fields pct</query></search>
+        <option name="numberPrecision">0.00</option>
+        <option name="unit">%</option>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
+        <option name="rangeValues">[0.5,1]</option>
+        <option name="useColors">1</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>จำนวนที่ขาด</title>
+        <search base="recon"><query>where state="missing" | stats count</query></search>
+        <option name="numberPrecision">0</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>ค่าเก่า / ค่าไม่ตรง</title>
+        <search base="recon"><query>where state="stale" OR state="value" | stats count</query></search>
+        <option name="numberPrecision">0</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>เกินใน Splunk</title>
+        <search>
+          <query>| inputlookup tbcert_recon_splunk.csv
+| lookup tbcert_recon_misp.csv attr_uuid OUTPUT misp_type
+| where isnull(misp_type)
+| stats count</query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="numberPrecision">0</option>
+        <option name="underLabel">ไม่พบใน MISP ช่วงเดียวกัน</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>ข้อมูลซ้ำใน Splunk</title>
+        <search>
+          <query>| inputlookup tbcert_recon_splunk.csv | stats sum(copies) as e count as u | eval dup=round(e/u,1) | fields dup</query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="numberPrecision">0.0</option>
+        <option name="unit">x</option>
+      </single>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>แนวโน้ม % ที่ขาด (จาก TBCERT Recon 3)</title>
+      <chart>
+        <search>
+          <query>| inputlookup tbcert_recon_history.csv
+| eval _time=run_at
+| timechart span=1d latest(missing_pct) as "% ขาด" latest(stale) as "ค่าเก่า"</query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.axisY2.enabled">1</option>
+        <option name="charting.chart.overlayFields">"ค่าเก่า"</option>
+        <option name="charting.legend.placement">bottom</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>ขาดตามชนิด</title>
+      <chart>
+        <search base="recon"><query>where state="missing" | top limit=10 misp_type showperc=f</query></search>
+        <option name="charting.chart">bar</option>
+        <option name="charting.legend.placement">none</option>
+        <option name="charting.chart.showDataLabels">all</option>
+      </chart>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Event ที่มีปัญหา (คลิกเพื่อดู IOC)</title>
+      <table>
+        <search base="recon">
+          <query>stats count as total count(eval(state="missing")) as missing count(eval(state="stale" OR state="value")) as changed latest(misp_event_info) as event_info by misp_event_id
+| where missing&gt;0 OR changed&gt;0
+| eval pct=round(missing/total*100,1), status=case(missing=total,"ขาดทั้ง event", missing&gt;0,"ขาดบางส่วน", true(),"ค่าเปลี่ยน")
+| sort - missing
+| table misp_event_id event_info status missing changed total pct
+| rename misp_event_id as "Event ID", event_info as "Event", status as "สถานะ", missing as "ขาด", changed as "ค่าเปลี่ยน", total as "ทั้งหมด", pct as "% ขาด"</query>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">row</option>
+        <format type="color" field="สถานะ">
+          <colorPalette type="map">{"ขาดทั้ง event":#DC4E41,"ขาดบางส่วน":#F8BE34,"ค่าเปลี่ยน":#A2CC3E}</colorPalette>
+        </format>
+        <drilldown>
+          <set token="form.ev">$row.Event ID$</set>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>รายการ IOC</title>
+      <table>
+        <search base="recon">
+          <query>search state=$state$ misp_event_id=$ev$
+| eval misp_modified=strftime(misp_timestamp,"%Y-%m-%d %H:%M"), splunk_modified=strftime(s_ts,"%Y-%m-%d %H:%M")
+| table misp_event_id misp_event_info state misp_type misp_value s_value misp_to_ids misp_modified splunk_modified attr_uuid</query>
+        </search>
+        <option name="count">20</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+</form>

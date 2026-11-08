@@ -60,6 +60,31 @@ class Plan:
     dropped_over_cap: int = 0
 
 
+def fetch_block_iocs_csv(scfg, csv_name: str, app: str) -> list[Ioc]:
+    """โหมดไม่ติดตั้งแอป: อ่าน CSV lookup (สร้างโดย saved search ในแอป MISP42Splunk) ผ่าน REST search"""
+    spl = (f"| inputlookup {csv_name} | where expires > now() AND (isnull(action) OR action!=\"detect\") "
+           "| where NOT like(status, \"revoked%\") | sort 0 - last_seen "
+           "| table indicator indicator_type event_id event_info expires")
+    r = requests.post(f"{scfg.splunk_url}/servicesNS/nobody/{app}/search/jobs/export", timeout=600, stream=True,
+                      verify=scfg.splunk_verify, headers={"Authorization": f"Bearer {scfg.splunk_token}"},
+                      data={"search": spl, "output_mode": "json", "earliest_time": "-1m", "latest_time": "now"})
+    r.raise_for_status()
+    out = []
+    for line in r.iter_lines():
+        if not line:
+            continue
+        obj = json.loads(line)
+        for m in obj.get("messages", []) or []:
+            if m.get("type") in ("ERROR", "FATAL"):
+                raise RuntimeError(f"Splunk: {m.get('text')}")
+        row = obj.get("result")
+        if row and not obj.get("preview"):
+            out.append(Ioc(str(row.get("indicator", "")).strip(), row.get("indicator_type", ""),
+                           str(row.get("event_id", "")), row.get("event_info", ""),
+                           int(float(row.get("expires", 0) or 0))))
+    return [i for i in out if i.value]
+
+
 def fetch_block_iocs(scfg) -> list[Ioc]:
     base = (f"{scfg.splunk_url}/servicesNS/nobody/{scfg.splunk_app}"
             f"/storage/collections/data/{scfg.collection}")
@@ -322,7 +347,13 @@ def main() -> None:
     if not adapters:
         sys.exit("ไม่มีปลายทางที่เปิดใช้ — ตั้ง enabled = true ใน [sentinelone] / [imperva] / [proofpoint]")
 
-    iocs = fetch_block_iocs(load_splunk(a.config))
+    scfg = load_splunk(a.config)
+    src = cp.get("splunk", "ioc_source", fallback="kv").strip().lower()
+    if src == "csv":
+        iocs = fetch_block_iocs_csv(scfg, cp.get("splunk", "ioc_csv", fallback="tbcert_misp_ioc.csv").strip(),
+                                    cp.get("splunk", "ioc_csv_app", fallback="misp42splunk").strip())
+    else:
+        iocs = fetch_block_iocs(scfg)
     LOG.info("IOC action=block จาก Splunk: %d", len(iocs))
 
     plans = []
