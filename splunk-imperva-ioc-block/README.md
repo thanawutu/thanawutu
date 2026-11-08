@@ -200,6 +200,10 @@ through, **Web Block / Allow** = websites (`dest_name`) on which the IP was bloc
 Older detections page: last 30 days + **WAF last seen** (saved search "... (30d)", hourly, KV
 `imperva_ip_activity_30d`). Classification: macro `imperva_waf_action_class`.
 
+IP of a finding: macro `imperva_ioc_ip` - `src` / `src_ip`, `threat_match_value`, and for risk-based
+rules (e.g. "Threat - ... Threat Hunting (IP) ...") `ip` / `threat_object`. Add a field there if a new
+correlation search stores the IP elsewhere.
+
 **✖ Not block** (Block / Older detections pages): hides the clicked IPs until they are detected again
 (KV `imperva_ioc_dismissed`, command `impervadismiss`); nothing is sent to the WAF. The list with
 **↩ Restore** is at the bottom of the Older detections page; both actions go to the audit CSV. Computed every 15 min by the saved search
