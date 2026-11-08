@@ -137,6 +137,12 @@ python3 reconcile_misp_splunk.py -c config.ini --window 7d --levels 1 --to-ids t
 - `splunk_duplicate_factor` สูง → ตัวดึงข้อมูล index ซ้ำทุกรอบ (เปลืองไลเซนส์ Splunk)
 - ตั้ง `hec_url` ใน `[splunk]` แล้วเปิด alert `TBCERT - MISP Reconcile - Missing IOC` เพื่อแจ้งเตือนรายวัน; exit code 2 เมื่อขาดเกิน `max_missing_pct`
 
+**Dashboard:** แอป `TA-tbcert-misp` มีหน้า *TB-CERT MISP ↔ Splunk Reconcile* (เป็นหน้าแรกของแอป)
+- ต้องตั้ง `hec_url` / `hec_token` ใน `[splunk]` — สคริปต์ส่ง `sourcetype=tbcert:misp:reconcile` (สรุป) และ
+  `tbcert:misp:reconcile:item` (รายละเอียด kind=missing/mismatched/extra/event, สูงสุด `hec_max_items` ต่อรอบ)
+- index ปลายทางตั้งที่ `hec_index` (ค่าเริ่มต้น `threat_intel` ต้องสร้าง index นี้ก่อน) และ macro `tbcert_reconcile_index` ต้องตรงกัน
+- เลือกรอบที่ตรวจ, threat level, คลิก event เพื่อดู IOC ที่ขาดของ event นั้น
+
 ## ข้อควรระวังสำหรับธนาคาร (สำคัญกว่าโค้ด)
 - **กัน False positive ก่อน block จริง**: เปิด `enforce_warninglist`, ใช้ `to_ids_only`, มี allowlist (IP ของธนาคารเอง, ITMX/NITMX, SWIFT, BOT, ผู้ให้บริการ cloud/CDN ที่ใช้งาน) และตัด private/reserved IP อัตโนมัติ
 - **เริ่มจาก monitor → block**: ช่วงแรกใช้ saved search อย่างเดียว 2–4 สัปดาห์ ดูปริมาณ hit และ FP แล้วจึงเปิด policy deny

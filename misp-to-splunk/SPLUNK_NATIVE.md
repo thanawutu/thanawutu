@@ -25,12 +25,12 @@ index=main sourcetype=misp_events earliest=-30d
 
 ถ้าเจอ error `macro 'tbcert_misp_src' cannot be found` แปลว่ายังไม่ได้ติดตั้งแอปบน Search Head นั้น
 
-**ทางที่ 1 — หน้าเว็บ:** Apps → Manage Apps → Install app from file → เลือก `dist/TA-tbcert-misp-1.3.0.tgz` → restart
+**ทางที่ 1 — หน้าเว็บ:** Apps → Manage Apps → Install app from file → เลือก `dist/TA-tbcert-misp-1.4.0.tgz` → restart
 (Splunk Cloud ต้องผ่าน AppInspect / private app vetting)
 
 **ทางที่ 2 — บนเครื่อง Search Head:**
 ```bash
-tar xzf TA-tbcert-misp-1.3.0.tgz -C $SPLUNK_HOME/etc/apps/
+tar xzf TA-tbcert-misp-1.4.0.tgz -C $SPLUNK_HOME/etc/apps/
 ```
 ```bash
 $SPLUNK_HOME/bin/splunk restart

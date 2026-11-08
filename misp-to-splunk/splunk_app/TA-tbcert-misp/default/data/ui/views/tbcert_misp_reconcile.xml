@@ -1,0 +1,248 @@
+<form version="1.1" theme="light">
+  <label>TB-CERT MISP ↔ Splunk Reconcile</label>
+  <description>ตรวจว่า IOC ใน MISP ถูกนำเข้า sourcetype=misp_events ครบหรือไม่ (ข้อมูลจาก reconcile_misp_splunk.py)</description>
+
+  <fieldset submitButton="false" autoRun="true">
+    <input type="time" token="trend">
+      <label>ช่วงเวลา (กราฟแนวโน้ม)</label>
+      <default>
+        <earliest>-30d@d</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="dropdown" token="run" searchWhenChanged="true">
+      <label>รอบที่ตรวจ</label>
+      <fieldForLabel>label</fieldForLabel>
+      <fieldForValue>run_at</fieldForValue>
+      <selectFirstChoice>true</selectFirstChoice>
+      <search>
+        <query>`tbcert_reconcile_index` sourcetype="tbcert:misp:reconcile"
+| stats latest(window) as window by run_at
+| sort - run_at
+| eval label=strftime(run_at, "%Y-%m-%d %H:%M")." (".window.")"</query>
+        <earliest>-90d</earliest>
+        <latest>now</latest>
+      </search>
+    </input>
+    <input type="dropdown" token="level" searchWhenChanged="true">
+      <label>Threat level</label>
+      <choice value="*">ทั้งหมด</choice>
+      <choice value="1">High</choice>
+      <choice value="2">Medium</choice>
+      <choice value="3">Low</choice>
+      <choice value="4">Undefined</choice>
+      <default>*</default>
+    </input>
+    <input type="text" token="ev" searchWhenChanged="true">
+      <label>Event ID (คลิกในตารางได้)</label>
+      <default>*</default>
+    </input>
+  </fieldset>
+
+  <search id="summary">
+    <query>`tbcert_reconcile_index` sourcetype="tbcert:misp:reconcile" run_at=$run$
+| head 1
+| table misp_attributes splunk_unique_attr_uuid splunk_events splunk_duplicate_factor matched missing_in_splunk missing_pct extra_in_splunk mismatched events_fully_missing events_partially_missing window threat_levels{} to_ids</query>
+    <earliest>-90d</earliest>
+    <latest>now</latest>
+  </search>
+
+  <row>
+    <panel>
+      <single>
+        <title>IOC ใน MISP</title>
+        <search base="summary"><query>fields misp_attributes</query></search>
+        <option name="numberPrecision">0</option>
+        <option name="underLabel">attribute ในช่วงที่ตรวจ</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>ขาดใน Splunk</title>
+        <search base="summary"><query>fields missing_pct</query></search>
+        <option name="numberPrecision">0.00</option>
+        <option name="unit">%</option>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
+        <option name="rangeValues">[0.5,1]</option>
+        <option name="useColors">1</option>
+        <option name="underLabel">ไม่ถึง 0.5% = ปกติ, เกิน 1% = แจ้งเตือน</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>จำนวนที่ขาด</title>
+        <search base="summary"><query>fields missing_in_splunk</query></search>
+        <option name="numberPrecision">0</option>
+        <option name="underLabel">attribute</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>ค่าไม่ตรง / ค่าเก่า</title>
+        <search base="summary"><query>fields mismatched</query></search>
+        <option name="numberPrecision">0</option>
+        <option name="underLabel">uuid ตรงแต่ค่าต่าง</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>เกินใน Splunk</title>
+        <search base="summary"><query>fields extra_in_splunk</query></search>
+        <option name="numberPrecision">0</option>
+        <option name="underLabel">ไม่พบใน MISP ช่วงเดียวกัน</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>ข้อมูลซ้ำใน Splunk</title>
+        <search base="summary"><query>fields splunk_duplicate_factor</query></search>
+        <option name="numberPrecision">0.0</option>
+        <option name="unit">x</option>
+        <option name="underLabel">event ต่อ 1 attribute</option>
+      </single>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>แนวโน้ม % ที่ขาด</title>
+      <chart>
+        <search>
+          <query>`tbcert_reconcile_index` sourcetype="tbcert:misp:reconcile"
+| timechart span=1d latest(missing_pct) as "% ขาด" latest(mismatched) as "ค่าไม่ตรง"</query>
+          <earliest>$trend.earliest$</earliest>
+          <latest>$trend.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.axisY2.enabled">1</option>
+        <option name="charting.chart.overlayFields">"ค่าไม่ตรง"</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="charting.chart.nullValueMode">connect</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>ขาดตาม threat level</title>
+      <chart>
+        <search>
+          <query>`tbcert_reconcile_index` sourcetype="tbcert:misp:reconcile:item" run_at=$run$ kind=missing
+| eval level=case(threat_level_id=1,"1 High", threat_level_id=2,"2 Medium", threat_level_id=3,"3 Low", true(),"4 Undefined")
+| stats count by level
+| sort level</query>
+          <earliest>-90d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">bar</option>
+        <option name="charting.legend.placement">none</option>
+        <option name="charting.chart.showDataLabels">all</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>ขาดตามชนิด (10 อันดับ)</title>
+      <chart>
+        <search>
+          <query>`tbcert_reconcile_index` sourcetype="tbcert:misp:reconcile:item" run_at=$run$ kind=missing threat_level_id=$level$
+| top limit=10 attr_type showperc=f</query>
+          <earliest>-90d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">bar</option>
+        <option name="charting.legend.placement">none</option>
+        <option name="charting.chart.showDataLabels">all</option>
+      </chart>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Event ที่ขาด (คลิกเพื่อดู IOC ของ event นั้น)</title>
+      <table>
+        <search>
+          <query>`tbcert_reconcile_index` sourcetype="tbcert:misp:reconcile:item" run_at=$run$ kind=event threat_level_id=$level$
+| eval pct=round(missing/total*100,1), status=if(missing=total,"ขาดทั้ง event","ขาดบางส่วน")
+| table event_id event_info threat_level_id status missing total pct
+| sort - missing
+| rename event_id as "Event ID", event_info as "Event", threat_level_id as "Level", status as "สถานะ", missing as "ขาด", total as "ทั้งหมด", pct as "% ขาด"</query>
+          <earliest>-90d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">row</option>
+        <format type="color" field="สถานะ">
+          <colorPalette type="map">{"ขาดทั้ง event":#DC4E41,"ขาดบางส่วน":#F8BE34}</colorPalette>
+        </format>
+        <format type="number" field="% ขาด">
+          <option name="precision">1</option>
+          <option name="unit">%</option>
+        </format>
+        <drilldown>
+          <set token="form.ev">$row.Event ID$</set>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>IOC ที่ขาดใน Splunk</title>
+      <table>
+        <search>
+          <query>`tbcert_reconcile_index` sourcetype="tbcert:misp:reconcile:item" run_at=$run$ kind=missing threat_level_id=$level$ event_id=$ev$
+| eval modified=strftime(attr_timestamp, "%Y-%m-%d %H:%M")
+| table event_id event_info threat_level_id attr_type value to_ids object modified attr_uuid
+| sort event_id attr_type</query>
+          <earliest>-90d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">20</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>uuid ตรงกันแต่ค่าไม่ตรง (stale = MISP แก้ไขหลัง Splunk นำเข้า)</title>
+      <table>
+        <search>
+          <query>`tbcert_reconcile_index` sourcetype="tbcert:misp:reconcile:item" run_at=$run$ kind=mismatched event_id=$ev$
+| eval misp_modified=strftime(misp_ts, "%Y-%m-%d %H:%M"), splunk_modified=strftime(splunk_ts, "%Y-%m-%d %H:%M")
+| table event_id diff misp_type splunk_type misp_value splunk_value misp_to_ids splunk_to_ids misp_modified splunk_modified</query>
+          <earliest>-90d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+    <panel>
+      <title>มีใน Splunk แต่ไม่พบใน MISP</title>
+      <table>
+        <search>
+          <query>`tbcert_reconcile_index` sourcetype="tbcert:misp:reconcile:item" run_at=$run$ kind=extra event_id=$ev$
+| eval modified=strftime(attr_timestamp, "%Y-%m-%d %H:%M")
+| table event_id org attr_type value to_ids copies modified</query>
+          <earliest>-90d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <html>
+        <h3>วิธีอ่านผล</h3>
+        <ul>
+          <li><b>ขาดเฉพาะ Medium/Low หรือ to_ids=false</b> — ตัวดึงข้อมูลเดิมกรองไว้ตั้งแต่ต้น (ตั้งใจ)</li>
+          <li><b>ขาดทั้ง event</b> — ตัวดึงข้อมูลพลาด event นั้น ตรวจ log ของตัวดึงในช่วงที่ event ถูก publish</li>
+          <li><b>ขาดบางส่วน</b> — มักเป็น attribute ใน object หรือ attribute ที่เพิ่มหลัง publish</li>
+          <li><b>ข้อมูลซ้ำสูง</b> — ตัวดึงข้อมูล index attribute เดิมซ้ำทุกรอบ เปลืองไลเซนส์ Splunk</li>
+          <li>รายละเอียดจำกัดตาม <code>hec_max_items</code> ต่อรอบ — รายการทั้งหมดอยู่ในไฟล์ CSV ของสคริปต์</li>
+        </ul>
+      </html>
+    </panel>
+  </row>
+</form>

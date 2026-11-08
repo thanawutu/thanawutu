@@ -1,0 +1,7 @@
+<nav search_view="search">
+  <view name="tbcert_misp_reconcile" default="true" />
+  <view name="search" />
+  <collection label="Lookups">
+    <a href="/app/TA-tbcert-misp/search?q=%7C%20inputlookup%20tbcert_misp_ioc_lookup">tbcert_misp_ioc</a>
+  </collection>
+</nav>

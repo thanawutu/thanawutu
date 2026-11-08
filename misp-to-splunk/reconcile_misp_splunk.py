@@ -223,15 +223,34 @@ def write_outputs(outdir: str, res: dict, meta: dict) -> None:
         json.dump({"run": meta, **res["summary"]}, fh, ensure_ascii=False, indent=2)
 
 
-def send_hec(cfg: dict, summary: dict, meta: dict) -> None:
+def send_hec(cfg: dict, res: dict, meta: dict) -> None:
+    """ส่งผลเข้า Splunk ผ่าน HEC สำหรับ dashboard
+       sourcetype=tbcert:misp:reconcile       1 event สรุปต่อรอบ
+       sourcetype=tbcert:misp:reconcile:item  รายละเอียด kind=missing|extra|mismatched|event (จำกัดจำนวนตาม hec_max_items)"""
     if not (cfg.get("hec_url") and cfg.get("hec_token")):
         return
+    t = meta["run_at"]
+
+    def ev(body, st):
+        return json.dumps({"time": t, "event": body, "index": cfg["hec_index"], "sourcetype": st})
+
+    lines = [ev({"action": "reconcile", **meta, **res["summary"]}, "tbcert:misp:reconcile")]
+    items = []
+    for kind in ("missing", "mismatched", "extra"):
+        items += [{"kind": kind, **row} for row in res[kind]]
+    items += [{"kind": "event", "event_id": k, **v} for k, v in res["by_event"].items() if v["missing"]]
+    cap = cfg.get("hec_max_items", 20000)
+    if len(items) > cap:
+        LOG.warning("รายละเอียด %d รายการ ส่งเข้า HEC เพียง %d (hec_max_items)", len(items), cap)
+        items = items[:cap]
+    lines += [ev({"run_at": t, **i}, "tbcert:misp:reconcile:item") for i in items]
+    sess = requests.Session()
+    sess.headers["Authorization"] = f"Splunk {cfg['hec_token']}"
+    sess.verify = cfg["splunk_verify"]
     try:
-        requests.post(cfg["hec_url"], timeout=30, verify=cfg["splunk_verify"],
-                      headers={"Authorization": f"Splunk {cfg['hec_token']}"},
-                      data=json.dumps({"event": {"action": "reconcile", **meta, **summary},
-                                       "index": cfg["hec_index"], "sourcetype": "tbcert:misp:reconcile"})
-                      ).raise_for_status()
+        for n in range(0, len(lines), 500):
+            sess.post(cfg["hec_url"], data="\n".join(lines[n:n + 500]), timeout=60).raise_for_status()
+        LOG.info("ส่ง HEC: สรุป 1 + รายละเอียด %d event", len(items))
     except requests.RequestException as e:
         LOG.warning("ส่ง HEC ไม่สำเร็จ: %s", e)
 
@@ -261,6 +280,7 @@ def load(path: str, a) -> dict:
         "splunk_base": r.get("splunk_base", "index=main sourcetype=misp_events"),
         "splunk_earliest": a.splunk_earliest or r.get("splunk_earliest", "-35d"),
         "max_missing_pct": r.getfloat("max_missing_pct", 1.0),
+        "hec_max_items": r.getint("hec_max_items", 20000),
     }
     if not cfg["misp_key"] or not cfg["splunk_token"]:
         sys.exit("ต้องมี MISP_API_KEY และ SPLUNK_TOKEN (env หรือ config)")
@@ -288,7 +308,7 @@ def main() -> None:
     splunk = fetch_splunk(cfg)
     res = compare(misp, splunk)
     write_outputs(a.outdir, res, meta)
-    send_hec(cfg, res["summary"], meta)
+    send_hec(cfg, res, meta)
 
     s = res["summary"]
     print(f"\nMISP {s['misp_attributes']:,} attribute  |  Splunk {s['splunk_unique_attr_uuid']:,} uuid "
