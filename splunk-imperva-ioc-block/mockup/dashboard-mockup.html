@@ -125,6 +125,10 @@ td.aid:hover{background:var(--info-bg)!important}
 .dhead{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center}
 .cols2{display:grid;grid-template-columns:1fr 1fr;gap:12px} @media (max-width:640px){.cols2{grid-template-columns:1fr}}
 .ua{font-family:var(--font-data);font-size:11px;word-break:break-all}
+.ptbl-wrap{max-height:270px;overflow:auto;border:1px solid var(--line);border-radius:5px;background:var(--panel)}
+.ptbl{font-size:12px} .ptbl th{font-size:10px;padding:5px 8px} .ptbl td{padding:4px 8px;border-bottom:1px dashed var(--grid)}
+.ptbl td.p{font-family:var(--font-data);font-size:11.5px;word-break:break-all} .ptbl td.n{text-align:right;font-family:var(--font-data);white-space:nowrap}
+.ptbl tr.both td.p::after{content:" ⚠ blocked + let through";color:var(--warn);font-family:var(--font-ui);font-size:10.5px;font-weight:600}
 </style>
 
 <header class="topbar">
@@ -356,6 +360,12 @@ function paths(ip, total, list, sites){ if(!total) return [];
   for(let i=0;i<k&&left>0;i++){ const n=i===k-1?left:Math.max(1,Math.round(left*(0.45+((h>>i)%3)*0.1))); left-=n;
     out.push({p:SITES[(h+i)%SITES.length]+list[(h+i*3)%list.length], n}); }
   return out.sort((a,b)=>b.n-a.n); }
+// v3.8: EVERY path of the IP (simulated long tail), merged by host + path, highest count first
+function fullPaths(ip, total, list, salt){ if(!total) return [];
+  const h=hh(ip, salt), n=Math.min(total, 4+h%9), m={}; let left=total;
+  for(let i=0;i<n&&left>0;i++){ const share=i===n-1?left:Math.max(1,Math.round(left*(0.34+((h>>i)%4)*0.07))); left-=share;
+    const k=SITES[(h+i)%SITES.length]+list[(h+i*7)%list.length]; m[k]=(m[k]||0)+share; }
+  return Object.entries(m).map(([p,n])=>({p,n})).sort((a,b)=>b.n-a.n); }
 // one cell: up to 3 blocked paths (red count) + up to 2 allowed paths (green count)
 function pathCell(blk, alw){ if(!blk.length && !alw.length) return '<span class="note">-</span>';
   const line=(x,cls)=>`<div><span class="${cls}">${x.n.toLocaleString()}</span> ${esc(x.p)}</div>`;
@@ -424,8 +434,10 @@ function renderDetail(page){
   const d=pg.detail&&pendingDetected().find(x=>x.ip===pg.detail);
   if(!d){ el.hidden=true; el.innerHTML=""; return; }
   const win=page==="history"?"30d":"24h", c=ctx(d,win), W=win==="30d"?"30d":"24h", R=win==="30d"?"30d":"7d";
-  const blk=paths(d.ip,c.w.b,BAD,c.w.wb||1), alw=paths(d.ip,c.w.a,GOOD,c.w.wa||1);
-  const plist=(xs,cls)=>xs.length?`<ul>${xs.slice(0,5).map(x=>li(esc(x.p),`<b class="${cls}">${x.n.toLocaleString()}</b>`)).join("")}</ul>`:'<div class="note">-</div>';
+  const merged={}; fullPaths(d.ip,c.w.b,BAD,3).forEach(x=>{(merged[x.p]=merged[x.p]||{p:x.p,b:0,a:0}).b+=x.n;});
+  fullPaths(d.ip,c.w.a,GOOD,5).forEach(x=>{(merged[x.p]=merged[x.p]||{p:x.p,b:0,a:0}).a+=x.n;});
+  const all=Object.values(merged).sort((x,y)=>(y.b+y.a)-(x.b+x.a)||y.b-x.b);
+  const ptable=all.length?`<div class="ptbl-wrap"><table class="ptbl"><thead><tr><th>#</th><th>Host + path</th><th style="text-align:right">Blocked</th><th style="text-align:right">Let through</th><th style="text-align:right">Total ▼</th></tr></thead><tbody>${all.map((x,i)=>`<tr class="${x.b&&x.a?"both":""}"><td class="n note">${i+1}</td><td class="p">${esc(x.p)}</td><td class="n">${x.b?`<b class="bk">${x.b.toLocaleString()}</b>`:'<span class="note">0</span>'}</td><td class="n">${x.a?`<b class="al">${x.a.toLocaleString()}</b>`:'<span class="note">0</span>'}</td><td class="n"><b>${(x.b+x.a).toLocaleString()}</b></td></tr>`).join("")}</tbody></table></div>`:'<div class="note">no requests</div>';
   const sel=pg.sel.has(d.ip);
   el.hidden=false;
   el.innerHTML=`<div class="panel-head"><div class="dhead"><h2>IP detail – <span class="mono">${d.ip}</span><span class="new">NEW</span></h2><span class="own o-${c.o[0]}">${OWN_LABEL[c.o[0]]}</span><span class="note">${esc(c.o[1])} · ${esc(d.loc)}</span><span class="pill ${sugPill[d.sug]}" title="existing suggestion – not changed">${d.sug}</span></div>
@@ -438,7 +450,7 @@ function renderDetail(page){
     <div class="dbox"><span class="label">Client (Imperva) / User-Agent</span><div><b>${esc(c.cl[0])}</b> · ${esc(c.cl[1])}</div><div class="ua">${esc(c.cl[2])}</div></div>
     <div class="dbox"><span class="label">History</span><ul>${li("detected on",`${c.days} days / 90d`)}${li("first detected",fmt(c.first).slice(0,10))}${c.hist.un?li(`↺ unblocked by ${esc(c.hist.un[1])}`,fmt(c.hist.un[0]).slice(0,10)):""}${c.hist.un?`<li><span class="note">“${esc(c.hist.un[2])}”</span><span></span></li>`:""}${c.hist.nb?li(`✖ not blocked by ${esc(c.hist.nb[1])}`,fmt(c.hist.nb[0]).slice(0,10)):""}${!c.hist.un&&!c.hist.nb?li("block / unblock / not block","none"):""}</ul></div>
     <div class="dbox"><span class="label">Neighbours detected</span><ul>${li("same /24",c.c24.length?c.c24.join(", "):"none")}${li(esc(c.o[1].split(" ")[0])+" (same ASN)",c.nbr.length?c.nbr.length+" IPs":"none")}</ul>${c.nbr.length?`<div class="note mono">${c.nbr.join(", ")}</div>`:""}</div>
-    <div class="dbox wide"><span class="label">Top paths (${W}) – all hosts</span><div class="cols2"><div><div class="note">blocked by the WAF</div>${plist(blk,"bk")}</div><div><div class="note">let through</div>${plist(alw,"al")}</div></div></div>
+    <div class="dbox wide"><span class="label">All paths (${W}) – ${all.length} path${all.length===1?"":"s"}, highest count first</span>${ptable}<div class="note" style="margin-top:5px">host + path without query string · click a column header in Splunk to sort by Blocked / Let through · 🔍 all events = every request incl. query string</div></div>
   </div>`;
 }
 // only IPs that no ENABLED WAF policy blocks or allows yet (disabled policies are ignored)
@@ -464,7 +476,7 @@ function renderDet(page){
     return `<tr data-ip="${d.ip}" class="${pg.sel.has(d.ip)?"selected":""}">
     <td>${ok?'<span class="box"></span>':''}</td><td class="ip">${d.ip}</td><td class="nw"><a class="vt" href="https://www.virustotal.com/gui/ip-address/${d.ip}" target="_blank" rel="noopener" onclick="event.stopPropagation()">🔗</a> <span class="mono">${d.vt}/94</span></td><td class="small">${esc(d.rule)}</td>
     <td class="mono nw">${esc(d.inc)}</td><td><span class="pill sev-${d.sev}">${d.sev}</span></td><td class="mono nw">${fmt(d.last)}</td>
-    <td class="num">${d.n}</td><td class="num nw"><b class="bk">${w.b.toLocaleString()}</b> / <b class="al">${w.a.toLocaleString()}</b></td><td class="num nw"><b class="bk">${w.wb}</b> / <b class="al">${w.wa}</b></td><td>${pathCell(paths(d.ip,w.b,BAD,w.wb||1), paths(d.ip,w.a,GOOD,w.wa||1))}</td>${page==="history"?`<td class="mono nw">${w.last?fmt(w.last):"-"}</td>`:""}<td><span class="pill ${sugPill[d.sug]}">${d.sug}</span></td>
+    <td class="num">${d.n}</td><td class="num nw"><b class="bk">${w.b.toLocaleString()}</b> / <b class="al">${w.a.toLocaleString()}</b></td><td class="num nw"><b class="bk">${w.wb}</b> / <b class="al">${w.wa}</b></td><td>${pathCell(fullPaths(d.ip,w.b,BAD,3), fullPaths(d.ip,w.a,GOOD,5))}</td>${page==="history"?`<td class="mono nw">${w.last?fmt(w.last):"-"}</td>`:""}<td><span class="pill ${sugPill[d.sug]}">${d.sug}</span></td>
     <td class="nw">${esc(d.loc)}</td>${aidCell(d, page==="history"?"30d":"24h")}</tr>`;}).join("")
     ||`<tr><td colspan="${page==="history"?15:14}" class="note">${q?`ไม่พบ IP ที่ตรงกับ “${esc(q)}”`:"ไม่มี IP ที่รอ block ในช่วงเวลานี้"}</td></tr>`;
 }
