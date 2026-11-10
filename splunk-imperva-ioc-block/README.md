@@ -29,7 +29,7 @@ For each attacking IP (top 50 by count), `vtcheck` calls the **VirusTotal v3 API
 | `vt_score`, `vt_reputation`, `vt_network` | VirusTotal |
 | `location` | Splunk `iplocation` (City, Region, Country) plus `[VT: country]` |
 | `asn` | VirusTotal ASN and AS owner |
-| `Block` button | `⛔ Block` → confirmation panel → `✅ CONFIRM BLOCK` → `impervablock dry_run=false` |
+| `⛔ Block n IPs` button | action card above the table → `impervablock action=block` (one click, see Dashboards) |
 | `VirusTotal` | `🔗 Open` opens the VirusTotal GUI page for the IP |
 
 How the suggestion is decided (thresholds are in `imperva.conf [virustotal]`):
@@ -176,9 +176,17 @@ Dashboard: **Apps → Imperva IOC Block**. Five pages (links at the top of every
 | ⚙ **Detection rules** (`imperva_ioc_rules`) | which ES correlation searches feed the Block pages (KV store `imperva_ioc_rules`, Include / Exclude, `*` wildcard, enable / disable / remove) + preview |
 | 📄 **Audit log** (`imperva_ioc_audit`) | every Block / Unblock / rule change from the CSV lookup `imperva_audit.csv`, search + export |
 
-Block / Unblock: click rows to select IPs (click again to unselect), check **Ticket / Incident no.**
-(filled from the ITHM note of the finding) and **Description**, then click the red
-`⛔ BLOCK n IPs` (or green `🔓 UNBLOCK n IPs`) cell - one click, no second confirmation.
+Block / Unblock: click rows to select IPs (click again, or × on the IP, to unselect), check
+**Ticket / Incident no.** (filled from the ITHM note of the finding) and **Description**, then click
+the red `⛔ Block n IPs` (or green `🔓 Unblock n IPs`) button - one click, no second confirmation.
+
+The action card (Search | Add IPs manually / Selected IPs | Ticket | Description | buttons / WAF check)
+is drawn by `appserver/static/imperva_form.js` in panel `<p>_actpanel` (p = `d` Block, `h` Older
+detections, `b` Unblock). It only sets the tokens of that Simple XML panel (`$p_q$`, `$p_add$`, `$p_tk$`,
+`$p_desc$`, `$p_sel$`, `$p_exec_*$`, `$p_nb_*$`) and reads the WAF check / "Select all shown" from the
+panel's action search (`<p>_act`), so the searches are unchanged. If the script is not loaded (old
+browser cache, script error) the Simple XML inputs and the action table are shown and work as before.
+After installing a new version, reload the page with Ctrl+F5 if the old panel is still shown.
 The result is verified on the WAF and appended to the audit CSV (`imperva_audit_write` macro).
 IPs that are allow-listed or already blocked by another WAF policy cannot be selected.
 

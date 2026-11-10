@@ -1,4 +1,4 @@
-<form version="1.1" theme="dark" hideFilters="true" script="imperva_cells.js">
+<form version="1.1" theme="dark" hideFilters="true" script="imperva_cells.js,imperva_form.js">
   <label>Imperva IOC Block – last 7 days</label>
   <description>IPs detected by the WAF detection rules in the last 7 days that are not blocked yet. Click rows to select IPs, fill Ticket / Incident no. and Description, then click ⛔ BLOCK (one click, no second confirm). Older detections, Blocked IPs / Unblock, Detection rules and the Audit log are on the other pages.</description>
   <init>
@@ -133,7 +133,7 @@
   </row>
 
   <row>
-    <panel>
+    <panel id="d_actpanel">
       <title>Search and Block</title>
       <input type="text" token="d_q" searchWhenChanged="true">
         <label>🔎 Search IP / Ticket / Incident no. / Rule (* = all)</label>
@@ -151,8 +151,8 @@
         <label>Description ("-" if none)</label>
         <default>-</default>
       </input>
-      <table>
-        <search base="det">
+      <table id="d_acttable">
+        <search id="d_act" base="det">
           <query>| eval _q=lower(trim(replace($d_q|s$, "[*]", "")))
 | where _q="" OR like(lower(src." ".incident_no." ".rule_name), "%"._q."%")
 | sort - _sev_rank - count
