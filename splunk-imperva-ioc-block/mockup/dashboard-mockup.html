@@ -79,6 +79,7 @@ th{position:sticky;top:0;z-index:1;background:var(--panel-2);text-align:left;fon
 td{padding:7px 9px;border-bottom:1px solid var(--line);vertical-align:top}
 tbody tr[data-ip]{cursor:pointer} tbody tr[data-ip]:hover td{background:var(--panel-2)}
 tbody tr.selected td{background:var(--sel)}
+tbody tr.nosel{cursor:not-allowed} tbody tr.nosel td:not(.aid){color:var(--muted)}
 td.ip{font-family:var(--font-data);white-space:nowrap;font-weight:500} td.num{text-align:right;font-family:var(--font-data)}
 td.small{font-size:11.5px;color:var(--muted);min-width:170px}
 td.nw{white-space:nowrap}
@@ -150,7 +151,7 @@ td.aid:hover{background:var(--info-bg)!important}
 
 <!-- ============ Page 1: dashboard (7 days, search + Block) ============ -->
 <main class="wrap" id="v-dash">
-  <div class="review"><b>Mockup v3.8b:</b> เลข <b>Incident no.</b> แสดงเฉพาะตัวเลข (ตัด ITHM ออก; ค้นหาด้วย “ITHM 1000101” หรือ “1000101” ได้ทั้งคู่) · IP ของ <b>cloud provider</b> (AWS, Google Cloud, Azure ฯลฯ) = suggestion <b>DO_NOT_BLOCK</b> พร้อมเหตุผล และเตือนใน WAF check ถ้าเลือก (ยัง block เองได้) · <b>ส่วนเพิ่มเติมช่วยตัดสินใจ (<span class="new">NEW</span>)</b> · <b>ของเดิมไม่เปลี่ยน:</b> คอลัมน์เดิมและลำดับเดิม, suggestion เดิม, การ์ด / ปุ่ม Block · Not block, saved search และ macro เดิม · <b>ส่วนใหม่:</b> ① คอลัมน์ <b>Decision aid</b> ต่อท้ายตาราง = เจ้าของ IP (Hosting / ISP / มือถือไทย shared IP / bot ที่ Imperva ยืนยัน) และสัญญาณเตือน (⚠ โจมตี + ปล่อยผ่านได้ 200, ● ยังยิงอยู่, ↺ เคย unblock, IP ข้างเคียงถูก detect) · ② <b>คลิกช่อง Decision aid</b> = เปิดแผง <b>IP detail</b> เหนือตาราง: ประเภทการโจมตี, response code ที่ผ่าน, กิจกรรมรายชั่วโมง, client / User-Agent, Top paths, ประวัติ, IP ข้างเคียง · คลิกส่วนอื่นของแถว = เลือก IP เหมือนเดิม</div>
+  <div class="review"><b>Mockup v3.8b:</b> เลข <b>Incident no.</b> แสดงเฉพาะตัวเลข (ตัด ITHM ออก; ค้นหาด้วย “ITHM 1000101” หรือ “1000101” ได้ทั้งคู่) · IP ของ <b>cloud provider</b> (AWS, Google Cloud, Azure ฯลฯ) <b>ห้าม block</b>: suggestion DO_NOT_BLOCK, คลิกเลือกไม่ได้ (ไม่มีช่องติ๊ก), พิมพ์ใน Add IPs manually จะถูกตัดออก (⛔ cloud) และ command impervablock reject อีกชั้น · <b>ส่วนเพิ่มเติมช่วยตัดสินใจ (<span class="new">NEW</span>)</b> · <b>ของเดิมไม่เปลี่ยน:</b> คอลัมน์เดิมและลำดับเดิม, suggestion เดิม, การ์ด / ปุ่ม Block · Not block, saved search และ macro เดิม · <b>ส่วนใหม่:</b> ① คอลัมน์ <b>Decision aid</b> ต่อท้ายตาราง = เจ้าของ IP (Hosting / ISP / มือถือไทย shared IP / bot ที่ Imperva ยืนยัน) และสัญญาณเตือน (⚠ โจมตี + ปล่อยผ่านได้ 200, ● ยังยิงอยู่, ↺ เคย unblock, IP ข้างเคียงถูก detect) · ② <b>คลิกช่อง Decision aid</b> = เปิดแผง <b>IP detail</b> เหนือตาราง: ประเภทการโจมตี, response code ที่ผ่าน, กิจกรรมรายชั่วโมง, client / User-Agent, Top paths, ประวัติ, IP ข้างเคียง · คลิกส่วนอื่นของแถว = เลือก IP เหมือนเดิม</div>
   <section class="kpis" aria-label="Summary">
     <div class="kpi k-warn"><span class="label">Detected WAF IPs</span><span class="v" id="kDet">0</span><span class="s" id="kDetSub">last 7 days</span></div>
     <div class="kpi k-info"><span class="label">Blocked on WAF now</span><span class="v" id="kWaf">0</span><span class="s">policy 2169031 (live)</span></div>
@@ -410,7 +411,7 @@ function ctx(d, win){
   const c24=detected.filter(x=>x.ip!==ip&&x.ip.split(".").slice(0,3).join(".")===ip.split(".").slice(0,3).join(".")).map(x=>x.ip);
   const hist=HIST[ip]||{}, days=1+h%6+(d.n>15?6:0), first=d.last-(h%25)*DAY;
   const sig=[];
-  if(o[0]==="cloud") sig.push(["w","⛔ cloud provider – do not block"]);
+  if(o[0]==="cloud") sig.push(["w","⛔ cloud provider – cannot be blocked"]);
   if(atk.length&&codes["200"]&&o[0]!=="thmob") sig.push(["w",`⚠ attacks + allowed 200 ×${codes["200"]}`]);
   if(o[0]==="thmob"||o[0]==="mob") sig.push(["c","⚠ shared IP – may hit customers"]);
   if(o[0]==="bot") sig.push(["i","✔ crawler verified by Imperva"]);
@@ -424,8 +425,9 @@ function ctx(d, win){
 }
 const rcls=v=>v>=150?"r-hi":v>=60?"r-mid":"r-lo";
 // cloud provider IPs (AWS, Google Cloud, Azure, ...) are shared / re-assigned: never suggest BLOCK
+const cloudOf=ip=>{const o=OWN[ip]; return o&&o[0]==="cloud"?o[1].replace(/^AS\d+ /,""):null;};
 function effSug(d){ const o=OWN[d.ip]||[];
-  if(o[0]==="cloud"&&d.sug!=="ALREADY_BLOCKED"&&d.sug!=="DO_NOT_BLOCK") return {sug:"DO_NOT_BLOCK",reason:`cloud provider IP (${o[1].replace(/^AS\d+ /,"")}) – shared / re-assigned to other customers`,was:d.sug};
+  if(o[0]==="cloud"&&d.sug!=="ALREADY_BLOCKED"&&d.sug!=="DO_NOT_BLOCK") return {sug:"DO_NOT_BLOCK",reason:`cloud provider IP (${o[1].replace(/^AS\d+ /,"")}) – blocking cloud IPs is not allowed`,was:d.sug};
   return {sug:d.sug,reason:"",was:null}; }
 function aidCell(d, win){ const c=ctx(d,win);
   return `<td class="aid" data-detail="${d.ip}" title="click: IP detail"><div class="row"><span class="own o-${c.o[0]}">${OWN_LABEL[c.o[0]]}</span></div>
@@ -446,7 +448,7 @@ function renderDetail(page){
   const sel=pg.sel.has(d.ip);
   el.hidden=false;
   el.innerHTML=`<div class="panel-head"><div class="dhead"><h2>IP detail – <span class="mono">${d.ip}</span><span class="new">NEW</span></h2><span class="own o-${c.o[0]}">${OWN_LABEL[c.o[0]]}</span><span class="note">${esc(c.o[1])} · ${esc(d.loc)}</span><span class="pill ${sugPill[effSug(d).sug]}" title="${esc(effSug(d).reason||"suggestion")}">${effSug(d).sug}</span>${effSug(d).reason?`<span class="note">${esc(effSug(d).reason)}</span>`:""}</div>
-    <div class="dact"><button type="button" data-dsel="${d.ip}">${sel?"✓ selected – unselect":"☐ select this IP"}</button><a class="vt" href="https://www.virustotal.com/gui/ip-address/${d.ip}" target="_blank" rel="noopener">🔗 VT ${d.vt}/94</a><button type="button" onclick="toast('Real dashboard: opens a Splunk search with every WAF event of this IP in a new tab')">🔍 all events</button><button type="button" data-dclose="1" aria-label="close IP detail">✖ close</button></div></div>
+    <div class="dact">${cloudOf(d.ip)?'<span class="pill p-safe" title="blocking cloud provider IPs is not allowed">⛔ cannot be blocked (cloud)</span>':`<button type="button" data-dsel="${d.ip}">${sel?"✓ selected – unselect":"☐ select this IP"}</button>`}<a class="vt" href="https://www.virustotal.com/gui/ip-address/${d.ip}" target="_blank" rel="noopener">🔗 VT ${d.vt}/94</a><button type="button" onclick="toast('Real dashboard: opens a Splunk search with every WAF event of this IP in a new tab')">🔍 all events</button><button type="button" data-dclose="1" aria-label="close IP detail">✖ close</button></div></div>
   <div class="dgrid">
     <div class="dbox"><span class="label">WAF attack types (${W})</span>${c.atk.length?`<ul>${c.atk.map(a=>li(esc(a[0]),`<b class="bk">${a[1].toLocaleString()}</b>`)).join("")}</ul>`:'<span class="note">no blocked requests</span>'}</div>
     <div class="dbox"><span class="label">Allowed responses (${W})</span>${Object.keys(c.codes).length?`<ul>${Object.entries(c.codes).map(([k,v])=>li(`HTTP ${k}${k==="200"&&c.atk.length&&c.o[0]!=="thmob"?' <span class="sig w">⚠ after attacks</span>':""}`,`<b class="al">${v}</b>`)).join("")}</ul>`:'<span class="note">nothing let through</span>'}</div>
@@ -464,7 +466,7 @@ const isHidden=d=>notBlocked.some(x=>x.ip===d.ip && x.t>=d.last);
 const pendingDetected=()=>detected.filter(d=>!onWaf(d.ip)&&!isHidden(d)&&ruleUsed(d.rule).use&&d.sug!=="ALREADY_BLOCKED"&&d.sug!=="DO_NOT_BLOCK");
 const WAF_POLICY={"185.220.101.47":"BLOCK in 1000001 Block DDoS policy","35.165.106.69":"BLOCK in 1000003 Block IOC attack","20.20.20.20":"ALLOW in 1000002 Allow partner DC"};
 function wafCheck(ip){ if(!isIP(ip)) return ip+" is not an IP / CIDR"; if(onWaf(ip)) return ip+" already blocked from Splunk";
-  const o=OWN[ip]||[]; if(o[0]==="cloud"&&!WAF_POLICY[ip]) return ip+" is a CLOUD PROVIDER IP ("+o[1].replace(/^AS\d+ /,"")+") – shared, block not recommended";
+  const cp=cloudOf(ip); if(cp&&!WAF_POLICY[ip]) return ip+" is a CLOUD PROVIDER IP ("+cp+") – not allowed, removed from the block";
   const p=WAF_POLICY[ip]; if(!p) return null; return p.startsWith("ALLOW")? ip+" is ALLOWED: "+p : ip+" already BLOCKED: "+p; }
 const win={dash:d=>age(d)<=7*DAY,
   history:d=>{const r=$("h_rng").value,a=age(d); return r==="30"?a>7*DAY&&a<=30*DAY : r==="90"?a>30*DAY&&a<=90*DAY : a>7*DAY;}};
@@ -478,8 +480,8 @@ function detRows(page){const q=normQ($(P[page].p+"_q").value);
 function renderDet(page){
   const pg=P[page], rows=detRows(page), q=$(pg.p+"_q").value.trim();
   $(pg.p+"_tbl").innerHTML=rows.map(d=>{
-    const ok=d.sug!=="DO_NOT_BLOCK"&&d.sug!=="ALREADY_BLOCKED", w=act(d.ip, page==="history"?"30d":"24h", d.last);
-    return `<tr data-ip="${d.ip}" class="${pg.sel.has(d.ip)?"selected":""}">
+    const ok=d.sug!=="DO_NOT_BLOCK"&&d.sug!=="ALREADY_BLOCKED"&&!cloudOf(d.ip), w=act(d.ip, page==="history"?"30d":"24h", d.last);
+    return `<tr data-ip="${d.ip}" class="${pg.sel.has(d.ip)?"selected":""}${cloudOf(d.ip)?" nosel":""}" ${cloudOf(d.ip)?'title="cloud provider IP – cannot be blocked"':""}>
     <td>${ok?'<span class="box"></span>':''}</td><td class="ip">${d.ip}</td><td class="nw"><a class="vt" href="https://www.virustotal.com/gui/ip-address/${d.ip}" target="_blank" rel="noopener" onclick="event.stopPropagation()">🔗</a> <span class="mono">${d.vt}/94</span></td><td class="small">${esc(d.rule)}</td>
     <td class="mono nw">${esc(d.inc)}</td><td><span class="pill sev-${d.sev}">${d.sev}</span></td><td class="mono nw">${fmt(d.last)}</td>
     <td class="num">${d.n}</td><td class="num nw"><b class="bk">${w.b.toLocaleString()}</b> / <b class="al">${w.a.toLocaleString()}</b></td><td class="num nw"><b class="bk">${w.wb}</b> / <b class="al">${w.wa}</b></td><td>${pathCell(fullPaths(d.ip,w.b,BAD,3), fullPaths(d.ip,w.a,GOOD,5))}</td>${page==="history"?`<td class="mono nw">${w.last?fmt(w.last):"-"}</td>`:""}<td>${(e=>`<span class="pill ${sugPill[e.sug]}">${e.sug}</span>${e.reason?`<div class="note" style="min-width:150px">${esc(e.reason)}</div>`:""}`)(effSug(d))}</td>
@@ -497,17 +499,17 @@ function renderBlocked(){
 }
 const isIP=x=>/^(\d{1,3})(\.\d{1,3}){3}(\/\d{1,2})?$/.test(x)&&x.split("/")[0].split(".").every(o=>+o<=255) || /^[0-9a-f:]+:[0-9a-f:]*(\/\d{1,3})?$/i.test(x);
 function manual(page){ if(page==="blocked") return []; const v=$(P[page].p+"_add").value; return [...new Set(v.split(/[\s,;]+/).map(x=>x.trim()).filter(Boolean))]; }
-function allIPs(page){ const m=manual(page).filter(isIP); return [...new Set([...P[page].sel, ...m])]; }
+function allIPs(page){ const m=manual(page).filter(x=>isIP(x)&&!cloudOf(x)); return [...new Set([...P[page].sel, ...m])]; }
 function renderCtl(page){
   const pg=P[page], all=allIPs(page), n=all.length, man=manual(page);
   $(pg.p+"_run").textContent=`${pg.act==="block"?"⛔ Block":"🔓 Unblock"} ${n} IP${n===1?"":"s"}`;
   $(pg.p+"_run").disabled=!n||pg.busy;
   if(page!=="blocked"){ const k=pg.sel.size; $(pg.p+"_nb").textContent=`✖ Not block ${k} IP${k===1?"":"s"}`; $(pg.p+"_nb").disabled=!k||pg.busy; }
-  if(page!=="blocked"){ const msgs=[...all, ...man.filter(x=>!isIP(x))].map(wafCheck).filter(Boolean), c=$(pg.p+"_chk");
+  if(page!=="blocked"){ const msgs=[...all, ...man.filter(x=>!isIP(x)||cloudOf(x))].map(wafCheck).filter(Boolean), c=$(pg.p+"_chk");
     c.hidden=!n&&!msgs.length; c.className="result "+(msgs.length?"running":"ok");
     c.textContent=msgs.length?"⚠ WAF check: "+msgs.join(" | "):"✔ WAF check: none of the selected IPs is blocked / allowed on the WAF"; }
   $(pg.p+"_sel").innerHTML=([...pg.sel].map(ip=>`<span class="tag">${ip}<button type="button" data-rm="${ip}" aria-label="remove ${ip}">×</button></span>`)
-    .concat(man.filter(x=>!pg.sel.has(x)).map(x=>isIP(x)?`<span class="tag man" title="added manually">✍ ${esc(x)}</span>`:`<span class="tag bad" title="not an IP / CIDR - ignored">✖ ${esc(x)}</span>`))).join("")||'<span class="note">ยังไม่ได้เลือก IP</span>';
+    .concat(man.filter(x=>!pg.sel.has(x)).map(x=>cloudOf(x)?`<span class="tag bad" title="cloud provider IP - blocking not allowed">⛔ ${esc(x)} cloud</span>`:isIP(x)?`<span class="tag man" title="added manually">✍ ${esc(x)}</span>`:`<span class="tag bad" title="not an IP / CIDR - ignored">✖ ${esc(x)}</span>`))).join("")||'<span class="note">ยังไม่ได้เลือก IP</span>';
 }
 function chart(el,days){
   const data=daily.slice(-days), n=data.length, W=days>7?1300:1000, H=days>7?230:200, L=34,R=8,T=28,B=34, cw=(W-L-R)/n, bw=days>7?.6:.4;
@@ -546,6 +548,7 @@ function pick(page,ip){
   if(page==="blocked"){ if(pg.sel.has(ip)) pg.sel.delete(ip); else {pg.sel.add(ip); const b=blocked.find(x=>x.ip===ip); if(b&&!tk.value) tk.value=b.tk;} }
   else { const d=detected.find(x=>x.ip===ip);
     if(d.sug==="DO_NOT_BLOCK"){toast(`${ip} ถูก allow อยู่ใน WAF policy (${d.pol}) — block ไม่ได้`);return;}
+    if(cloudOf(ip)){toast(`${ip} เป็น IP ของ cloud provider (${cloudOf(ip)}) — ห้าม block`);return;}
     if(d.sug==="ALREADY_BLOCKED"){toast(`${ip} ถูก block อยู่แล้วใน policy อื่น (${d.pol})`);return;}
     if(pg.sel.has(ip)) pg.sel.delete(ip); else {pg.sel.add(ip); if(!tk.value&&d.inc!=="-") tk.value=d.inc;} }
   if(page==="blocked") renderBlocked(); else {renderDet(page); renderDetail(page);} renderCtl(page);
