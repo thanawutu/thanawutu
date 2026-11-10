@@ -150,7 +150,7 @@ td.aid:hover{background:var(--info-bg)!important}
 
 <!-- ============ Page 1: dashboard (7 days, search + Block) ============ -->
 <main class="wrap" id="v-dash">
-  <div class="review"><b>Mockup v3.8 – ส่วนเพิ่มเติมช่วยตัดสินใจ (<span class="new">NEW</span>)</b> · <b>ของเดิมไม่เปลี่ยน:</b> คอลัมน์เดิมและลำดับเดิม, suggestion เดิม, การ์ด / ปุ่ม Block · Not block, saved search และ macro เดิม · <b>ส่วนใหม่:</b> ① คอลัมน์ <b>Decision aid</b> ต่อท้ายตาราง = ES risk score, เจ้าของ IP (Hosting / ISP / มือถือไทย shared IP / bot ที่ Imperva ยืนยัน) และสัญญาณเตือน (⚠ โจมตี + ปล่อยผ่านได้ 200, ● ยังยิงอยู่, ↺ เคย unblock, IP ข้างเคียงถูก detect) · ② <b>คลิกช่อง Decision aid</b> = เปิดแผง <b>IP detail</b> เหนือตาราง: risk แยก rule, ประเภทการโจมตี, response code ที่ผ่าน, กิจกรรมรายชั่วโมง, client / User-Agent, Top paths, ประวัติ, IP ข้างเคียง · คลิกส่วนอื่นของแถว = เลือก IP เหมือนเดิม</div>
+  <div class="review"><b>Mockup v3.8 – ส่วนเพิ่มเติมช่วยตัดสินใจ (<span class="new">NEW</span>)</b> · <b>ของเดิมไม่เปลี่ยน:</b> คอลัมน์เดิมและลำดับเดิม, suggestion เดิม, การ์ด / ปุ่ม Block · Not block, saved search และ macro เดิม · <b>ส่วนใหม่:</b> ① คอลัมน์ <b>Decision aid</b> ต่อท้ายตาราง = เจ้าของ IP (Hosting / ISP / มือถือไทย shared IP / bot ที่ Imperva ยืนยัน) และสัญญาณเตือน (⚠ โจมตี + ปล่อยผ่านได้ 200, ● ยังยิงอยู่, ↺ เคย unblock, IP ข้างเคียงถูก detect) · ② <b>คลิกช่อง Decision aid</b> = เปิดแผง <b>IP detail</b> เหนือตาราง: ประเภทการโจมตี, response code ที่ผ่าน, กิจกรรมรายชั่วโมง, client / User-Agent, Top paths, ประวัติ, IP ข้างเคียง · คลิกส่วนอื่นของแถว = เลือก IP เหมือนเดิม</div>
   <section class="kpis" aria-label="Summary">
     <div class="kpi k-warn"><span class="label">Detected WAF IPs</span><span class="v" id="kDet">0</span><span class="s" id="kDetSub">last 7 days</span></div>
     <div class="kpi k-info"><span class="label">Blocked on WAF now</span><span class="v" id="kWaf">0</span><span class="s">policy 2169031 (live)</span></div>
@@ -184,7 +184,7 @@ td.aid:hover{background:var(--info-bg)!important}
       <p>คลิกแถวเพื่อเลือก · Ticket/Incident no. เติมจาก ITHM ใน finding note · IP ที่ block แล้วจะย้ายไปหน้า Blocked IPs</p>
     </div>
     <div class="tbl-wrap"><table>
-      <thead><tr><th></th><th>IP</th><th>VirusTotal</th><th>Rule</th><th>Incident no.</th><th>Severity</th><th>Last detected</th><th style="text-align:right">Findings</th><th style="text-align:right" title="WAF requests in the last 24 h: blocked / allowed">Block / Allow (24h)</th><th style="text-align:right" title="websites the IP tried in the last 24 h: blocked on / allowed on">Web Block / Allow (24h)</th><th title="top URLs of this IP in the last 24 h: red = blocked by the WAF, green = let through">Top paths (24h)</th><th>Suggestion</th><th>Location</th><th title="new: ES risk score, owner of the IP and warning signals – click to open IP detail">Decision aid (24h)<span class="new">NEW</span></th></tr></thead>
+      <thead><tr><th></th><th>IP</th><th>VirusTotal</th><th>Rule</th><th>Incident no.</th><th>Severity</th><th>Last detected</th><th style="text-align:right">Findings</th><th style="text-align:right" title="WAF requests in the last 24 h: blocked / allowed">Block / Allow (24h)</th><th style="text-align:right" title="websites the IP tried in the last 24 h: blocked on / allowed on">Web Block / Allow (24h)</th><th title="top URLs of this IP in the last 24 h: red = blocked by the WAF, green = let through">Top paths (24h)</th><th>Suggestion</th><th>Location</th><th title="new: owner of the IP and warning signals – click to open IP detail">Decision aid (24h)<span class="new">NEW</span></th></tr></thead>
       <tbody id="d_tbl"></tbody></table></div>
   </section>
 </main>
@@ -215,7 +215,7 @@ td.aid:hover{background:var(--info-bg)!important}
   <section class="panel">
     <div class="panel-head"><h2 id="h_title">IPs detected by WAF rules – 8 to 30 days ago</h2><p>ยังไม่ได้ block · คลิกแถวเพื่อเลือก</p></div>
     <div class="tbl-wrap"><table>
-      <thead><tr><th></th><th>IP</th><th>VirusTotal</th><th>Rule</th><th>Incident no.</th><th>Severity</th><th>Last detected</th><th style="text-align:right">Findings</th><th style="text-align:right" title="WAF requests in the last 30 days: blocked / allowed">Block / Allow (30d)</th><th style="text-align:right" title="websites the IP tried in the last 30 days: blocked on / allowed on">Web Block / Allow (30d)</th><th title="top URLs of this IP in the last 30 days: red = blocked by the WAF, green = let through">Top paths (30d)</th><th title="last request of this IP seen on the WAF (30 days)">WAF last seen</th><th>Suggestion</th><th>Location</th><th title="new: ES risk score, owner of the IP and warning signals – click to open IP detail">Decision aid (30d)<span class="new">NEW</span></th></tr></thead>
+      <thead><tr><th></th><th>IP</th><th>VirusTotal</th><th>Rule</th><th>Incident no.</th><th>Severity</th><th>Last detected</th><th style="text-align:right">Findings</th><th style="text-align:right" title="WAF requests in the last 30 days: blocked / allowed">Block / Allow (30d)</th><th style="text-align:right" title="websites the IP tried in the last 30 days: blocked on / allowed on">Web Block / Allow (30d)</th><th title="top URLs of this IP in the last 30 days: red = blocked by the WAF, green = let through">Top paths (30d)</th><th title="last request of this IP seen on the WAF (30 days)">WAF last seen</th><th>Suggestion</th><th>Location</th><th title="new: owner of the IP and warning signals – click to open IP detail">Decision aid (30d)<span class="new">NEW</span></th></tr></thead>
       <tbody id="h_tbl"></tbody></table></div>
   </section>
   <section class="panel">
@@ -422,8 +422,7 @@ function ctx(d, win){
 }
 const rcls=v=>v>=150?"r-hi":v>=60?"r-mid":"r-lo";
 function aidCell(d, win){ const c=ctx(d,win);
-  return `<td class="aid" data-detail="${d.ip}" title="click: IP detail"><div class="row"><span class="note">Risk ${win==="30d"?"30d":"7d"}</span><span class="risk ${rcls(c.score)}">${c.score}</span><span class="note">· ${c.rules.length} rule${c.rules.length===1?"":"s"}</span></div>
-    <div class="row"><span class="own o-${c.o[0]}">${OWN_LABEL[c.o[0]]}</span></div>
+  return `<td class="aid" data-detail="${d.ip}" title="click: IP detail"><div class="row"><span class="own o-${c.o[0]}">${OWN_LABEL[c.o[0]]}</span></div>
     ${c.sig.slice(0,3).map(x=>`<div><span class="sig ${x[0]}">${esc(x[1])}</span></div>`).join("")}${c.sig.length>3?`<div class="note">+${c.sig.length-3} more</div>`:""}
     <div class="note">🔎 detail</div></td>`; }
 function spark(v){ const mx=Math.max(1,...v), W=240, H=46, bw=W/v.length;
@@ -443,7 +442,6 @@ function renderDetail(page){
   el.innerHTML=`<div class="panel-head"><div class="dhead"><h2>IP detail – <span class="mono">${d.ip}</span><span class="new">NEW</span></h2><span class="own o-${c.o[0]}">${OWN_LABEL[c.o[0]]}</span><span class="note">${esc(c.o[1])} · ${esc(d.loc)}</span><span class="pill ${sugPill[d.sug]}" title="existing suggestion – not changed">${d.sug}</span></div>
     <div class="dact"><button type="button" data-dsel="${d.ip}">${sel?"✓ selected – unselect":"☐ select this IP"}</button><a class="vt" href="https://www.virustotal.com/gui/ip-address/${d.ip}" target="_blank" rel="noopener">🔗 VT ${d.vt}/94</a><button type="button" onclick="toast('Real dashboard: opens a Splunk search with every WAF event of this IP in a new tab')">🔍 all events</button><button type="button" data-dclose="1" aria-label="close IP detail">✖ close</button></div></div>
   <div class="dgrid">
-    <div class="dbox"><span class="label">ES risk score (${R})</span><div class="big ${rcls(c.score)}">${c.score}</div>${c.rules.length?`<ul>${c.rules.map(r=>li(esc(r[0]),`${r[1]} · ${r[2]}×`)).join("")}</ul>`:'<span class="note">no risk events</span>'}</div>
     <div class="dbox"><span class="label">WAF attack types (${W})</span>${c.atk.length?`<ul>${c.atk.map(a=>li(esc(a[0]),`<b class="bk">${a[1].toLocaleString()}</b>`)).join("")}</ul>`:'<span class="note">no blocked requests</span>'}</div>
     <div class="dbox"><span class="label">Allowed responses (${W})</span>${Object.keys(c.codes).length?`<ul>${Object.entries(c.codes).map(([k,v])=>li(`HTTP ${k}${k==="200"&&c.atk.length&&c.o[0]!=="thmob"?' <span class="sig w">⚠ after attacks</span>':""}`,`<b class="al">${v}</b>`)).join("")}</ul>`:'<span class="note">nothing let through</span>'}</div>
     <div class="dbox"><span class="label">Activity – requests per hour (24h)</span>${spark(c.trend)}<div class="note">last 1h: <b>${c.last1h}</b> · ${c.last1h?"● still active":"quiet in the last hour"}</div></div>
