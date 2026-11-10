@@ -108,7 +108,7 @@ td.aid:hover{background:var(--info-bg)!important}
 .r-hi{color:var(--crit)} .r-mid{color:var(--warn)} .r-lo{color:var(--muted)}
 .own{display:inline-block;border-radius:4px;padding:0 6px;font-size:11px;font-weight:600;white-space:nowrap}
 .o-host{background:var(--mute-bg);color:var(--fg)} .o-isp{background:var(--info-bg);color:var(--info)}
-.o-mob,.o-thmob{background:var(--warn-bg);color:var(--warn)} .o-bot,.o-asset{background:var(--ok-bg);color:var(--ok)}
+.o-mob,.o-thmob,.o-cloud{background:var(--warn-bg);color:var(--warn)} .o-bot,.o-asset{background:var(--ok-bg);color:var(--ok)}
 .sig{display:inline-block;font-size:11px;white-space:nowrap}
 .sig.w{color:var(--crit);font-weight:600} .sig.c{color:var(--warn);font-weight:600} .sig.i{color:var(--muted)}
 .detail{border-color:var(--accent);border-width:1.5px}
@@ -135,7 +135,7 @@ td.aid:hover{background:var(--info-bg)!important}
   <div class="in">
     <div><span class="label">Apps › Imperva IOC Block</span><h1 id="pageTitle">Imperva WAF – IOC Block</h1></div>
     <div class="chips">
-      <span class="chip sim">Mockup v3.8 · simulated data</span>
+      <span class="chip sim">Mockup v3.8b · simulated data</span>
       <span class="chip">Policy 2169031 · via SOAR</span>
     </div>
   </div>
@@ -150,7 +150,7 @@ td.aid:hover{background:var(--info-bg)!important}
 
 <!-- ============ Page 1: dashboard (7 days, search + Block) ============ -->
 <main class="wrap" id="v-dash">
-  <div class="review"><b>Mockup v3.8 – ส่วนเพิ่มเติมช่วยตัดสินใจ (<span class="new">NEW</span>)</b> · <b>ของเดิมไม่เปลี่ยน:</b> คอลัมน์เดิมและลำดับเดิม, suggestion เดิม, การ์ด / ปุ่ม Block · Not block, saved search และ macro เดิม · <b>ส่วนใหม่:</b> ① คอลัมน์ <b>Decision aid</b> ต่อท้ายตาราง = เจ้าของ IP (Hosting / ISP / มือถือไทย shared IP / bot ที่ Imperva ยืนยัน) และสัญญาณเตือน (⚠ โจมตี + ปล่อยผ่านได้ 200, ● ยังยิงอยู่, ↺ เคย unblock, IP ข้างเคียงถูก detect) · ② <b>คลิกช่อง Decision aid</b> = เปิดแผง <b>IP detail</b> เหนือตาราง: ประเภทการโจมตี, response code ที่ผ่าน, กิจกรรมรายชั่วโมง, client / User-Agent, Top paths, ประวัติ, IP ข้างเคียง · คลิกส่วนอื่นของแถว = เลือก IP เหมือนเดิม</div>
+  <div class="review"><b>Mockup v3.8b:</b> เลข <b>Incident no.</b> แสดงเฉพาะตัวเลข (ตัด ITHM ออก; ค้นหาด้วย “ITHM 1000101” หรือ “1000101” ได้ทั้งคู่) · IP ของ <b>cloud provider</b> (AWS, Google Cloud, Azure ฯลฯ) = suggestion <b>DO_NOT_BLOCK</b> พร้อมเหตุผล และเตือนใน WAF check ถ้าเลือก (ยัง block เองได้) · <b>ส่วนเพิ่มเติมช่วยตัดสินใจ (<span class="new">NEW</span>)</b> · <b>ของเดิมไม่เปลี่ยน:</b> คอลัมน์เดิมและลำดับเดิม, suggestion เดิม, การ์ด / ปุ่ม Block · Not block, saved search และ macro เดิม · <b>ส่วนใหม่:</b> ① คอลัมน์ <b>Decision aid</b> ต่อท้ายตาราง = เจ้าของ IP (Hosting / ISP / มือถือไทย shared IP / bot ที่ Imperva ยืนยัน) และสัญญาณเตือน (⚠ โจมตี + ปล่อยผ่านได้ 200, ● ยังยิงอยู่, ↺ เคย unblock, IP ข้างเคียงถูก detect) · ② <b>คลิกช่อง Decision aid</b> = เปิดแผง <b>IP detail</b> เหนือตาราง: ประเภทการโจมตี, response code ที่ผ่าน, กิจกรรมรายชั่วโมง, client / User-Agent, Top paths, ประวัติ, IP ข้างเคียง · คลิกส่วนอื่นของแถว = เลือก IP เหมือนเดิม</div>
   <section class="kpis" aria-label="Summary">
     <div class="kpi k-warn"><span class="label">Detected WAF IPs</span><span class="v" id="kDet">0</span><span class="s" id="kDetSub">last 7 days</span></div>
     <div class="kpi k-info"><span class="label">Blocked on WAF now</span><span class="v" id="kWaf">0</span><span class="s">policy 2169031 (live)</span></div>
@@ -164,12 +164,12 @@ td.aid:hover{background:var(--info-bg)!important}
   </section>
   <section class="control" aria-label="Search and block">
     <div class="crow">
-      <div class="field" style="flex:1 1 300px"><label for="d_q">🔎 Search IP / Ticket / Incident no. / Rule</label><input type="text" id="d_q" placeholder="เช่น 54.245 หรือ ITHM 1000101"></div>
+      <div class="field" style="flex:1 1 300px"><label for="d_q">🔎 Search IP / Ticket / Incident no. / Rule</label><input type="text" id="d_q" placeholder="เช่น 54.245 หรือ 1000101"></div>
       <div class="field" style="flex:1 1 300px"><label for="d_add">➕ Add IPs manually – other sources, comma separated</label><input type="text" id="d_add" placeholder="เช่น 203.0.113.10, 198.51.100.7"></div>
     </div>
     <div class="crow">
       <div class="field" style="flex:1 1 340px"><span class="flabel">Selected IPs — คลิกแถวในตารางด้านล่าง</span><div class="selbox" id="d_sel"></div></div>
-      <div class="field" style="flex:0 1 190px"><label for="d_tk">Ticket / Incident no.</label><input type="text" id="d_tk" placeholder="ITHM 1234567"></div>
+      <div class="field" style="flex:0 1 190px"><label for="d_tk">Ticket / Incident no.</label><input type="text" id="d_tk" placeholder="1234567"></div>
       <div class="field" style="flex:1 1 240px"><label for="d_desc">Description</label><input type="text" id="d_desc" placeholder="เหตุผล / รายละเอียด"></div>
       <button class="run" id="d_run" type="button" disabled>⛔ Block 0 IPs</button>
       <button class="run nb" id="d_nb" type="button" disabled title="hide the selected IPs until they are detected again">✖ Not block 0 IPs</button>
@@ -181,7 +181,7 @@ td.aid:hover{background:var(--info-bg)!important}
   <section class="panel">
     <div class="panel-head">
       <h2>IPs detected by WAF rules – last 7 days</h2>
-      <p>คลิกแถวเพื่อเลือก · Ticket/Incident no. เติมจาก ITHM ใน finding note · IP ที่ block แล้วจะย้ายไปหน้า Blocked IPs</p>
+      <p>คลิกแถวเพื่อเลือก · Ticket/Incident no. เติมเลข incident จาก finding note (ตัดคำว่า ITHM ออก) · IP ที่ block แล้วจะย้ายไปหน้า Blocked IPs</p>
     </div>
     <div class="tbl-wrap"><table>
       <thead><tr><th></th><th>IP</th><th>VirusTotal</th><th>Rule</th><th>Incident no.</th><th>Severity</th><th>Last detected</th><th style="text-align:right">Findings</th><th style="text-align:right" title="WAF requests in the last 24 h: blocked / allowed">Block / Allow (24h)</th><th style="text-align:right" title="websites the IP tried in the last 24 h: blocked on / allowed on">Web Block / Allow (24h)</th><th title="top URLs of this IP in the last 24 h: red = blocked by the WAF, green = let through">Top paths (24h)</th><th>Suggestion</th><th>Location</th><th title="new: owner of the IP and warning signals – click to open IP detail">Decision aid (24h)<span class="new">NEW</span></th></tr></thead>
@@ -197,13 +197,13 @@ td.aid:hover{background:var(--info-bg)!important}
   </section>
   <section class="control" aria-label="Search and block older detections">
     <div class="crow">
-      <div class="field" style="flex:1 1 300px"><label for="h_q">🔎 Search IP / Ticket / Incident no. / Rule</label><input type="text" id="h_q" placeholder="เช่น 45.95 หรือ ITHM 1000060"></div>
+      <div class="field" style="flex:1 1 300px"><label for="h_q">🔎 Search IP / Ticket / Incident no. / Rule</label><input type="text" id="h_q" placeholder="เช่น 45.95 หรือ 1000060"></div>
       <div class="field" style="flex:1 1 300px"><label for="h_add">➕ Add IPs manually – other sources, comma separated</label><input type="text" id="h_add" placeholder="เช่น 203.0.113.10, 198.51.100.7"></div>
       <div class="field" style="flex:0 0 210px"><label for="h_rng">Detected</label><select id="h_rng"><option value="30">8 – 30 days ago</option><option value="90">31 – 90 days ago</option><option value="all">older than 7 days (all)</option></select></div>
     </div>
     <div class="crow">
       <div class="field" style="flex:1 1 340px"><span class="flabel">Selected IPs — คลิกแถวในตารางด้านล่าง</span><div class="selbox" id="h_sel"></div></div>
-      <div class="field" style="flex:0 1 190px"><label for="h_tk">Ticket / Incident no.</label><input type="text" id="h_tk" placeholder="ITHM 1234567"></div>
+      <div class="field" style="flex:0 1 190px"><label for="h_tk">Ticket / Incident no.</label><input type="text" id="h_tk" placeholder="1234567"></div>
       <div class="field" style="flex:1 1 240px"><label for="h_desc">Description</label><input type="text" id="h_desc" placeholder="เหตุผล / รายละเอียด"></div>
       <button class="run" id="h_run" type="button" disabled>⛔ Block 0 IPs</button>
       <button class="run nb" id="h_nb" type="button" disabled title="hide the selected IPs until they are detected again">✖ Not block 0 IPs</button>
@@ -235,11 +235,11 @@ td.aid:hover{background:var(--info-bg)!important}
   </section>
   <section class="control u" aria-label="Search and unblock">
     <div class="crow">
-      <div class="field" style="flex:1 1 300px"><label for="b_q">🔎 Search IP / Ticket / Incident no. / Description</label><input type="text" id="b_q" placeholder="เช่น 193.42 หรือ ITHM 1000090"></div>
+      <div class="field" style="flex:1 1 300px"><label for="b_q">🔎 Search IP / Ticket / Incident no. / Description</label><input type="text" id="b_q" placeholder="เช่น 193.42 หรือ 1000090"></div>
     </div>
     <div class="crow">
       <div class="field" style="flex:1 1 340px"><span class="flabel">Selected IPs — คลิกแถวในตารางด้านล่าง</span><div class="selbox" id="b_sel"></div></div>
-      <div class="field" style="flex:0 1 190px"><label for="b_tk">Ticket / Incident no.</label><input type="text" id="b_tk" placeholder="ITHM 1234567"></div>
+      <div class="field" style="flex:0 1 190px"><label for="b_tk">Ticket / Incident no.</label><input type="text" id="b_tk" placeholder="1234567"></div>
       <div class="field" style="flex:1 1 240px"><label for="b_desc">Description</label><input type="text" id="b_desc" placeholder="เหตุผลที่ unblock"></div>
       <button class="run u" id="b_run" type="button" disabled>🔓 Unblock 0 IPs</button>
     </div>
@@ -300,27 +300,28 @@ const USER="analyst01", HOUR=3600e3, DAY=86400e3, now0=Date.now();
 const RULES=["WAF - High-Volume Blocked Requests from Single Source","WAF - Partner Site Attack","WAF - DDoS Behavior Detection","WAF - Abnormal User-Agent Length","WAF - Attack Analytics Multi-Category"];
 const D=(ip,rule,inc,sev,ageH,n,vt,loc,sug,pol)=>({ip,rule:RULES[rule],inc,sev,last:now0-ageH*HOUR,n,vt,loc,sug,pol:pol||"-"});
 const detected=[
- D("54.245.198.114",1,"ITHM 1000101","high",0.5,14,6,"Boardman, US","BLOCK"),
- D("54.213.203.214",1,"ITHM 1000101","high",0.6,11,5,"Boardman, US","BLOCK"),
- D("52.88.145.123",1,"ITHM 1000101","high",0.7,9,2,"Boardman, US","REVIEW"),
+ D("54.245.198.114",1,"1000101","high",0.5,14,6,"Boardman, US","BLOCK"),
+ D("54.213.203.214",1,"1000101","high",0.6,11,5,"Boardman, US","BLOCK"),
+ D("52.88.145.123",1,"1000101","high",0.7,9,2,"Boardman, US","REVIEW"),
  D("223.181.15.230",4,"-","medium",20,3,9,"Mumbai, IN","BLOCK"),
- D("211.24.84.19",2,"ITHM 1000102","medium",30,4,3,"Kuala Lumpur, MY","BLOCK"),
+ D("211.24.84.19",2,"1000102","medium",30,4,3,"Kuala Lumpur, MY","BLOCK"),
  D("57.141.0.36",3,"-","medium",50,2,0,"Paris, FR","MONITOR"),
- D("185.220.101.47",0,"ITHM 1000103","high",75,21,14,"Frankfurt, DE","ALREADY_BLOCKED","BLOCK in 1000001 Block DDoS policy"),
+ D("185.220.101.47",0,"1000103","high",75,21,14,"Frankfurt, DE","ALREADY_BLOCKED","BLOCK in 1000001 Block DDoS policy"),
  D("20.20.20.20",0,"-","low",100,5,0,"Singapore, SG","DO_NOT_BLOCK","ALLOW in 1000002 Allow partner DC"),
- D("103.152.18.90",0,"ITHM 1000104","medium",140,6,1,"Ho Chi Minh City, VN","REVIEW"),
- D("198.51.100.77",3,"ITHM 1000105","medium",5,3,0,"Bangkok, TH","REVIEW"),
- D("45.95.147.236",0,"ITHM 1000060","high",10*24,18,11,"Amsterdam, NL","BLOCK"),
- D("194.26.29.102",2,"ITHM 1000058","medium",13*24,7,6,"Moscow, RU","BLOCK"),
+ D("103.152.18.90",0,"1000104","medium",140,6,1,"Ho Chi Minh City, VN","REVIEW"),
+ D("198.51.100.77",3,"1000105","medium",5,3,0,"Bangkok, TH","REVIEW"),
+ D("35.240.10.8",4,"1000106","medium",8,2,3,"Singapore, SG","BLOCK"),
+ D("45.95.147.236",0,"1000060","high",10*24,18,11,"Amsterdam, NL","BLOCK"),
+ D("194.26.29.102",2,"1000058","medium",13*24,7,6,"Moscow, RU","BLOCK"),
  D("118.193.33.60",4,"-","medium",19*24,4,2,"Hong Kong, HK","REVIEW"),
  D("5.188.206.14",3,"-","low",26*24,2,1,"St Petersburg, RU","MONITOR"),
- D("89.248.165.52",0,"ITHM 1000031","high",45*24,25,12,"Amsterdam, NL","BLOCK"),
+ D("89.248.165.52",0,"1000031","high",45*24,25,12,"Amsterdam, NL","BLOCK"),
  D("162.142.125.9",0,"-","low",70*24,3,4,"Ann Arbor, US","REVIEW"),
 ];
 const blocked=[
- {ip:"193.42.33.7",t:now0-3*DAY,tk:"ITHM 1000090",desc:"Credential stuffing on /login",by:"analyst01",rule:RULES[0]},
- {ip:"141.98.10.60",t:now0-9*DAY,tk:"ITHM 1000071",desc:"Scanner, VT 9/94",by:"analyst02",rule:RULES[4]},
- {ip:"91.240.118.172",t:now0-14*DAY,tk:"ITHM 1000055",desc:"SQLi burst on partner site",by:"analyst03",rule:RULES[1]},
+ {ip:"193.42.33.7",t:now0-3*DAY,tk:"1000090",desc:"Credential stuffing on /login",by:"analyst01",rule:RULES[0]},
+ {ip:"141.98.10.60",t:now0-9*DAY,tk:"1000071",desc:"Scanner, VT 9/94",by:"analyst02",rule:RULES[4]},
+ {ip:"91.240.118.172",t:now0-14*DAY,tk:"1000055",desc:"SQLi burst on partner site",by:"analyst03",rule:RULES[1]},
 ];
 const audit=blocked.map((b,i)=>({t:b.t,user:b.by,action:"block",ip:b.ip,tk:b.tk,desc:b.desc,status:"blocked",ver:"yes",cont:4700+i*13}));
 const rules=[
@@ -380,16 +381,16 @@ const act=(ip,win,det)=>{let h=0; for(const c of ip) h=(h*31+c.charCodeAt(0))%99
 // ---------- NEW (v3.8): decision aid – all simulated. Real sources: ES risk index, VT ASN / AS owner +
 // ES asset lookup + Imperva client classification, Imperva CEF (cef_name, response code, user agent), audit CSV
 const hh=(ip,salt)=>{let h=salt||7; for(const c of ip) h=(h*31+c.charCodeAt(0))%100003; return h;};
-const OWN={"54.245.198.114":["host","AS16509 Amazon.com"],"54.213.203.214":["host","AS16509 Amazon.com"],"52.88.145.123":["host","AS16509 Amazon.com"],
+const OWN={"54.245.198.114":["cloud","AS16509 Amazon AWS"],"54.213.203.214":["cloud","AS16509 Amazon AWS"],"52.88.145.123":["cloud","AS16509 Amazon AWS"],"35.240.10.8":["cloud","AS396982 Google Cloud"],
  "223.181.15.230":["mob","AS45609 Bharti Airtel"],"211.24.84.19":["isp","AS4788 TM Net"],"57.141.0.36":["bot","AS32934 Meta · facebookexternalhit"],
  "103.152.18.90":["isp","AS45899 VNPT"],"45.95.147.236":["host","AS49870 Alsycon"],"194.26.29.102":["host","AS206728 Media Land"],
  "118.193.33.60":["host","AS135377 UCloud"],"5.188.206.14":["host","AS49453 Global Layer"],"89.248.165.52":["host","AS202425 IP Volume"],
  "162.142.125.9":["host","AS398324 Censys (research scanner)"],"198.51.100.77":["thmob","AS131445 AIS mobile"],
  "185.220.101.47":["host","AS60729 Tor exit"],"20.20.20.20":["asset","partner DC (ES asset)"]};
-const OWN_LABEL={host:"Hosting / Cloud",isp:"ISP",mob:"Mobile ISP · shared IP",thmob:"TH mobile · shared IP",bot:"Crawler (verified)",asset:"Asset / partner"};
+const OWN_LABEL={cloud:"Cloud provider · shared IP",host:"Hosting / VPS",isp:"ISP",mob:"Mobile ISP · shared IP",thmob:"TH mobile · shared IP",bot:"Crawler (verified)",asset:"Asset / partner"};
 const RISK_RULES=["Risk - Web Attack from External IP","Risk - Threat Intel Match (IP)","Risk - Brute Force Login","Risk - Scanner Activity","Risk - Abnormal Request Rate"];
 const ATK=["SQL Injection","Cross Site Scripting","Illegal Resource Access","Bot Access Control","Remote File Inclusion","Blocked IP"];
-const CLIENT={host:[["Vulnerability Scanner","Nuclei","Mozilla/5.0 (Windows NT 10.0; Win64; x64) Nuclei - Open-source project"],["Bad Bot","python-requests","python-requests/2.31.0"],["Vulnerability Scanner","sqlmap","sqlmap/1.7.2#stable (https://sqlmap.org)"]],
+const CLIENT={cloud:[["Bad Bot","python-requests","python-requests/2.31.0"],["Vulnerability Scanner","Nuclei","Mozilla/5.0 (Windows NT 10.0; Win64; x64) Nuclei - Open-source project"]],host:[["Vulnerability Scanner","Nuclei","Mozilla/5.0 (Windows NT 10.0; Win64; x64) Nuclei - Open-source project"],["Bad Bot","python-requests","python-requests/2.31.0"],["Vulnerability Scanner","sqlmap","sqlmap/1.7.2#stable (https://sqlmap.org)"]],
  isp:[["Bad Bot","curl","curl/8.4.0"]],mob:[["Browser","Chrome Mobile","Mozilla/5.0 (Linux; Android 13) Chrome/124.0 Mobile Safari/537.36"]],
  thmob:[["Browser","Chrome Mobile","Mozilla/5.0 (Linux; Android 14; SM-A546E) Chrome/125.0 Mobile Safari/537.36"]],
  bot:[["Search Bot","facebookexternalhit","facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)"]],asset:[["Browser","Chrome","Mozilla/5.0 Chrome/124.0"]]};
@@ -409,6 +410,7 @@ function ctx(d, win){
   const c24=detected.filter(x=>x.ip!==ip&&x.ip.split(".").slice(0,3).join(".")===ip.split(".").slice(0,3).join(".")).map(x=>x.ip);
   const hist=HIST[ip]||{}, days=1+h%6+(d.n>15?6:0), first=d.last-(h%25)*DAY;
   const sig=[];
+  if(o[0]==="cloud") sig.push(["w","⛔ cloud provider – do not block"]);
   if(atk.length&&codes["200"]&&o[0]!=="thmob") sig.push(["w",`⚠ attacks + allowed 200 ×${codes["200"]}`]);
   if(o[0]==="thmob"||o[0]==="mob") sig.push(["c","⚠ shared IP – may hit customers"]);
   if(o[0]==="bot") sig.push(["i","✔ crawler verified by Imperva"]);
@@ -421,6 +423,10 @@ function ctx(d, win){
   return {w,o,score,rules,atk,codes,cl,trend,last1h,nbr,c24,hist,days,first,sig,win};
 }
 const rcls=v=>v>=150?"r-hi":v>=60?"r-mid":"r-lo";
+// cloud provider IPs (AWS, Google Cloud, Azure, ...) are shared / re-assigned: never suggest BLOCK
+function effSug(d){ const o=OWN[d.ip]||[];
+  if(o[0]==="cloud"&&d.sug!=="ALREADY_BLOCKED"&&d.sug!=="DO_NOT_BLOCK") return {sug:"DO_NOT_BLOCK",reason:`cloud provider IP (${o[1].replace(/^AS\d+ /,"")}) – shared / re-assigned to other customers`,was:d.sug};
+  return {sug:d.sug,reason:"",was:null}; }
 function aidCell(d, win){ const c=ctx(d,win);
   return `<td class="aid" data-detail="${d.ip}" title="click: IP detail"><div class="row"><span class="own o-${c.o[0]}">${OWN_LABEL[c.o[0]]}</span></div>
     ${c.sig.slice(0,3).map(x=>`<div><span class="sig ${x[0]}">${esc(x[1])}</span></div>`).join("")}${c.sig.length>3?`<div class="note">+${c.sig.length-3} more</div>`:""}
@@ -439,7 +445,7 @@ function renderDetail(page){
   const ptable=all.length?`<div class="ptbl-wrap"><table class="ptbl"><thead><tr><th>#</th><th>Host + path</th><th style="text-align:right">Blocked</th><th style="text-align:right">Let through</th><th style="text-align:right">Total ▼</th></tr></thead><tbody>${all.map((x,i)=>`<tr class="${x.b&&x.a?"both":""}"><td class="n note">${i+1}</td><td class="p">${esc(x.p)}</td><td class="n">${x.b?`<b class="bk">${x.b.toLocaleString()}</b>`:'<span class="note">0</span>'}</td><td class="n">${x.a?`<b class="al">${x.a.toLocaleString()}</b>`:'<span class="note">0</span>'}</td><td class="n"><b>${(x.b+x.a).toLocaleString()}</b></td></tr>`).join("")}</tbody></table></div>`:'<div class="note">no requests</div>';
   const sel=pg.sel.has(d.ip);
   el.hidden=false;
-  el.innerHTML=`<div class="panel-head"><div class="dhead"><h2>IP detail – <span class="mono">${d.ip}</span><span class="new">NEW</span></h2><span class="own o-${c.o[0]}">${OWN_LABEL[c.o[0]]}</span><span class="note">${esc(c.o[1])} · ${esc(d.loc)}</span><span class="pill ${sugPill[d.sug]}" title="existing suggestion – not changed">${d.sug}</span></div>
+  el.innerHTML=`<div class="panel-head"><div class="dhead"><h2>IP detail – <span class="mono">${d.ip}</span><span class="new">NEW</span></h2><span class="own o-${c.o[0]}">${OWN_LABEL[c.o[0]]}</span><span class="note">${esc(c.o[1])} · ${esc(d.loc)}</span><span class="pill ${sugPill[effSug(d).sug]}" title="${esc(effSug(d).reason||"suggestion")}">${effSug(d).sug}</span>${effSug(d).reason?`<span class="note">${esc(effSug(d).reason)}</span>`:""}</div>
     <div class="dact"><button type="button" data-dsel="${d.ip}">${sel?"✓ selected – unselect":"☐ select this IP"}</button><a class="vt" href="https://www.virustotal.com/gui/ip-address/${d.ip}" target="_blank" rel="noopener">🔗 VT ${d.vt}/94</a><button type="button" onclick="toast('Real dashboard: opens a Splunk search with every WAF event of this IP in a new tab')">🔍 all events</button><button type="button" data-dclose="1" aria-label="close IP detail">✖ close</button></div></div>
   <div class="dgrid">
     <div class="dbox"><span class="label">WAF attack types (${W})</span>${c.atk.length?`<ul>${c.atk.map(a=>li(esc(a[0]),`<b class="bk">${a[1].toLocaleString()}</b>`)).join("")}</ul>`:'<span class="note">no blocked requests</span>'}</div>
@@ -458,6 +464,7 @@ const isHidden=d=>notBlocked.some(x=>x.ip===d.ip && x.t>=d.last);
 const pendingDetected=()=>detected.filter(d=>!onWaf(d.ip)&&!isHidden(d)&&ruleUsed(d.rule).use&&d.sug!=="ALREADY_BLOCKED"&&d.sug!=="DO_NOT_BLOCK");
 const WAF_POLICY={"185.220.101.47":"BLOCK in 1000001 Block DDoS policy","35.165.106.69":"BLOCK in 1000003 Block IOC attack","20.20.20.20":"ALLOW in 1000002 Allow partner DC"};
 function wafCheck(ip){ if(!isIP(ip)) return ip+" is not an IP / CIDR"; if(onWaf(ip)) return ip+" already blocked from Splunk";
+  const o=OWN[ip]||[]; if(o[0]==="cloud"&&!WAF_POLICY[ip]) return ip+" is a CLOUD PROVIDER IP ("+o[1].replace(/^AS\d+ /,"")+") – shared, block not recommended";
   const p=WAF_POLICY[ip]; if(!p) return null; return p.startsWith("ALLOW")? ip+" is ALLOWED: "+p : ip+" already BLOCKED: "+p; }
 const win={dash:d=>age(d)<=7*DAY,
   history:d=>{const r=$("h_rng").value,a=age(d); return r==="30"?a>7*DAY&&a<=30*DAY : r==="90"?a>30*DAY&&a<=90*DAY : a>7*DAY;}};
@@ -465,7 +472,8 @@ const win={dash:d=>age(d)<=7*DAY,
 const P={dash:{p:"d",act:"block",sel:new Set(),busy:false,detail:null},history:{p:"h",act:"block",sel:new Set(),busy:false,detail:null},blocked:{p:"b",act:"unblock",sel:new Set(),busy:false}};
 let soarSeq=4813;
 
-function detRows(page){const q=$(P[page].p+"_q").value.trim().toLowerCase();
+const normQ=v=>v.trim().toLowerCase().replace(/^ithm[\s:#-]*/,"");   // "ITHM 1000101" = "1000101"
+function detRows(page){const q=normQ($(P[page].p+"_q").value);
   return pendingDetected().filter(win[page]).filter(d=>has(q,d.ip,d.inc,d.rule)).sort((a,b)=>b.last-a.last);}
 function renderDet(page){
   const pg=P[page], rows=detRows(page), q=$(pg.p+"_q").value.trim();
@@ -474,12 +482,12 @@ function renderDet(page){
     return `<tr data-ip="${d.ip}" class="${pg.sel.has(d.ip)?"selected":""}">
     <td>${ok?'<span class="box"></span>':''}</td><td class="ip">${d.ip}</td><td class="nw"><a class="vt" href="https://www.virustotal.com/gui/ip-address/${d.ip}" target="_blank" rel="noopener" onclick="event.stopPropagation()">🔗</a> <span class="mono">${d.vt}/94</span></td><td class="small">${esc(d.rule)}</td>
     <td class="mono nw">${esc(d.inc)}</td><td><span class="pill sev-${d.sev}">${d.sev}</span></td><td class="mono nw">${fmt(d.last)}</td>
-    <td class="num">${d.n}</td><td class="num nw"><b class="bk">${w.b.toLocaleString()}</b> / <b class="al">${w.a.toLocaleString()}</b></td><td class="num nw"><b class="bk">${w.wb}</b> / <b class="al">${w.wa}</b></td><td>${pathCell(fullPaths(d.ip,w.b,BAD,3), fullPaths(d.ip,w.a,GOOD,5))}</td>${page==="history"?`<td class="mono nw">${w.last?fmt(w.last):"-"}</td>`:""}<td><span class="pill ${sugPill[d.sug]}">${d.sug}</span></td>
+    <td class="num">${d.n}</td><td class="num nw"><b class="bk">${w.b.toLocaleString()}</b> / <b class="al">${w.a.toLocaleString()}</b></td><td class="num nw"><b class="bk">${w.wb}</b> / <b class="al">${w.wa}</b></td><td>${pathCell(fullPaths(d.ip,w.b,BAD,3), fullPaths(d.ip,w.a,GOOD,5))}</td>${page==="history"?`<td class="mono nw">${w.last?fmt(w.last):"-"}</td>`:""}<td>${(e=>`<span class="pill ${sugPill[e.sug]}">${e.sug}</span>${e.reason?`<div class="note" style="min-width:150px">${esc(e.reason)}</div>`:""}`)(effSug(d))}</td>
     <td class="nw">${esc(d.loc)}</td>${aidCell(d, page==="history"?"30d":"24h")}</tr>`;}).join("")
     ||`<tr><td colspan="${page==="history"?15:14}" class="note">${q?`ไม่พบ IP ที่ตรงกับ “${esc(q)}”`:"ไม่มี IP ที่รอ block ในช่วงเวลานี้"}</td></tr>`;
 }
 function renderBlocked(){
-  const pg=P.blocked, q=$("b_q").value.trim().toLowerCase();
+  const pg=P.blocked, q=normQ($("b_q").value);
   const rows=blocked.filter(b=>has(q,b.ip,b.tk,b.desc,b.rule)).sort((a,b)=>b.t-a.t);
   $("b_tbl").innerHTML=rows.map(b=>`<tr data-ip="${b.ip}" class="${pg.sel.has(b.ip)?"selected":""}">
     <td><span class="box"></span></td><td class="ip">${b.ip}</td><td class="mono nw">${fmt(b.t)}</td>
