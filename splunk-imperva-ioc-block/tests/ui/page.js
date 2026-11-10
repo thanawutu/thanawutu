@@ -7,10 +7,11 @@ const CARD = url(path.join(__dirname, "..", "..", "TA-imperva-ioc-block", "appse
 module.exports = function (p, dark, extra) {
   const ipField = p === "b" ? "ip" : "src";
   const rows = [
-    {ip: "54.245.10.21", inc: "ITHM 1000101", rule: "Threat - WAF scanner"},
-    {ip: "54.245.88.7", inc: "ITHM 1000101", rule: "Threat - WAF scanner"},
-    {ip: "198.51.100.23", inc: "ITHM 1000102", rule: "Risk - brute force"},
-    {ip: "192.0.2.55", inc: "ITHM 1000103", rule: "Threat - IOC match"}];
+    {ip: "54.245.10.21", inc: "1000101", rule: "Threat - WAF scanner"},
+    {ip: "54.245.88.7", inc: "1000101", rule: "Threat - WAF scanner"},
+    {ip: "198.51.100.23", inc: "1000102", rule: "Risk - brute force"},
+    {ip: "192.0.2.55", inc: "1000103", rule: "Threat - IOC match"},
+    {ip: "52.88.145.123", inc: "1000104", rule: "Threat - WAF scanner"}];
   const tableId = p === "b" ? "b_table" : "det_table";
   const bg = dark ? "#171d21" : "#eef1f4", panel = dark ? "#212527" : "#ffffff", fg = dark ? "#fff" : "#000";
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -31,6 +32,7 @@ module.exports = function (p, dark, extra) {
 <table><thead><tr><th data-sort-key="${ipField}">${ipField}</th><th data-sort-key="VirusTotal">VirusTotal</th><th data-sort-key="incident_no">incident_no</th><th data-sort-key="severity">severity</th></tr></thead>
 <tbody>${rows.map(r => `<tr><td>${r.ip}</td><td style="background-color:#2C62B3;color:#fff">🔗</td><td>${r.inc}</td><td>high</td></tr>`).join("")}</tbody></table>
 </div></div></div></div>
+<div class="dashboard-row"><div class="dashboard-cell"><div class="dashboard-panel"><div id="${p}_paths" class="dashboard-element table"><div class="table-wrap"><table><tbody>${Array.from({length: 40}, (_, i) => `<tr><td>www.example.com/p${i}</td></tr>`).join("")}</tbody></table></div></div></div></div></div>
 <div class="filler"></div>
 <script>$("#${tableId} tbody tr").on("click", function(){ rowClick($(this).children().eq(0).text(), $(this).children().eq(2).text()); });</script>
 <script src="${CARD}"></script>

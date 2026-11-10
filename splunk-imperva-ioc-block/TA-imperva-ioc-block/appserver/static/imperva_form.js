@@ -11,6 +11,11 @@
  * $p_desc$, $p_sel$, $p_exec_*$, $p_nb_*$), so the searches of the views do not change.
  * If this script does not load, the Simple XML inputs and the action table stay visible and
  * work as before.
+ *
+ * 1.3.0: cloud provider IPs (field cloud_ips of the action search) are never counted in Block -
+ *        they can only be selected for Not block (impervablock also rejects them); incident
+ *        numbers are digits only ("ITHM 1000101" in the search box -> Ticket 1000101); the
+ *        "All paths" table of the IP detail panel scrolls.
  */
 require([
     "jquery",
@@ -22,13 +27,13 @@ require([
     var PAGES = {
         d: {verb: "block", manual: true, table: "det_table", ipField: "src",
             search: "🔎 Search IP / Ticket / Incident no. / Rule",
-            qph: "เช่น 54.245 หรือ ITHM 1000101", dph: "เหตุผล / รายละเอียด"},
+            qph: "เช่น 54.245 หรือ 1000101", dph: "เหตุผล / รายละเอียด"},
         h: {verb: "block", manual: true, table: "det_table", ipField: "src",
             search: "🔎 Search IP / Ticket / Incident no. / Rule",
-            qph: "เช่น 54.245 หรือ ITHM 1000101", dph: "เหตุผล / รายละเอียด"},
+            qph: "เช่น 54.245 หรือ 1000101", dph: "เหตุผล / รายละเอียด"},
         b: {verb: "unblock", manual: false, table: "b_table", ipField: "ip",
             search: "🔎 Search IP / Ticket / Incident no. / Description",
-            qph: "เช่น 193.42 หรือ ITHM 1000090", dph: "เหตุผลที่ unblock"}
+            qph: "เช่น 193.42 หรือ 1000090", dph: "เหตุผลที่ unblock"}
     };
 
     // light = colours of the mockup; body.imp-dark when Splunk draws the dashboard dark
@@ -49,6 +54,8 @@ require([
         ".imp-tag{display:inline-flex;align-items:center;gap:2px;font-family:Menlo,Consolas,monospace;font-size:12px;background:var(--imp-sel);border:1px solid var(--imp-accent);border-radius:4px;padding:1px 2px 1px 8px;color:var(--imp-fg);white-space:nowrap}",
         ".imp-tag.imp-man{border-style:dashed;background:var(--imp-warn-bg);padding-right:8px}",
         ".imp-tag.imp-bad{border-color:var(--imp-crit);background:var(--imp-crit-bg);color:var(--imp-crit);padding-right:8px}",
+        ".imp-tag.imp-cloud{border-color:var(--imp-warn);background:var(--imp-warn-bg);color:var(--imp-warn)}",
+        ".imp-scroll{max-height:360px;overflow-y:auto}",
         ".imp-tag button{border:0;background:transparent;padding:0 5px;margin:0;font-size:15px;line-height:1;color:var(--imp-muted);cursor:pointer}",
         ".imp-tag button:hover{color:var(--imp-fg)}",
         ".imp-link{border:0;background:transparent;padding:0;margin:0 0 0 10px;font-size:12px;color:var(--imp-accent);cursor:pointer;white-space:nowrap}",
@@ -148,6 +155,12 @@ require([
         });
     }
 
+    // "ITHM 1000101" / "1000101" -> "1000101" (incident numbers are shown as digits only)
+    function incidentOf(v) {
+        var m = /^\s*(?:ITHM[\s:#-]*)?(\d{6,})\s*$/i.exec(v || "");
+        return m ? m[1] : null;
+    }
+
     function isIp(x) {
         var m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(\/(\d{1,2}))?$/.exec(x);
         if (m) {
@@ -198,6 +211,7 @@ require([
         this.cfg = cfg;
         this.autoTk = false;     // Ticket was filled from an "ITHM ..." search, not typed
         this.shown = [];         // IPs of "Select all shown" (from the action search)
+        this.cloud = [];         // selected / added IPs of a cloud provider: Not block only
         this.chk = null;         // last WAF check text
         this.chkFor = null;      // IPs that WAF check was made for
         this.chkWait = false;
@@ -251,7 +265,7 @@ require([
         selWrap.appendChild(selBox);
         row2.appendChild(selWrap);
 
-        var tk = field("imp_" + p + "_tk", "Ticket / Incident no.", "0 1 190px", "ITHM 1234567");
+        var tk = field("imp_" + p + "_tk", "Ticket / Incident no.", "0 1 190px", "1234567");
         var desc = field("imp_" + p + "_desc", "Description", "1 1 240px", cfg.dph);
         row2.appendChild(tk.wrap);
         row2.appendChild(desc.wrap);
@@ -306,10 +320,10 @@ require([
         this.applyQ = debounce(function () {
             var v = q.input.value.trim();
             setInputTok(p + "_q", v || "*");
-            // a search for a ticket fills Ticket / Incident no. (as the old action table did)
-            if (/^ITHM/i.test(v)) {
+            // a search for an incident number fills Ticket / Incident no. (digits only)
+            if (incidentOf(v)) {
                 if (!tk.input.value.trim() || self.autoTk) {
-                    tk.input.value = v.toUpperCase();
+                    tk.input.value = incidentOf(v);
                     self.autoTk = true;
                     setInputTok(p + "_tk", tk.input.value);
                 }
@@ -430,10 +444,14 @@ require([
     };
 
     // IPs the main button acts on: selected rows + valid manually added IPs
+    // ... never a cloud provider IP (those are Not block only)
     Card.prototype.targets = function () {
-        var out = this.selected().slice();
+        var cloud = this.cloud;
+        var out = this.selected().filter(function (x) {
+            return cloud.indexOf(x) < 0;
+        });
         this.manualItems().forEach(function (x) {
-            if (isIp(x) && out.indexOf(x) < 0) {
+            if (isIp(x) && out.indexOf(x) < 0 && cloud.indexOf(x) < 0) {
                 out.push(x);
             }
         });
@@ -444,9 +462,14 @@ require([
         var e = this.el, sel = this.selected(), man = this.manualItems(), all = this.targets();
         var verb = this.cfg.verb === "block" ? "⛔ Block " : "🔓 Unblock ";
 
+        var cloud = this.cloud;
         e.sel.textContent = "";
         sel.forEach(function (ip) {
-            var t = el("span", "imp-tag", ip);
+            var isCloud = cloud.indexOf(ip) >= 0;
+            var t = el("span", "imp-tag" + (isCloud ? " imp-cloud" : ""), isCloud ? "⛔ " + ip + " · Not block only" : ip);
+            if (isCloud) {
+                t.title = "cloud provider IP - never blocked, can be hidden with Not block";
+            }
             var x = el("button", null, "×");
             x.type = "button";
             x.setAttribute("data-ip", ip);
@@ -459,9 +482,10 @@ require([
             if (sel.indexOf(x) >= 0) {
                 return;
             }
-            var ok = isIp(x);
-            var t = el("span", "imp-tag " + (ok ? "imp-man" : "imp-bad"), (ok ? "✍ " : "✖ ") + x);
-            t.title = ok ? "added manually" : "not an IP / CIDR - ignored";
+            var ok = isIp(x), isCloud = cloud.indexOf(x) >= 0;
+            var t = el("span", "imp-tag " + (ok && !isCloud ? "imp-man" : "imp-bad"),
+                isCloud ? "⛔ " + x + " cloud - not blocked" : (ok ? "✍ " : "✖ ") + x);
+            t.title = isCloud ? "cloud provider IP - blocking not allowed" : (ok ? "added manually" : "not an IP / CIDR - ignored");
             e.sel.appendChild(t);
         });
         if (!sel.length && !man.length) {
@@ -477,7 +501,7 @@ require([
         $(e.clear).toggleClass("imp-hidden", !sel.length && !man.length);
         $(e.all).toggleClass("imp-hidden", !this.shown.length);
         e.all.textContent = "☑ Select all " + this.shown.length + " shown";
-        this.renderCheck(all, man);
+        this.renderCheck(sel.concat(all), man);   // also when only cloud IPs (Not block only) are selected
         this.highlight(sel);
     };
 
@@ -543,6 +567,8 @@ require([
             self.chk = get("waf_check");
             var ips = get("selected_ips");
             self.chkFor = setKey(!ips || ips === "-" ? [] : String(ips).split(/\s*,\s*/));
+            var cl = get("cloud_ips");
+            self.cloud = cl && cl !== "-" ? String(cl).split(/\s*[,|]\s*/).filter(function (x) { return x; }) : [];
             var m = /^☑ Select all \d+ shown: (.*)$/.exec(get("SelectAll") || "");
             self.shown = m ? m[1].split(",").filter(function (x) { return x; }) : [];
             self.render();
@@ -596,8 +622,8 @@ require([
     Card.prototype.ticket = function () {
         var v = this.el.tk.value.trim();
         var q = this.el.q.value.trim();
-        if (!v && /^ITHM/i.test(q)) {
-            v = q.toUpperCase();
+        if (!v && incidentOf(q)) {
+            v = incidentOf(q);
         }
         return v || "-";
     };
@@ -647,6 +673,27 @@ require([
         this.reset(false);
     };
 
+    // "All paths" of the IP detail panel: up to 100 rows in a box that scrolls
+    function scrollPaths() {
+        ["d_paths", "h_paths"].forEach(function (id) {
+            var node = document.getElementById(id);
+            if (!node || node.getAttribute("data-imp-scroll")) {
+                return;
+            }
+            node.setAttribute("data-imp-scroll", "1");
+            var apply = function () {
+                var t = node.querySelector("table");
+                if (t && t.parentElement && t.parentElement !== node) {
+                    t.parentElement.classList.add("imp-scroll");
+                }
+            };
+            apply();
+            if (window.MutationObserver) {
+                new MutationObserver(apply).observe(node, {childList: true, subtree: true});
+            }
+        });
+    }
+
     function mount() {
         Object.keys(PAGES).forEach(function (p) {
             var $panel = $("#" + p + "_actpanel");
@@ -694,10 +741,12 @@ require([
         document.head.appendChild(style);
     }
     mount();
+    scrollPaths();
     // inputs / tables can be drawn a little after "ready": hide the old ones again
     [300, 1500].forEach(function (ms) {
         setTimeout(function () {
             mount();
+            scrollPaths();
             $("[id$=_actpanel]").each(function () {
                 var c = $(this).data("impCard");
                 if (c) {

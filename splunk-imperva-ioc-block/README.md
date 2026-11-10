@@ -133,6 +133,7 @@ Set `api_mode = soar`. Splunk sends each block, unblock or list request to Splun
 | Private, loopback, reserved and multicast IPs are refused | `validate_ips` |
 | CIDR can be no wider than /24 (v4) or /48 (v6) | `imperva.conf` |
 | `protected_networks` are never blocked | `imperva.conf` |
+| IPs of **cloud providers** (AWS, Google Cloud, Azure, ...) are never blocked - Not block only | `imperva.conf` `cloud_providers`, `ip_owner.py` |
 | `max_ips_per_action` (default 50) | `imperva.conf` |
 | Per-IP button needs two clicks (Block → CONFIRM). Its tokens are not kept in the URL, so reloading the page never re-runs it | dashboard |
 | **Read → merge → write**, so the existing blacklist is never overwritten | `apply_action` |
@@ -223,6 +224,34 @@ The scheduled search **"Imperva - VT cache warm-up"** (every 10 min, enabled) ha
 limit and keeps retrying, so every detected IP gets a VT score; the dashboards read the cache.
 Imperva API calls are retried on HTTP 429 / 503 (honours `Retry-After`).
 
+### Decision aid and IP detail (1.3.0)
+
+Added on the Block and Older detections pages; the existing columns, suggestion logic, buttons
+and saved searches are not changed.
+
+- Column **Decision aid (24h|30d)** at the end of the table (macro `imperva_ioc_decision_aid(win)`):
+  owner of the IP from the VirusTotal AS owner (Cloud provider / Crawler verified by Imperva /
+  Mobile ISP / Hosting / ISP), warning signals (cloud = Not block only, shared mobile IP, attacks
+  + 2xx responses let through, active in the last hour, unblocked / not blocked before) and
+  `🔎 detail`. Owner word lists: macros `imperva_cloud_providers`, `imperva_mobile_providers`,
+  `imperva_hosting_providers`.
+- Data: saved searches **"Imperva - Decision aid of detected IPs (24h)"** (every 15 min) and
+  **"(30d)"** (every 4 h) -> KV `imperva_ip_context_24h` / `imperva_ip_context_30d`.
+- Click the Decision aid cell -> **IP detail** panels above the table: summary (✖ Close, VT,
+  all events), WAF attack types, HTTP codes of the requests let through, client / User-Agent,
+  requests per hour / day, audit history, ES detections of 90 days, neighbours (same /24 or ASN)
+  and **All paths** (host + path, highest count first, scrolls). Request fields come from macro
+  `imperva_waf_request_fields`, which tries several field names (request / url / uri_path,
+  Response_Code / cn1 / status, requestClientApplication / http_user_agent, ...): adapt it if
+  this Imperva add-on names them differently.
+- **Cloud provider IPs are never blocked**: suggestion DO_NOT_BLOCK, the card counts them only
+  in Not block (field `cloud_ips` of the action search), and `impervablock` rejects them
+  (`ip_owner.py`: VirusTotal cache, else up to `cloud_check_max_lookups` lookups; owner unknown
+  -> blocked with a warning). Word list `cloud_providers` in `imperva.conf`, the same as macro
+  `imperva_cloud_providers`.
+- Incident numbers are shown as digits only (`ITHM 1000101` -> `1000101`); the search box
+  accepts both.
+
 From SPL:
 ```
 | makeresults | impervablock action=block ip="8.8.4.4" incident_no="ITHM 1234567" description="C2 beacon"
@@ -235,8 +264,9 @@ From SPL:
 
 ## Tests (no Splunk needed)
 ```bash
-python3 -m unittest -v tests/test_imperva_lib.py tests/test_vt_lib.py tests/test_policy_v2.py tests/test_soar_e2e.py
+python3 -m unittest discover -s tests
 ```
+UI of the action card (fake Simple XML runtime, Playwright): see `tests/ui/run.js`.
 
 ## Notes
 - The sample lookup uses documentation ranges (`203.0.113.0/24`, `198.51.100.0/24`). These are

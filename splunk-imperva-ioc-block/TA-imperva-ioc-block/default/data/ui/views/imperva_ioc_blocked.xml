@@ -34,7 +34,7 @@
                          true(), "✖ NOT on WAF - removed outside Splunk")
 | eval blocked_time=if(isnotnull(blocked_at), strftime(blocked_at, "%Y-%m-%d %H:%M"), "-")
 | eval last_checked_on_waf=strftime(last_check, "%Y-%m-%d %H:%M:%S")
-| eval ticket=coalesce(mvjoin(incident_no, ", "), "-"), description=coalesce(mvjoin(comment, "; "), "-"), blocked_by=coalesce(mvjoin(blocked_by, ", "), "-")
+| eval ticket=coalesce(mvjoin(mvmap(incident_no, replace(incident_no, "(?i)ITHM\s*-?\s*", "")), ", "), "-"), description=coalesce(mvjoin(comment, "; "), "-"), blocked_by=coalesce(mvjoin(blocked_by, ", "), "-")
 | sort 0 - blocked_at]]></query>
     <earliest>-1m</earliest>
     <latest>now</latest>
@@ -205,7 +205,7 @@
       <title>IPs blocked on the WAF policy (read live) – click a row to select / unselect it</title>
       <table id="b_table">
         <search base="waf_list">
-          <query><![CDATA[| eval _q=lower(trim(replace($b_q|s$, "[*]", "")))
+          <query><![CDATA[| eval _q=replace(lower(trim(replace($b_q|s$, "[*]", ""))), "^ithm[\s:#-]*", "")
 | where _q="" OR like(lower(ip." ".ticket." ".description." ".blocked_by), "%"._q."%")
 | eval Events="🔍 Search"
 | table blocked_time ip ticket description blocked_by verification site_id site_name last_checked_on_waf Events]]></query>

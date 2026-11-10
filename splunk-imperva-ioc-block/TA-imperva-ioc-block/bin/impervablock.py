@@ -35,6 +35,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import splunk.Intersplunk as si  # noqa: E402
 
 import imperva_lib as il         # noqa: E402
+import ip_owner                  # noqa: E402
 from backend import get_backend   # noqa: E402
 from soar_bridge import SoarError  # noqa: E402
 from splunk_helpers import (get_logger, is_true, kv_get,  # noqa: E402
@@ -95,8 +96,14 @@ def main():
                 candidates, protected,
                 max_prefix_v4=int(conf.get("max_cidr_prefix_v4", 24)),
                 max_prefix_v6=int(conf.get("max_cidr_prefix_v6", 48)))
+            # never block cloud provider IPs (imperva.conf cloud_providers): Not block only.
+            # Owner unknown (no VirusTotal data) -> blocked anyway, with a warning (fail-open)
+            vconf = load_conf_stanza(session_key, "imperva", "virustotal") if conf.get("cloud_providers") else {}
+            accepted, cloud_rejected, owner_unknown = ip_owner.split_cloud(session_key, conf, vconf, accepted, log)
+            rejected += cloud_rejected
         else:  # unblocking is always allowed for anything that parses
             accepted, rejected = il.validate_ips(candidates, (), 0, 0)
+            owner_unknown = set()
 
         # direct (v2_policy / v1_site) or via Splunk SOAR (soar) - same rows either way
         backend = get_backend(conf, load_credential, session_key,
@@ -120,7 +127,10 @@ def main():
             try:
                 for r in backend.execute(action, accepted, dry_run, meta, user, protected=protected):
                     extra = {"soar_container": r["soar_container"]} if "soar_container" in r else None
-                    row(r["ip"], r["site_id"], r["status"], r.get("detail", ""),
+                    detail = r.get("detail", "")
+                    if r["ip"] in owner_unknown:
+                        detail = (detail + " | " if detail else "") + ip_owner.UNKNOWN_WARNING
+                    row(r["ip"], r["site_id"], r["status"], detail,
                         r.get("verified_in_waf", "-"), extra)
             except (il.ImpervaError, SoarError) as e:
                 for ip in accepted:

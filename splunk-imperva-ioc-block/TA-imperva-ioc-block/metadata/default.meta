@@ -116,3 +116,20 @@ export = system
 [commands/impervanotes]
 access = read : [ admin, imperva_blocker ], write : [ admin ]
 export = system
+
+# Decision aid (1.3.0): written by the saved searches, read by the dashboards
+[collections/imperva_ip_context_24h]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = system
+
+[transforms/imperva_ip_context_24h]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = system
+
+[collections/imperva_ip_context_30d]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = system
+
+[transforms/imperva_ip_context_30d]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = system

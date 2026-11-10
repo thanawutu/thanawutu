@@ -153,7 +153,7 @@
       </input>
       <table id="d_acttable">
         <search id="d_act" base="det">
-          <query>| eval _q=lower(trim(replace($d_q|s$, "[*]", "")))
+          <query>| eval _q=replace(lower(trim(replace($d_q|s$, "[*]", ""))), "^ithm[\s:#-]*", "")
 | where _q="" OR like(lower(src." ".incident_no." ".rule_name), "%"._q."%")
 | sort - _sev_rank - count
 | head 50
@@ -172,22 +172,25 @@
 | eval ip=if(n=0, "-", split(ips, ","))
 | mvexpand ip
 | impervapolicycheck field=ip
+| vtcheck field=ip check_waf=false cache_only=true
+| eval _cloud=if(ip!="-" AND match(lower(coalesce(vt_as_owner, "")), `imperva_cloud_providers`), ip, null())
 | lookup imperva_block_registry ip OUTPUT status AS _reg
 | eval chk=case(ip="-" OR ip="", null(),
+    isnotnull(_cloud), ip." is a CLOUD PROVIDER IP (".vt_as_owner.") - never blocked (Not block only)",
     NOT (match(ip, "^\d{1,3}(\.\d{1,3}){3}(/\d{1,2})?\z") OR (match(ip, ":") AND match(ip, "^[0-9A-Fa-f:.]+(/\d{1,3})?\z"))), ip." is not an IP / CIDR",
     isnotnull(mvfind(_reg, "^blocked\z")), ip." already blocked from Splunk",
     waf_policy_verdict="ALLOWLISTED", ip." is ALLOWED: ".waf_policies,
     waf_policy_verdict="BLOCKED_ELSEWHERE" OR waf_policy_verdict="BLOCKED_HERE", ip." already BLOCKED: ".waf_policies,
     waf_policy_verdict="UNKNOWN", ip." WAF check unavailable",
     true(), null())
-| stats first(SelectAll) AS SelectAll first(ips) AS ips first(n) AS n first(nb_ips) AS nb_ips first(nb_n) AS nb_n values(chk) AS waf_check
-| eval ips=coalesce(ips, ""), n=coalesce(n, 0), nb_ips=coalesce(nb_ips, ""), nb_n=coalesce(nb_n, 0)
+| stats first(SelectAll) AS SelectAll first(ips) AS ips first(n) AS n first(nb_ips) AS nb_ips first(nb_n) AS nb_n values(chk) AS waf_check values(_cloud) AS cloud_ips
+| eval ips=coalesce(ips, ""), n=coalesce(n, 0), nb_ips=coalesce(nb_ips, ""), nb_n=coalesce(nb_n, 0), cloud_ips=coalesce(mvjoin(cloud_ips, ","), "")
 | eval waf_check=coalesce(mvjoin(waf_check, " | "), if(n=0, "-", "✔ none blocked / allowed on WAF"))
 | eval nb_n=coalesce(nb_n, 0), NotBlock=if(nb_n>0, "✖ NOT BLOCK ".nb_n." IP".if(nb_n=1, "", "s").": ".replace(nb_ips, ",", ", "), "-")
 | eval Action=if(n=0, "Click rows below or add IPs manually", "⛔ BLOCK ".n." IP".if(n=1, "", "s")), Clear=if(n=0, "-", "✖ Clear selection")
 | eval selected_ips=if(n=0, "-", replace(ips, ",", ", ")), ticket=$d_tk|s$, description=$d_desc|s$
-| eval ticket=if(ticket="-" AND match($d_q|s$, "(?i)^\s*ITHM"), upper(trim($d_q|s$)), ticket)
-| table Action NotBlock Clear SelectAll selected_ips waf_check ticket description</query>
+| eval ticket=if(ticket="-" AND match($d_q|s$, "(?i)^\s*(ITHM[\s:#-]*)?\d{6,}\s*\z"), replace(trim($d_q|s$), "(?i)^ITHM[\s:#-]*", ""), ticket)
+| table Action NotBlock Clear SelectAll selected_ips waf_check cloud_ips ticket description</query>
         </search>
         <option name="count">1</option>
         <option name="wrap">true</option>
@@ -298,14 +301,183 @@
     </panel>
   </row>
 
+  <!-- ============ IP detail (1.3.0): click the "Decision aid" cell of the table below ============ -->
+  <search id="d_dbase">
+    <query>`imperva_waf_events` src=$d_detail|s$
+| `imperva_waf_action_class`
+| `imperva_waf_request_fields`
+| bin _time span=1h
+| stats count BY _time waf_class waf_atk waf_code waf_path waf_client waf_ua</query>
+    <earliest>-24h</earliest>
+    <latest>now</latest>
+  </search>
+  <row>
+    <panel depends="$d_detail$">
+      <title>IP detail – $d_detail$ (24h) · ✖ Close = first column</title>
+      <table>
+        <search base="det">
+          <query>| where src=$d_detail|s$
+| `imperva_ioc_enrich`
+| `imperva_ioc_decision_aid(24h)`
+| eval Close="✖ Close", Events="🔍 all events"
+| table Close src suggestion suggestion_reason asn location vt_score VirusTotal "Decision aid (24h)" Events
+| rename src AS IP, asn AS owner, vt_score AS VT</query>
+        </search>
+        <option name="count">1</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">cell</option>
+        <format type="color" field="VirusTotal">
+          <colorPalette type="expression">"#2C62B3"</colorPalette>
+        </format>
+        <format type="color" field="suggestion">
+          <colorPalette type="map">{"BLOCK":#DC4E41,"REVIEW":#F8BE34,"MONITOR":#5A9BD5,"ALREADY_BLOCKED":#708794,"DO_NOT_BLOCK":#53A051}</colorPalette>
+        </format>
+        <format type="color" field="severity">
+          <colorPalette type="map">{"critical":#B6488E,"high":#DC4E41,"medium":#F8BE34,"low":#5A9BD5,"informational":#708794}</colorPalette>
+        </format>
+        <drilldown>
+          <condition field="Close">
+            <unset token="d_detail"></unset>
+          </condition>
+          <condition field="VirusTotal">
+            <link target="_blank">https://www.virustotal.com/gui/ip-address/$row.IP|n$</link>
+          </condition>
+          <condition field="Events">
+            <link target="_blank">search?q=search%20index%3Dimperva%20sourcetype%3D%22incapsula%3Acef%22%20src%3D$row.IP|u$&amp;earliest=-24h&amp;latest=now</link>
+          </condition>
+          <condition></condition>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel depends="$d_detail$">
+      <title>WAF attack types (24h)</title>
+      <table>
+        <search base="d_dbase">
+          <query>| where waf_atk!="-" | stats sum(count) AS requests BY waf_atk | sort 0 - requests | rename waf_atk AS "attack type"</query>
+        </search>
+        <option name="count">10</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+    <panel depends="$d_detail$">
+      <title>Responses of requests let through (24h)</title>
+      <table>
+        <search base="d_dbase">
+          <query>| where waf_class="allowed" | stats sum(count) AS requests BY waf_code | sort 0 - requests | rename waf_code AS "HTTP code"</query>
+        </search>
+        <option name="count">10</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+    <panel depends="$d_detail$">
+      <title>Client (Imperva) / User-Agent (24h)</title>
+      <table>
+        <search base="d_dbase">
+          <query>| stats sum(count) AS requests BY waf_client waf_ua | sort 0 - requests | head 5 | rename waf_client AS client, waf_ua AS "User-Agent"</query>
+        </search>
+        <option name="count">5</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+    <panel depends="$d_detail$">
+      <title>Activity – requests per hour (24h)</title>
+      <chart>
+        <search base="d_dbase">
+          <query>| where waf_class="blocked" OR waf_class="allowed" | timechart span=1h sum(count) BY waf_class</query>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.visibility">collapsed</option>
+        <option name="charting.fieldColors">{"blocked":0xDC4E41,"allowed":0x53A051}</option>
+        <option name="charting.legend.placement">top</option>
+        <option name="height">200</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel depends="$d_detail$">
+      <title>History – block / unblock / not block (audit log)</title>
+      <table>
+        <search>
+          <query>| inputlookup imperva_audit where ip=$d_detail|s$
+| eval _t=tonumber(time), time=strftime(_t, "%Y-%m-%d %H:%M"), ticket=replace(coalesce(ticket, "-"), "(?i)ITHM\s*-?\s*", "")
+| sort 0 - _t
+| table time action status user ticket description</query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+    <panel depends="$d_detail$">
+      <title>Detected by ES – last 90 days</title>
+      <table>
+        <search>
+          <query>`imperva_ioc_notables` $d_detail|s$
+| `imperva_ioc_ip`
+| mvexpand ioc_ip
+| where ioc_ip=$d_detail|s$
+| eval _day=strftime(_time, "%Y-%m-%d")
+| stats dc(_day) AS days count AS findings min(_time) AS first max(_time) AS last values(search_name) AS rules
+| eval first=strftime(first, "%Y-%m-%d %H:%M"), last=strftime(last, "%Y-%m-%d %H:%M"), rules=mvjoin(rules, "; ")
+| rename days AS "detected on (days)", findings AS findings, first AS "first detected", last AS "last detected", rules AS "correlation searches"</query>
+          <earliest>-90d@d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">1</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+    <panel depends="$d_detail$">
+      <title>Neighbours detected – same /24 or same ASN (detected IPs of this page)</title>
+      <table>
+        <search base="det">
+          <query>| `imperva_ioc_enrich_base`
+| eval _sel=$d_detail|s$, _c24=replace(src, "\.\d+\z", ".0/24")
+| eval _sel_asn1=if(src=_sel, vt_asn, null()), _sel_c241=if(src=_sel, _c24, null())
+| eventstats values(_sel_asn1) AS _sel_asn values(_sel_c241) AS _sel_c24
+| where src!=_sel AND (_c24=_sel_c24 OR (vt_asn=_sel_asn AND vt_asn!="-"))
+| eval same=if(_c24=_sel_c24, "same /24", "same ASN")
+| table src same asn suggestion last_detected</query>
+        </search>
+        <option name="count">10</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel depends="$d_detail$">
+      <title>All paths (24h) – highest count first · host + path without query string (🔍 all events = with query string)</title>
+      <table id="d_paths">
+        <search base="d_dbase">
+          <query>| stats sum(eval(if(waf_class="blocked", count, 0))) AS Blocked sum(eval(if(waf_class="allowed", count, 0))) AS "Let through" sum(count) AS Total BY waf_path | sort 0 - Total | rename waf_path AS "host + path"</query>
+        </search>
+        <option name="count">100</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+
   <row>
     <panel>
       <title>IPs detected by WAF rules – last 7 days (click a row to select / unselect it)</title>
       <table id="det_table">
         <search base="det">
-          <query>| eval _q=lower(trim(replace($d_q|s$, "[*]", "")))
+          <query>| eval _q=replace(lower(trim(replace($d_q|s$, "[*]", ""))), "^ithm[\s:#-]*", "")
 | where _q="" OR like(lower(src." ".incident_no." ".rule_name), "%"._q."%")
-| `imperva_ioc_enrich`</query>
+| `imperva_ioc_enrich`
+| `imperva_ioc_decision_aid(24h)`</query>
         </search>
         <option name="count">20</option>
         <option name="wrap">true</option>
@@ -322,6 +494,10 @@
         <drilldown>
           <condition field="VirusTotal">
             <link target="_blank">https://www.virustotal.com/gui/ip-address/$row.src|n$</link>
+          </condition>
+          <condition field="Decision aid (24h)">
+            <!-- IP detail panels above the table -->
+            <set token="d_detail">$row.src$</set>
           </condition>
           <condition>
             <!-- click = select / unselect this IP; Ticket is filled from the finding's ITHM note -->

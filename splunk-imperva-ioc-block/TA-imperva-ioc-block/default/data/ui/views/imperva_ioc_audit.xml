@@ -45,7 +45,8 @@
 | eval _time=tonumber(time)
 | where $a_days$=0 OR _time&gt;=relative_time(now(), "-$a_days$d@d")
 | search action=$a_act|s$
-| eval _q=lower(trim(replace($a_q|s$, "[*]", "")))
+| eval ticket=replace(coalesce(ticket, "-"), "(?i)ITHM\s*-?\s*", "")
+| eval _q=replace(lower(trim(replace($a_q|s$, "[*]", ""))), "^ithm[\s:#-]*", "")
 | where _q="" OR like(lower(ip." ".ticket." ".user." ".description." ".action), "%"._q."%")
 | sort 0 - _time
 | eval time=strftime(_time, "%Y-%m-%d %H:%M:%S")

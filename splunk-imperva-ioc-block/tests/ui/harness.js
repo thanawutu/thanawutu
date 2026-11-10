@@ -29,6 +29,7 @@
 
   var ROWS = window.ROWS;
   var ALLOWED = {"192.0.2.55": "Allowlist-Partners"};
+  var CLOUD = {"52.88.145.123": "Amazon.com, Inc.", "35.240.10.8": "Google LLC"};
   function odd(raw) {
     var s = String(raw || "").replace(/☑ Select all \d+ shown: /g, "").replace(/^,+|,+$/g, ""), c = {}, o = [];
     s.split(",").forEach(function (x) { if (!x || x === "-") return; if (!(x in c)) { c[x] = 0; o.push(x); } c[x]++; });
@@ -50,17 +51,18 @@
         var sel = odd(sub.get(p + "_sel")), add = String(sub.get(p + "_add") || "-");
         var man = add === "-" ? [] : add.split(/[\s,;]+/).filter(Boolean);
         var ips = sel.concat(man.filter(function (x) { return sel.indexOf(x) < 0; }));
-        var q = String(sub.get(p + "_q") || "*").replace(/\*/g, "").trim().toLowerCase();
+        var q = String(sub.get(p + "_q") || "*").replace(/\*/g, "").trim().toLowerCase().replace(/^ithm[\s:#-]*/, "");
         var shown = ROWS.filter(function (r) { return !q || (r.ip + " " + r.inc + " " + r.rule).toLowerCase().indexOf(q) >= 0; }).map(function (r) { return r.ip; });
         var chk = ips.map(function (ip) {
           if (!/^[0-9a-f:.\/]+$/i.test(ip) || (ip.indexOf(":") < 0 && !/^\d{1,3}(\.\d{1,3}){3}(\/\d{1,2})?$/.test(ip))) return ip + " is not an IP / CIDR";
+          if (CLOUD[ip]) return ip + " is a CLOUD PROVIDER IP (" + CLOUD[ip] + ") - never blocked (Not block only)";
           return ALLOWED[ip] ? ip + " is ALLOWED: " + ALLOWED[ip] : null;
         }).filter(Boolean);
         var waf = chk.length ? chk : (ips.length ? "✔ none blocked / allowed on WAF" : "-");
         var fields = p === "b" ? ["Action", "Clear", "selected_ips", "ticket", "description"]
-                               : ["Action", "NotBlock", "Clear", "SelectAll", "selected_ips", "waf_check", "ticket", "description"];
+                               : ["Action", "NotBlock", "Clear", "SelectAll", "selected_ips", "waf_check", "cloud_ips", "ticket", "description"];
         var vals = {Action: "-", NotBlock: "-", Clear: "-", SelectAll: shown.length ? "☑ Select all " + shown.length + " shown: " + shown.join(",") : "-",
-                    selected_ips: ips.join(", ") || "-", waf_check: waf, ticket: sub.get(p + "_tk"), description: sub.get(p + "_desc")};
+                    selected_ips: ips.join(", ") || "-", waf_check: waf, cloud_ips: ips.filter(function (x) { return CLOUD[x]; }).join(","), ticket: sub.get(p + "_tk"), description: sub.get(p + "_desc")};
         mgr.res.d = {fields: fields, rows: [fields.map(function (f) { return vals[f]; })]};
         mgr.res.trigger("data");
       }, 40);
