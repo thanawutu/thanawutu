@@ -80,6 +80,9 @@ td{padding:7px 9px;border-bottom:1px solid var(--line);vertical-align:top}
 tbody tr[data-ip]{cursor:pointer} tbody tr[data-ip]:hover td{background:var(--panel-2)}
 tbody tr.selected td{background:var(--sel)}
 tbody tr.cloudrow td:not(.aid){color:var(--muted)}
+.sel-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.lnk{border:0;background:none;padding:0;margin:0 0 0 12px;color:var(--accent);font-size:11.5px;font-weight:600;cursor:pointer}
+.lnk:hover{text-decoration:underline}
 .tag.cloud{border-color:var(--warn);background:var(--warn-bg);color:var(--warn)}
 td.ip{font-family:var(--font-data);white-space:nowrap;font-weight:500} td.num{text-align:right;font-family:var(--font-data)}
 td.small{font-size:11.5px;color:var(--muted);min-width:170px}
@@ -152,7 +155,7 @@ td.aid:hover{background:var(--info-bg)!important}
 
 <!-- ============ Page 1: dashboard (7 days, search + Block) ============ -->
 <main class="wrap" id="v-dash">
-  <div class="review"><b>Mockup v3.8b:</b> เลข <b>Incident no.</b> แสดงเฉพาะตัวเลข (ตัด ITHM ออก; ค้นหาด้วย “ITHM 1000101” หรือ “1000101” ได้ทั้งคู่) · IP ของ <b>cloud provider</b> (AWS, Google Cloud, Azure ฯลฯ) <b>ห้าม block</b> แต่ <b>เลือกเพื่อ Not block ได้</b>: suggestion DO_NOT_BLOCK, ป้ายสีส้ม “Not block only”, ไม่นับในปุ่ม Block (พิมพ์ใน Add IPs manually ก็ถูกตัด), command impervablock reject อีกชั้น · ถ้าเช็คเจ้าของ IP ไม่ได้ (VT ใช้ไม่ได้) = block ต่อพร้อมคำเตือน · <b>ส่วนเพิ่มเติมช่วยตัดสินใจ (<span class="new">NEW</span>)</b> · <b>ของเดิมไม่เปลี่ยน:</b> คอลัมน์เดิมและลำดับเดิม, suggestion เดิม, การ์ด / ปุ่ม Block · Not block, saved search และ macro เดิม · <b>ส่วนใหม่:</b> ① คอลัมน์ <b>Decision aid</b> ต่อท้ายตาราง = เจ้าของ IP (Hosting / ISP / มือถือไทย shared IP / bot ที่ Imperva ยืนยัน) และสัญญาณเตือน (⚠ โจมตี + ปล่อยผ่านได้ 200, ● ยังยิงอยู่, ↺ เคย unblock, IP ข้างเคียงถูก detect) · ② <b>คลิกช่อง Decision aid</b> = เปิดแผง <b>IP detail</b> เหนือตาราง: ประเภทการโจมตี, response code ที่ผ่าน, กิจกรรมรายชั่วโมง, client / User-Agent, Top paths, ประวัติ, IP ข้างเคียง · คลิกส่วนอื่นของแถว = เลือก IP เหมือนเดิม</div>
+  <div class="review"><b>Mockup v3.8b:</b> ปุ่ม <b>☑ Select all N shown</b> / <b>✖ Clear</b> อยู่มุมขวาบนของกล่อง Selected IPs (เลือกทุก IP ที่ตรงกับช่อง Search สูงสุด 50 เช่น ค้นหา 1000101 แล้วกด Select all) · เลข <b>Incident no.</b> แสดงเฉพาะตัวเลข (ตัด ITHM ออก; ค้นหาด้วย “ITHM 1000101” หรือ “1000101” ได้ทั้งคู่) · IP ของ <b>cloud provider</b> (AWS, Google Cloud, Azure ฯลฯ) <b>ห้าม block</b> แต่ <b>เลือกเพื่อ Not block ได้</b>: suggestion DO_NOT_BLOCK, ป้ายสีส้ม “Not block only”, ไม่นับในปุ่ม Block (พิมพ์ใน Add IPs manually ก็ถูกตัด), command impervablock reject อีกชั้น · ถ้าเช็คเจ้าของ IP ไม่ได้ (VT ใช้ไม่ได้) = block ต่อพร้อมคำเตือน · <b>ส่วนเพิ่มเติมช่วยตัดสินใจ (<span class="new">NEW</span>)</b> · <b>ของเดิมไม่เปลี่ยน:</b> คอลัมน์เดิมและลำดับเดิม, suggestion เดิม, การ์ด / ปุ่ม Block · Not block, saved search และ macro เดิม · <b>ส่วนใหม่:</b> ① คอลัมน์ <b>Decision aid</b> ต่อท้ายตาราง = เจ้าของ IP (Hosting / ISP / มือถือไทย shared IP / bot ที่ Imperva ยืนยัน) และสัญญาณเตือน (⚠ โจมตี + ปล่อยผ่านได้ 200, ● ยังยิงอยู่, ↺ เคย unblock, IP ข้างเคียงถูก detect) · ② <b>คลิกช่อง Decision aid</b> = เปิดแผง <b>IP detail</b> เหนือตาราง: ประเภทการโจมตี, response code ที่ผ่าน, กิจกรรมรายชั่วโมง, client / User-Agent, Top paths, ประวัติ, IP ข้างเคียง · คลิกส่วนอื่นของแถว = เลือก IP เหมือนเดิม</div>
   <section class="kpis" aria-label="Summary">
     <div class="kpi k-warn"><span class="label">Detected WAF IPs</span><span class="v" id="kDet">0</span><span class="s" id="kDetSub">last 7 days</span></div>
     <div class="kpi k-info"><span class="label">Blocked on WAF now</span><span class="v" id="kWaf">0</span><span class="s">policy 2169031 (live)</span></div>
@@ -170,7 +173,7 @@ td.aid:hover{background:var(--info-bg)!important}
       <div class="field" style="flex:1 1 300px"><label for="d_add">➕ Add IPs manually – other sources, comma separated</label><input type="text" id="d_add" placeholder="เช่น 203.0.113.10, 198.51.100.7"></div>
     </div>
     <div class="crow">
-      <div class="field" style="flex:1 1 340px"><span class="flabel">Selected IPs — คลิกแถวในตารางด้านล่าง</span><div class="selbox" id="d_sel"></div></div>
+      <div class="field" style="flex:1 1 340px"><div class="flabel sel-head"><span>Selected IPs — คลิกแถวในตารางด้านล่าง</span><span><button class="lnk" id="d_all" type="button" hidden>☑ Select all 0 shown</button><button class="lnk" id="d_clr" type="button" hidden>✖ Clear</button></span></div><div class="selbox" id="d_sel"></div></div>
       <div class="field" style="flex:0 1 190px"><label for="d_tk">Ticket / Incident no.</label><input type="text" id="d_tk" placeholder="1234567"></div>
       <div class="field" style="flex:1 1 240px"><label for="d_desc">Description</label><input type="text" id="d_desc" placeholder="เหตุผล / รายละเอียด"></div>
       <button class="run" id="d_run" type="button" disabled>⛔ Block 0 IPs</button>
@@ -204,7 +207,7 @@ td.aid:hover{background:var(--info-bg)!important}
       <div class="field" style="flex:0 0 210px"><label for="h_rng">Detected</label><select id="h_rng"><option value="30">8 – 30 days ago</option><option value="90">31 – 90 days ago</option><option value="all">older than 7 days (all)</option></select></div>
     </div>
     <div class="crow">
-      <div class="field" style="flex:1 1 340px"><span class="flabel">Selected IPs — คลิกแถวในตารางด้านล่าง</span><div class="selbox" id="h_sel"></div></div>
+      <div class="field" style="flex:1 1 340px"><div class="flabel sel-head"><span>Selected IPs — คลิกแถวในตารางด้านล่าง</span><span><button class="lnk" id="h_all" type="button" hidden>☑ Select all 0 shown</button><button class="lnk" id="h_clr" type="button" hidden>✖ Clear</button></span></div><div class="selbox" id="h_sel"></div></div>
       <div class="field" style="flex:0 1 190px"><label for="h_tk">Ticket / Incident no.</label><input type="text" id="h_tk" placeholder="1234567"></div>
       <div class="field" style="flex:1 1 240px"><label for="h_desc">Description</label><input type="text" id="h_desc" placeholder="เหตุผล / รายละเอียด"></div>
       <button class="run" id="h_run" type="button" disabled>⛔ Block 0 IPs</button>
@@ -240,7 +243,7 @@ td.aid:hover{background:var(--info-bg)!important}
       <div class="field" style="flex:1 1 300px"><label for="b_q">🔎 Search IP / Ticket / Incident no. / Description</label><input type="text" id="b_q" placeholder="เช่น 193.42 หรือ 1000090"></div>
     </div>
     <div class="crow">
-      <div class="field" style="flex:1 1 340px"><span class="flabel">Selected IPs — คลิกแถวในตารางด้านล่าง</span><div class="selbox" id="b_sel"></div></div>
+      <div class="field" style="flex:1 1 340px"><div class="flabel sel-head"><span>Selected IPs — คลิกแถวในตารางด้านล่าง</span><span><button class="lnk" id="b_clr" type="button" hidden>✖ Clear</button></span></div><div class="selbox" id="b_sel"></div></div>
       <div class="field" style="flex:0 1 190px"><label for="b_tk">Ticket / Incident no.</label><input type="text" id="b_tk" placeholder="1234567"></div>
       <div class="field" style="flex:1 1 240px"><label for="b_desc">Description</label><input type="text" id="b_desc" placeholder="เหตุผลที่ unblock"></div>
       <button class="run u" id="b_run" type="button" disabled>🔓 Unblock 0 IPs</button>
@@ -502,8 +505,12 @@ const isIP=x=>/^(\d{1,3})(\.\d{1,3}){3}(\/\d{1,2})?$/.test(x)&&x.split("/")[0].s
 function manual(page){ if(page==="blocked") return []; const v=$(P[page].p+"_add").value; return [...new Set(v.split(/[\s,;]+/).map(x=>x.trim()).filter(Boolean))]; }
 // IPs the Block button sends: selected + typed, never cloud provider IPs (those are Not block only)
 function allIPs(page){ const m=manual(page).filter(x=>isIP(x)&&!cloudOf(x)); return [...new Set([...[...P[page].sel].filter(x=>!cloudOf(x)), ...m])]; }
+const shownIPs=page=>detRows(page).slice(0,50).map(d=>d.ip);   // what "Select all" takes: rows matching the search (top 50)
+const incOf=q=>{const m=/^\s*(?:ithm[\s:#-]*)?(\d{5,})\s*$/i.exec(q); return m?m[1]:null;};   // "ITHM 1000101" / "1000101" -> 1000101
 function renderCtl(page){
   const pg=P[page], all=allIPs(page), n=all.length, man=manual(page);
+  if(page!=="blocked"){ const k=shownIPs(page).length; $(pg.p+"_all").textContent=`☑ Select all ${k} shown`; $(pg.p+"_all").hidden=!k; }
+  $(pg.p+"_clr").hidden=!pg.sel.size&&!man.length;
   $(pg.p+"_run").textContent=`${pg.act==="block"?"⛔ Block":"🔓 Unblock"} ${n} IP${n===1?"":"s"}`;
   $(pg.p+"_run").disabled=!n||pg.busy;
   if(page!=="blocked"){ const k=pg.sel.size; $(pg.p+"_nb").textContent=`✖ Not block ${k} IP${k===1?"":"s"}`; $(pg.p+"_nb").disabled=!k||pg.busy; }
@@ -562,7 +569,11 @@ Object.keys(P).forEach(page=>{const p=P[page].p;
     if(e.target.closest("[data-dclose]")){ P[page].detail=null; renderDetail(page); }
     const b=e.target.closest("[data-dsel]"); if(b) pick(page,b.dataset.dsel);});
   $(p+"_sel").addEventListener("click",e=>{const b=e.target.closest("[data-rm]"); if(b){P[page].sel.delete(b.dataset.rm); renderAll();}});
-  $(p+"_q").addEventListener("input",()=>{page==="blocked"?renderBlocked():renderDet(page);});
+  $(p+"_q").addEventListener("input",()=>{page==="blocked"?renderBlocked():renderDet(page); renderCtl(page);});
+  if(page!=="blocked") $(p+"_all").addEventListener("click",()=>{   // replaces the selection with every IP that matches the search
+    P[page].sel=new Set(shownIPs(page)); const tk=$(p+"_tk"), inc=incOf($(p+"_q").value); if(!tk.value&&inc) tk.value=inc;
+    renderDet(page); renderDetail(page); renderCtl(page); });
+  $(p+"_clr").addEventListener("click",()=>{ P[page].sel.clear(); if(page!=="blocked") $(p+"_add").value=""; renderAll(); });
   if(page!=="blocked") $(p+"_add").addEventListener("input",()=>renderCtl(page));
   $(p+"_run").addEventListener("click",()=>run(page));
   if(page!=="blocked") $(p+"_nb").addEventListener("click",()=>notBlock(page));
