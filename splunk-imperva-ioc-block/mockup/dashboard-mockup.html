@@ -181,7 +181,7 @@ td.aid:hover{background:var(--info-bg)!important}
   <div class="in">
     <div><span class="label">Apps › Imperva IOC Block</span><h1 id="pageTitle">Imperva WAF – IOC Block</h1></div>
     <div class="chips">
-      <span class="chip sim">Mockup v3.9 · simulated data</span>
+      <span class="chip sim">Mockup v3.10 · simulated data</span>
       <span class="chip">Policy 2169031 · via SOAR</span>
     </div>
   </div>
@@ -197,7 +197,7 @@ td.aid:hover{background:var(--info-bg)!important}
 
 <!-- ============ Page 1: dashboard (7 days, search + Block) ============ -->
 <main class="wrap" id="v-dash">
-  <div class="review"><b>Mockup v3.9 – Auto unblock (ใน app เดิม):</b> IP ที่ block ทุกตัวมี <b>ระยะเวลา block</b>: IP ของ <b>cloud provider</b> (AWS, Google Cloud, Azure ฯลฯ) <b>block ได้แล้ว</b> และ unblock อัตโนมัติหลัง <b>7 วัน</b> · IP อื่น <b>90 วัน</b> · ตั้งราย IP ได้ (Keep = ไม่หมดอายุ) ที่หน้าใหม่ <b>⏱ Auto unblock</b> · หน้า Blocked IPs มีคอลัมน์วันหมดอายุ · ส่วนอื่นเหมือน v3.8b (Decision aid, IP detail, เลข incident เฉพาะตัวเลข, Select all)</div>
+  <div class="review"><b>Mockup v3.10 – Auto unblock (ใน app เดิม):</b> หน้า <b>⏱ Auto unblock</b> แสดง IP ที่ถูก block จาก<b>ทุก rule / policy</b> ของ WAF · นับจาก<b>การโจมตีครั้งสุดท้าย</b> (log “Blocked IP” ของ Imperva = IP ยังส่ง request เข้ามา): IP ของ <b>cloud provider</b> ไม่โจมตีครบ <b>7 วัน</b> → unblock · IP อื่นไม่โจมตีครบ <b>90 วัน</b> → unblock · ถ้ายังโจมตีอยู่ นับใหม่อัตโนมัติ · IP ที่ไม่เคยเห็นโจมตีหลัง block นับจากวันที่ block (หรือวันที่ Splunk เห็นใน policy) · IP cloud block ได้ · Keep = ไม่ unblock · ส่วนอื่นเหมือน v3.8b</div>
   <section class="kpis" aria-label="Summary">
     <div class="kpi k-warn"><span class="label">Detected WAF IPs</span><span class="v" id="kDet">0</span><span class="s" id="kDetSub">last 7 days</span></div>
     <div class="kpi k-info"><span class="label">Blocked on WAF now</span><span class="v" id="kWaf">0</span><span class="s">policy 2169031 (live)</span></div>
@@ -295,7 +295,7 @@ td.aid:hover{background:var(--info-bg)!important}
   <section class="panel">
     <div class="panel-head"><h2>IPs blocked on WAF policy 2169031 (read live)</h2><p>IP ที่ unblock แล้วจะหายจากตารางนี้</p></div>
     <div class="tbl-wrap"><table>
-      <thead><tr><th></th><th>IP</th><th>Blocked time</th><th>Ticket / Incident no.</th><th>Description</th><th>Blocked by</th><th>Detected by rule</th><th>Verified on WAF</th><th title="new: cloud provider 7 days, others 90 days, or set per IP on the Auto unblock page">Block period</th><th>Expires</th><th>Left</th><th>Auto unblock</th></tr></thead>
+      <thead><tr><th></th><th>IP</th><th>Blocked time</th><th>Ticket / Incident no.</th><th>Description</th><th>Blocked by</th><th>Detected by rule</th><th>Verified on WAF</th><th title="unblocked when the IP sent no request for this many days (cloud provider 7, others 90, or set per IP)">Unblock after</th><th>Last attack</th><th>Unblock on</th><th>Left</th><th>Auto unblock</th></tr></thead>
       <tbody id="b_tbl"></tbody></table></div>
   </section>
 </main>
@@ -303,8 +303,8 @@ td.aid:hover{background:var(--info-bg)!important}
 <!-- ============ Page 3b: Auto unblock (v3.9) ============ -->
 <main class="wrap" id="v-auto" hidden>
   <section class="kpis" aria-label="Auto unblock summary">
-    <div class="kpi k-info"><span class="label">Blocked from Splunk</span><span class="v" id="au_kAll">0</span><span class="s" id="au_kAllSub">with a block period</span></div>
-    <div class="kpi k-warn"><span class="label">Expiring soon</span><span class="v" id="au_kSoon">0</span><span class="s">within the reminder window</span></div>
+    <div class="kpi k-info"><span class="label">Blocked on the WAF</span><span class="v" id="au_kAll">0</span><span class="s" id="au_kAllSub">all policies</span></div>
+    <div class="kpi k-warn"><span class="label">Attacking now</span><span class="v" id="au_kSoon">0</span><span class="s">request in the last 24 h</span></div>
     <div class="kpi k-crit"><span class="label">Due now</span><span class="v" id="au_kDue">0</span><span class="s" id="au_kDueSub">next run</span></div>
     <div class="kpi k-ok"><span class="label">Kept (no expiry)</span><span class="v" id="au_kKeep">0</span><span class="s">never auto unblocked</span></div>
     <div class="kpi"><span class="label">Auto unblocked · 30 days</span><span class="v" id="au_kDone">0</span><span class="s">from the audit log</span></div>
@@ -316,45 +316,43 @@ td.aid:hover{background:var(--info-bg)!important}
         <div class="field wide"><span class="flabel">Mode</span>
           <div class="seg" role="group" aria-label="Mode"><button type="button" id="au_mReport" aria-pressed="true">Report only</button><button type="button" id="au_mAuto" aria-pressed="false">Auto unblock</button></div>
           <span class="note" id="au_modeNote"></span></div>
-        <div class="field"><label for="au_def">Block period – IPs</label><select id="au_def"><option value="30">30 days</option><option value="60">60 days</option><option value="90" selected>90 days</option><option value="180">180 days</option><option value="365">365 days</option></select></div>
-        <div class="field"><label for="au_cloud">Block period – cloud provider IPs</label><select id="au_cloud"><option value="1">1 day</option><option value="3">3 days</option><option value="7" selected>7 days</option><option value="14">14 days</option><option value="30">30 days</option></select></div>
-        <div class="field wide"><span class="flabel">Still attacking</span>
-          <div class="inline"><input type="checkbox" id="au_atk" checked> <label for="au_atk">Do not unblock if the WAF blocked requests from the IP in the last</label>
-          <input type="number" id="au_atkDays" min="1" max="30" value="7" aria-label="days to look back"> <span>days → extend by</span>
-          <input type="number" id="au_ext" min="1" max="180" value="30" aria-label="days to extend"> <span>days (cloud</span>
-          <input type="number" id="au_extCloud" min="1" max="30" value="7" aria-label="days to extend cloud IPs"> <span>days)</span></div></div>
+        <div class="field"><label for="au_def">Unblock IPs after no attack for</label><select id="au_def"><option value="30">30 days</option><option value="60">60 days</option><option value="90" selected>90 days</option><option value="180">180 days</option><option value="365">365 days</option></select></div>
+        <div class="field"><label for="au_cloud">Unblock cloud provider IPs after no attack for</label><select id="au_cloud"><option value="1">1 day</option><option value="3">3 days</option><option value="7" selected>7 days</option><option value="14">14 days</option><option value="30">30 days</option></select></div>
+        <div class="field wide"><span class="flabel">Unblock from</span>
+          <div class="seg" role="group" aria-label="Unblock from"><button type="button" id="au_sSplunk" aria-pressed="true">Policy 2169031 only</button><button type="button" id="au_sAll" aria-pressed="false">All enabled policies</button></div>
+          <span class="note" id="au_scopeNote"></span></div>
         <div class="field"><label for="au_remind">Show “expiring soon”</label><div class="inline"><input type="number" id="au_remind" min="1" max="60" value="7"> <span>days before expiry</span></div></div>
         <div class="field"><label for="au_max">Max IPs per run</label><div class="inline"><input type="number" id="au_max" min="1" max="50" value="50"> <span>· daily 02:15</span></div></div>
-        <div class="field wide"><div class="inline"><button type="button" class="btn-primary" id="au_save">Save settings</button><span class="note">IP ที่ block ไปแล้วคำนวณวันหมดอายุใหม่ตามค่าที่ตั้ง (ยกเว้น IP ที่ตั้งเฉพาะไว้)</span></div></div>
+        <div class="field wide"><div class="inline"><button type="button" class="btn-primary" id="au_save">Save settings</button><span class="note">ทุก IP คำนวณใหม่ตามค่าที่ตั้ง (ยกเว้น IP ที่ตั้งเฉพาะไว้)</span></div></div>
       </div>
     </section>
     <section class="panel" aria-labelledby="au_hFlow">
       <div class="panel-head"><h2 id="au_hFlow">How it works</h2><p>saved search “Imperva - Auto unblock expired IPs”</p></div>
       <ol class="flow">
-        <li><b>Block</b>cloud provider 7 วัน · IP อื่น 90 วัน (ตั้งราย IP ได้)</li>
-        <li><b>Check daily</b>IP ที่ครบเวลา · ข้าม Keep · ยังโจมตีใน 7 วัน → ต่ออายุ</li>
-        <li><b>Unblock</b>impervablock action=unblock ผ่าน SOAR + verify บน WAF</li>
-        <li><b>Record</b>audit log + registry · ถ้าโจมตีใหม่ → กลับมาหน้า Block</li>
+        <li><b>Read</b>IP rule ของทุก policy (cache ทุก 5 นาที) + IP ที่ block จาก Splunk</li>
+        <li><b>Last attack</b>log “Blocked IP” ของ Imperva ทุกชั่วโมง = IP ยังส่ง request เข้ามา</li>
+        <li><b>Check daily</b>ไม่โจมตีครบ 7 วัน (cloud) / 90 วัน → unblock · ข้าม Keep</li>
+        <li><b>Unblock</b>impervablock action=unblock ผ่าน SOAR + verify · audit log · ถ้าโจมตีใหม่ → กลับมาหน้า Block</li>
       </ol>
       <div class="panel-head" style="margin:14px 0 4px"><h2>Expiring in the next 30 days</h2><p id="au_chartNote"></p></div>
       <div id="au_chart"></div>
     </section>
   </section>
   <section class="panel" aria-labelledby="au_hTbl">
-    <div class="panel-head"><h2 id="au_hTbl">Blocked IPs and their block period</h2><p id="au_unmanaged"></p></div>
+    <div class="panel-head"><h2 id="au_hTbl">IPs blocked on the WAF – all policies</h2><p id="au_unmanaged"></p></div>
     <div class="toolbar"><div class="filters" role="group" aria-label="Filter" id="au_filters"></div>
       <div class="field" style="flex:0 1 280px"><label for="au_q">Search IP / ticket / description</label><input type="text" id="au_q" placeholder="ค้นหา IP / ticket / description"></div></div>
     <div class="actbar" id="au_actbar" hidden>
       <span id="au_selInfo" class="mono"></span>
-      <label for="au_setDur" class="note">Block period</label>
-      <select id="au_setDur"><option value="default">Default (cloud 7 / others 90)</option><option value="7">7 days</option><option value="30">30 days</option><option value="90">90 days</option><option value="180">180 days</option><option value="365">365 days</option><option value="keep">Keep (no expiry)</option></select>
+      <label for="au_setDur" class="note">Unblock after</label>
+      <select id="au_setDur"><option value="default">Default (cloud 7 / others 90 quiet days)</option><option value="7">7 quiet days</option><option value="30">30 quiet days</option><option value="90">90 quiet days</option><option value="180">180 quiet days</option><option value="365">365 quiet days</option><option value="keep">Keep (never unblock)</option></select>
       <input type="text" id="au_setWhy" placeholder="เหตุผล (บันทึกลง audit log)">
       <button type="button" class="btn-primary" id="au_apply">Apply</button>
       <button type="button" class="btn-crit" id="au_unblock">🔓 Unblock now</button>
       <button type="button" id="au_clear">✖ Clear</button>
     </div>
     <div class="tbl-wrap"><table>
-      <thead><tr><th></th><th>IP</th><th>Owner</th><th>Blocked at</th><th>By</th><th>Ticket</th><th>Description</th><th>Block period</th><th>Expires</th><th>Left</th><th style="text-align:right" title="requests the WAF blocked from this IP in the look-back window">WAF hits</th><th>Status</th></tr></thead>
+      <thead><tr><th></th><th>IP</th><th>Owner</th><th>Policy</th><th title="block date (from Splunk) or the first time Splunk saw the rule in the policy">Blocked / listed since</th><th>Ticket</th><th>Description</th><th>Last attack</th><th style="text-align:right" title="requests the WAF blocked from this IP in the last 7 days">Hits 7d</th><th>Unblock after</th><th>Unblock on</th><th>Left</th><th>Status</th></tr></thead>
       <tbody id="au_tbl"></tbody></table></div>
   </section>
   <section class="panel" aria-labelledby="au_hRun">
@@ -436,25 +434,36 @@ const detected=[
 // hits = requests the WAF blocked from the IP (ACL) in the look-back window
 const blocked=[
  {ip:"193.42.33.7",t:now0-3*DAY,tk:"1000090",desc:"Credential stuffing on /login",by:"analyst01",rule:RULES[0]},
- {ip:"141.98.10.60",t:now0-9*DAY,tk:"1000071",desc:"Scanner, VT 9/94",by:"analyst02",rule:RULES[4],hits:412},
+ {ip:"141.98.10.60",t:now0-9*DAY,tk:"1000071",desc:"Scanner, VT 9/94",by:"analyst02",rule:RULES[4],hits:412,seen:now0-2*HOUR},
  {ip:"91.240.118.172",t:now0-14*DAY,tk:"1000055",desc:"SQLi burst on partner site",by:"analyst03",rule:RULES[1]},
  {ip:"13.229.88.40",t:now0-2*DAY-3*HOUR,tk:"1000129",desc:"Credential stuffing from AWS",by:"analyst01",rule:RULES[0]},
  {ip:"34.120.45.17",t:now0-6*DAY-5*HOUR,tk:"1000112",desc:"Scanner on Google Cloud",by:"analyst01",rule:RULES[4]},
- {ip:"3.120.33.9",t:now0-8*DAY,tk:"1000108",desc:"Bot on AWS, 2k req / h",by:"analyst02",rule:RULES[2],hits:310},
+ {ip:"3.120.33.9",t:now0-8*DAY,tk:"1000108",desc:"Bot on AWS, 2k req / h",by:"analyst02",rule:RULES[2],hits:310,seen:now0-1*DAY-4*HOUR},
  {ip:"104.248.50.3",t:now0-20*DAY,tk:"1000096",desc:"Exploit attempts /vendor/phpunit",by:"analyst03",rule:RULES[4],dur:30},
  {ip:"45.142.120.11",t:now0-61*DAY,tk:"1000077",desc:"Path traversal",by:"analyst01",rule:RULES[1]},
- {ip:"80.82.77.33",t:now0-88*DAY,tk:"1000061",desc:"Mass scanner",by:"analyst02",rule:RULES[4],hits:57},
+ {ip:"80.82.77.33",t:now0-88*DAY,tk:"1000061",desc:"Mass scanner",by:"analyst02",rule:RULES[4],hits:57,seen:now0-6*DAY},
  {ip:"193.163.125.9",t:now0-93*DAY,tk:"1000052",desc:"Brute force on /api/v1/login",by:"analyst03",rule:RULES[0]},
- {ip:"152.32.180.2",t:now0-96*DAY,tk:"1000047",desc:"SQLi, still active",by:"analyst01",rule:RULES[1],hits:140},
+ {ip:"152.32.180.2",t:now0-96*DAY,tk:"1000047",desc:"SQLi, still active",by:"analyst01",rule:RULES[1],hits:140,seen:now0-5*HOUR},
  {ip:"185.156.73.54",t:now0-130*DAY,tk:"1000020",desc:"Known C2 infrastructure (TI)",by:"analyst02",rule:RULES[4],dur:"keep"},
 ];
+// IPs blocked by the OTHER WAF policies (IP rules read from every enabled policy - no block date:
+// "listed" = first time Splunk saw the rule in the policy); seen = last request the WAF blocked from the IP
+const POLICY={2169031:"BlockIOCsFromSplunk",1000001:"Block DDoS policy",1000003:"Block IOC attack"};
+const otherBlocked=[
+ {ip:"185.220.101.47",pol:1000001,listed:now0-200*DAY,seen:now0-3*HOUR,hits:880,desc:"Tor exit"},
+ {ip:"35.165.106.69",pol:1000003,listed:now0-40*DAY,seen:now0-9*DAY,hits:0,desc:"-"},
+ {ip:"52.14.90.3",pol:1000003,listed:now0-20*DAY,seen:now0-2*DAY,hits:44,desc:"-"},
+ {ip:"61.177.172.13",pol:1000001,listed:now0-300*DAY,seen:now0-120*DAY,hits:0,desc:"SSH / login brute force"},
+ {ip:"218.92.0.112",pol:1000001,listed:now0-150*DAY,seen:now0-60*DAY,hits:0,desc:"-"},
+ {ip:"45.9.20.18",pol:1000003,listed:now0-95*DAY,seen:null,hits:0,desc:"-"},
+];
 // Auto unblock settings (real app: KV store, changed on the Auto unblock page, written to the audit log)
-const AU={mode:"report", def:90, cloud:7, remind:7, atk:true, atkDays:7, ext:30, extCloud:7, max:50};
+// def / cloud = days WITHOUT an attack before the IP is unblocked; scope = which policies are changed
+const AU={mode:"report", def:90, cloud:7, remind:7, max:50, scope:"splunk"};
 const auLog=[
- {t:now0-1*DAY-3*HOUR, ip:"80.94.95.115", act:"auto_unblock", st:"unblocked · verified", tk:"1000012", det:"block period ended (90 days)"},
- {t:now0-1*DAY-3*HOUR, ip:"35.198.44.21", act:"auto_unblock", st:"unblocked · verified", tk:"1000118", det:"cloud provider IP (Google Cloud) – block period ended (7 days)"},
- {t:now0-1*DAY-3*HOUR, ip:"185.224.128.17", act:"auto_extend", st:"extended", tk:"1000015", det:"still attacking: 57 blocked requests in 7 days → +30 days"},
- {t:now0-4*DAY-3*HOUR, ip:"92.118.39.120", act:"auto_unblock", st:"unblocked · verified", tk:"1000008", det:"block period ended (90 days)"},
+ {t:now0-1*DAY-3*HOUR, ip:"80.94.95.115", act:"auto_unblock", st:"unblocked · verified", tk:"1000012", det:"no attack for 90 days (last seen 2026-08-12)"},
+ {t:now0-1*DAY-3*HOUR, ip:"35.198.44.21", act:"auto_unblock", st:"unblocked · verified", tk:"1000118", det:"cloud provider IP (Google Cloud) – no attack for 7 days"},
+ {t:now0-4*DAY-3*HOUR, ip:"92.118.39.120", act:"auto_unblock", st:"unblocked · verified", tk:"1000008", det:"no attack for 90 days (never seen after the block)"},
 ];
 const audit=blocked.map((b,i)=>({t:b.t,user:b.by,action:"block",ip:b.ip,tk:b.tk,desc:b.desc,status:"blocked",ver:"yes",cont:4700+i*13}));
 const rules=[
@@ -514,7 +523,7 @@ const act=(ip,win,det)=>{let h=0; for(const c of ip) h=(h*31+c.charCodeAt(0))%99
 // ---------- NEW (v3.8): decision aid – all simulated. Real sources: ES risk index, VT ASN / AS owner +
 // ES asset lookup + Imperva client classification, Imperva CEF (cef_name, response code, user agent), audit CSV
 const hh=(ip,salt)=>{let h=salt||7; for(const c of ip) h=(h*31+c.charCodeAt(0))%100003; return h;};
-const OWN={"13.229.88.40":["cloud","AS16509 Amazon AWS"],"34.120.45.17":["cloud","AS396982 Google Cloud"],"3.120.33.9":["cloud","AS16509 Amazon AWS"],"104.248.50.3":["host","AS14061 DigitalOcean"],"54.245.198.114":["cloud","AS16509 Amazon AWS"],"54.213.203.214":["cloud","AS16509 Amazon AWS"],"52.88.145.123":["cloud","AS16509 Amazon AWS"],"35.240.10.8":["cloud","AS396982 Google Cloud"],
+const OWN={"35.165.106.69":["cloud","AS16509 Amazon AWS"],"52.14.90.3":["cloud","AS16509 Amazon AWS"],"61.177.172.13":["isp","AS4134 Chinanet"],"218.92.0.112":["isp","AS4134 Chinanet"],"45.9.20.18":["host","AS49870 Alsycon"],"13.229.88.40":["cloud","AS16509 Amazon AWS"],"34.120.45.17":["cloud","AS396982 Google Cloud"],"3.120.33.9":["cloud","AS16509 Amazon AWS"],"104.248.50.3":["host","AS14061 DigitalOcean"],"54.245.198.114":["cloud","AS16509 Amazon AWS"],"54.213.203.214":["cloud","AS16509 Amazon AWS"],"52.88.145.123":["cloud","AS16509 Amazon AWS"],"35.240.10.8":["cloud","AS396982 Google Cloud"],
  "223.181.15.230":["mob","AS45609 Bharti Airtel"],"211.24.84.19":["isp","AS4788 TM Net"],"57.141.0.36":["bot","AS32934 Meta · facebookexternalhit"],
  "103.152.18.90":["isp","AS45899 VNPT"],"45.95.147.236":["host","AS49870 Alsycon"],"194.26.29.102":["host","AS206728 Media Land"],
  "118.193.33.60":["host","AS135377 UCloud"],"5.188.206.14":["host","AS49453 Global Layer"],"89.248.165.52":["host","AS202425 IP Volume"],
@@ -543,7 +552,7 @@ function ctx(d, win){
   const c24=detected.filter(x=>x.ip!==ip&&x.ip.split(".").slice(0,3).join(".")===ip.split(".").slice(0,3).join(".")).map(x=>x.ip);
   const hist=HIST[ip]||{}, days=1+h%6+(d.n>15?6:0), first=d.last-(h%25)*DAY;
   const sig=[];
-  if(o[0]==="cloud") sig.push(["c",`☁ cloud provider – ${AU.cloud}-day block`]);
+  if(o[0]==="cloud") sig.push(["c",`☁ cloud provider – unblock after ${AU.cloud} quiet days`]);
   if(atk.length&&codes["200"]&&o[0]!=="thmob") sig.push(["w",`⚠ attacks + allowed 200 ×${codes["200"]}`]);
   if(o[0]==="thmob"||o[0]==="mob") sig.push(["c","⚠ shared IP – may hit customers"]);
   if(o[0]==="bot") sig.push(["i","✔ crawler verified by Imperva"]);
@@ -559,7 +568,7 @@ const rcls=v=>v>=150?"r-hi":v>=60?"r-mid":"r-lo";
 // cloud provider IPs (AWS, Google Cloud, Azure, ...) are shared / re-assigned: never suggest BLOCK
 const cloudOf=ip=>{const o=OWN[ip]; return o&&o[0]==="cloud"?o[1].replace(/^AS\d+ /,""):null;};
 function effSug(d){ const o=OWN[d.ip]||[];
-  if(o[0]==="cloud"&&d.sug!=="ALREADY_BLOCKED"&&d.sug!=="DO_NOT_BLOCK") return {sug:d.sug,reason:`cloud provider IP (${o[1].replace(/^AS\d+ /,"")}) – auto unblock after ${AU.cloud} days`,was:null};
+  if(o[0]==="cloud"&&d.sug!=="ALREADY_BLOCKED"&&d.sug!=="DO_NOT_BLOCK") return {sug:d.sug,reason:`cloud provider IP (${o[1].replace(/^AS\d+ /,"")}) – auto unblock after ${AU.cloud} days without an attack`,was:null};
   return {sug:d.sug,reason:"",was:null}; }
 function aidCell(d, win){ const c=ctx(d,win);
   return `<td class="aid" data-detail="${d.ip}" title="click: IP detail"><div class="row"><span class="own o-${c.o[0]}">${OWN_LABEL[c.o[0]]}</span></div>
@@ -580,7 +589,7 @@ function renderDetail(page){
   const sel=pg.sel.has(d.ip);
   el.hidden=false;
   el.innerHTML=`<div class="panel-head"><div class="dhead"><h2>IP detail – <span class="mono">${d.ip}</span><span class="new">NEW</span></h2><span class="own o-${c.o[0]}">${OWN_LABEL[c.o[0]]}</span><span class="note">${esc(c.o[1])} · ${esc(d.loc)}</span><span class="pill ${sugPill[effSug(d).sug]}" title="${esc(effSug(d).reason||"suggestion")}">${effSug(d).sug}</span>${effSug(d).reason?`<span class="note">${esc(effSug(d).reason)}</span>`:""}</div>
-    <div class="dact">${cloudOf(d.ip)?`<span class="pill p-review">☁ ${AU.cloud}-day block</span>`:""}<button type="button" data-dsel="${d.ip}">${sel?"✓ selected – unselect":"☐ select this IP"}</button><a class="vt" href="https://www.virustotal.com/gui/ip-address/${d.ip}" target="_blank" rel="noopener">🔗 VT ${d.vt}/94</a><button type="button" onclick="toast('Real dashboard: opens a Splunk search with every WAF event of this IP in a new tab')">🔍 all events</button><button type="button" data-dclose="1" aria-label="close IP detail">✖ close</button></div></div>
+    <div class="dact">${cloudOf(d.ip)?`<span class="pill p-review">☁ unblock after ${AU.cloud} quiet days</span>`:""}<button type="button" data-dsel="${d.ip}">${sel?"✓ selected – unselect":"☐ select this IP"}</button><a class="vt" href="https://www.virustotal.com/gui/ip-address/${d.ip}" target="_blank" rel="noopener">🔗 VT ${d.vt}/94</a><button type="button" onclick="toast('Real dashboard: opens a Splunk search with every WAF event of this IP in a new tab')">🔍 all events</button><button type="button" data-dclose="1" aria-label="close IP detail">✖ close</button></div></div>
   <div class="dgrid">
     <div class="dbox"><span class="label">WAF attack types (${W})</span>${c.atk.length?`<ul>${c.atk.map(a=>li(esc(a[0]),`<b class="bk">${a[1].toLocaleString()}</b>`)).join("")}</ul>`:'<span class="note">no blocked requests</span>'}</div>
     <div class="dbox"><span class="label">Allowed responses (${W})</span>${Object.keys(c.codes).length?`<ul>${Object.entries(c.codes).map(([k,v])=>li(`HTTP ${k}${k==="200"&&c.atk.length&&c.o[0]!=="thmob"?' <span class="sig w">⚠ after attacks</span>':""}`,`<b class="al">${v}</b>`)).join("")}</ul>`:'<span class="note">nothing let through</span>'}</div>
@@ -598,7 +607,7 @@ const isHidden=d=>notBlocked.some(x=>x.ip===d.ip && x.t>=d.last);
 const pendingDetected=()=>detected.filter(d=>!onWaf(d.ip)&&!isHidden(d)&&ruleUsed(d.rule).use&&d.sug!=="ALREADY_BLOCKED"&&d.sug!=="DO_NOT_BLOCK");
 const WAF_POLICY={"185.220.101.47":"BLOCK in 1000001 Block DDoS policy","35.165.106.69":"BLOCK in 1000003 Block IOC attack","20.20.20.20":"ALLOW in 1000002 Allow partner DC"};
 function wafCheck(ip){ if(!isIP(ip)) return ip+" is not an IP / CIDR"; if(onWaf(ip)) return ip+" already blocked from Splunk";
-  const cp=cloudOf(ip); if(cp&&!WAF_POLICY[ip]) return ip+" is a CLOUD PROVIDER IP ("+cp+") – blocked for "+AU.cloud+" days, then auto unblock";
+  const cp=cloudOf(ip); if(cp&&!WAF_POLICY[ip]) return ip+" is a CLOUD PROVIDER IP ("+cp+") – auto unblock after "+AU.cloud+" days without an attack";
   const p=WAF_POLICY[ip]; if(!p) return null; return p.startsWith("ALLOW")? ip+" is ALLOWED: "+p : ip+" already BLOCKED: "+p; }
 const win={dash:d=>age(d)<=7*DAY,
   history:d=>{const r=$("h_rng").value,a=age(d); return r==="30"?a>7*DAY&&a<=30*DAY : r==="90"?a>30*DAY&&a<=90*DAY : a>7*DAY;}};
@@ -613,35 +622,39 @@ function renderDet(page){
   const pg=P[page], rows=detRows(page), q=$(pg.p+"_q").value.trim();
   $(pg.p+"_tbl").innerHTML=rows.map(d=>{
     const ok=d.sug!=="DO_NOT_BLOCK"&&d.sug!=="ALREADY_BLOCKED", w=act(d.ip, page==="history"?"30d":"24h", d.last);
-    return `<tr data-ip="${d.ip}" class="${pg.sel.has(d.ip)?"selected":""}" ${cloudOf(d.ip)?`title="cloud provider IP – blocked for ${AU.cloud} days, then auto unblock"`:""}>
+    return `<tr data-ip="${d.ip}" class="${pg.sel.has(d.ip)?"selected":""}" ${cloudOf(d.ip)?`title="cloud provider IP – auto unblock after ${AU.cloud} days without an attack"`:""}>
     <td>${ok?'<span class="box"></span>':''}</td><td class="ip">${d.ip}</td><td class="nw"><a class="vt" href="https://www.virustotal.com/gui/ip-address/${d.ip}" target="_blank" rel="noopener" onclick="event.stopPropagation()">🔗</a> <span class="mono">${d.vt}/94</span></td><td class="small">${esc(d.rule)}</td>
     <td class="mono nw">${esc(d.inc)}</td><td><span class="pill sev-${d.sev}">${d.sev}</span></td><td class="mono nw">${fmt(d.last)}</td>
     <td class="num">${d.n}</td><td class="num nw"><b class="bk">${w.b.toLocaleString()}</b> / <b class="al">${w.a.toLocaleString()}</b></td><td class="num nw"><b class="bk">${w.wb}</b> / <b class="al">${w.wa}</b></td><td>${pathCell(fullPaths(d.ip,w.b,BAD,3), fullPaths(d.ip,w.a,GOOD,5))}</td>${page==="history"?`<td class="mono nw">${w.last?fmt(w.last):"-"}</td>`:""}<td>${(e=>`<span class="pill ${sugPill[e.sug]}">${e.sug}</span>${e.reason?`<div class="note" style="min-width:150px">${esc(e.reason)}</div>`:""}`)(effSug(d))}</td>
     <td class="nw">${esc(d.loc)}</td>${aidCell(d, page==="history"?"30d":"24h")}</tr>`;}).join("")
     ||`<tr><td colspan="${page==="history"?15:14}" class="note">${q?`ไม่พบ IP ที่ตรงกับ “${esc(q)}”`:"ไม่มี IP ที่รอ block ในช่วงเวลานี้"}</td></tr>`;
 }
+// unblock when the IP sent no request for N days: cloud provider 7, others 90 (or set per IP / Keep)
 function expInfo(b){
-  if(b.dur==="keep") return {st:"keep", exp:null, left:null, days:null, cl:!!cloudOf(b.ip)};
-  const cl=!!cloudOf(b.ip), days=b.dur??(cl?AU.cloud:AU.def), exp=b.ext??(b.t+days*DAY), left=(exp-Date.now())/DAY;
-  const st=left<=0?((AU.atk&&(b.hits||0)>0)?"extend":"due"):(left<=Math.min(AU.remind,days*0.3)?"soon":"active");
-  return {st, cl, days, exp, left, custom:b.dur!=null||b.ext!=null};
+  const cl=!!cloudOf(b.ip), pol=b.pol||2169031, managed=pol===2169031||AU.scope==="all", since=b.t||b.listed;
+  if(b.dur==="keep") return {st:"keep", cl, pol, managed, keep:true, since};
+  const days=b.dur??(cl?AU.cloud:AU.def), base=Math.max(b.seen||0, since||0), unb=base+days*DAY, n=Date.now();
+  const left=(unb-n)/DAY, quiet=(n-base)/DAY, attacking=!!b.seen&&n-b.seen<DAY;
+  const st=left<=0?(managed?"due":"other"):attacking?"attacking":left<=Math.min(AU.remind,days*0.3)?"soon":"quiet";
+  return {st, cl, pol, managed, days, base, unb, left, quiet, attacking, since, custom:b.dur!=null};
 }
-const EST={active:["p-active","Active"], soon:["p-soon","Expiring soon"], due:["p-due","Due · unblock"], extend:["p-extend","Due · extend (still attacking)"], keep:["p-keep","Kept"]};
+const EST={attacking:["p-due","Attacking · seen today"], quiet:["p-active","Quiet"], soon:["p-soon","Unblock soon"], due:["p-extend","Due · unblock"], other:["p-done","Due · other policy (shown only)"], keep:["p-keep","Kept"]};
+function stLabel(i){ return i.st==="quiet"?`Quiet ${Math.floor(i.quiet)} d`:EST[i.st][1]; }
 function durBadge(b,i){ if(i.st==="keep") return '<span class="dur keep">Keep</span>';
-  if(b.ext) return '<span class="dur custom">extended</span>';
-  if(b.dur) return `<span class="dur custom">${b.dur} d</span>`;
-  return i.cl?`<span class="dur cloud">☁ ${AU.cloud} d</span>`:`<span class="dur">${AU.def} d</span>`; }
-function leftCell(i){ if(i.left==null) return '<span class="note">no expiry</span>';
-  const pct=Math.max(0,Math.min(100,i.left/(i.days||1)*100)), cls=i.st==="due"||i.st==="extend"?"due":i.st==="soon"?"soon":"";
-  const txt=i.left<=0?`${Math.max(1,Math.floor(-i.left))} d overdue`:i.left<1?`${Math.ceil(i.left*24)} h`:`${Math.floor(i.left)} d`;
+  if(b.dur) return `<span class="dur custom">${b.dur} d quiet</span>`;
+  return i.cl?`<span class="dur cloud">☁ ${AU.cloud} d quiet</span>`:`<span class="dur">${AU.def} d quiet</span>`; }
+function leftCell(i){ if(i.left==null) return '<span class="note">never</span>';
+  const pct=Math.max(0,Math.min(100,i.left/(i.days||1)*100)), cls=i.st==="due"||i.st==="other"?"due":i.st==="soon"?"soon":"";
+  const txt=i.left<=0?"now":i.left<1?`${Math.ceil(i.left*24)} h`:`${Math.floor(i.left)} d`;
   return `<div class="left"><span class="mono">${txt}</span><div class="bar ${cls}"><i style="width:${pct.toFixed(0)}%"></i></div></div>`; }
+const seenCell=b=>b.seen?`<span class="mono nw">${fmt(b.seen)}</span>${Date.now()-b.seen<DAY?' <b class="bk">●</b>':""}`:`<span class="note">not seen since ${b.t?"block":"listed"}</span>`;
 function renderBlocked(){
   const pg=P.blocked, q=normQ($("b_q").value);
   const rows=blocked.filter(b=>has(q,b.ip,b.tk,b.desc,b.rule)).sort((a,b)=>b.t-a.t);
   $("b_tbl").innerHTML=rows.map(b=>`<tr data-ip="${b.ip}" class="${pg.sel.has(b.ip)?"selected":""}">
     <td><span class="box"></span></td><td class="ip">${b.ip}</td><td class="mono nw">${fmt(b.t)}</td>
-    <td class="mono nw">${esc(b.tk)}</td><td class="small">${esc(b.desc)}</td><td>${esc(b.by)}</td><td class="small">${esc(b.rule||"-")}</td><td><span class="pill p-safe">yes</span></td>${(i=>`<td>${durBadge(b,i)}</td><td class="mono nw">${i.exp?fmt(i.exp).slice(0,10):"-"}</td><td>${leftCell(i)}</td><td><span class="pill ${EST[i.st][0]}">${EST[i.st][1]}</span></td>`)(expInfo(b))}</tr>`).join("")
-    ||`<tr><td colspan="12" class="note">${q?`ไม่พบ IP ที่ตรงกับ “${esc(q)}”`:"ไม่มี IP ที่ถูก block"}</td></tr>`;
+    <td class="mono nw">${esc(b.tk)}</td><td class="small">${esc(b.desc)}</td><td>${esc(b.by)}</td><td class="small">${esc(b.rule||"-")}</td><td><span class="pill p-safe">yes</span></td>${(i=>`<td>${durBadge(b,i)}</td><td>${seenCell(b)}</td><td class="mono nw">${i.unb?fmt(i.unb).slice(0,10):"-"}</td><td>${leftCell(i)}</td><td><span class="pill ${EST[i.st][0]}">${stLabel(i)}</span></td>`)(expInfo(b))}</tr>`).join("")
+    ||`<tr><td colspan="13" class="note">${q?`ไม่พบ IP ที่ตรงกับ “${esc(q)}”`:"ไม่มี IP ที่ถูก block"}</td></tr>`;
   $("bWaf").textContent=blocked.length; $("bRead").textContent=fmt(Date.now()).slice(11);
 }
 const isIP=x=>/^(\d{1,3})(\.\d{1,3}){3}(\/\d{1,2})?$/.test(x)&&x.split("/")[0].split(".").every(o=>+o<=255) || /^[0-9a-f:]+:[0-9a-f:]*(\/\d{1,3})?$/i.test(x);
@@ -660,8 +673,8 @@ function renderCtl(page){
   if(page!=="blocked"){ const msgs=[...all, ...man.filter(x=>!isIP(x))].map(wafCheck).filter(Boolean), c=$(pg.p+"_chk");
     c.hidden=!n&&!msgs.length; c.className="result "+(msgs.length?"running":"ok");
     c.textContent=msgs.length?"⚠ WAF check: "+msgs.join(" | "):"✔ WAF check: none of the selected IPs is blocked / allowed on the WAF"; }
-  $(pg.p+"_sel").innerHTML=([...pg.sel].map(ip=>cloudOf(ip)?`<span class="tag cloud" title="cloud provider IP – blocked for ${AU.cloud} days, then auto unblock">☁ ${ip} · ${AU.cloud}-day block<button type="button" data-rm="${ip}" aria-label="remove ${ip}">×</button></span>`:`<span class="tag">${ip}<button type="button" data-rm="${ip}" aria-label="remove ${ip}">×</button></span>`)
-    .concat(man.filter(x=>!pg.sel.has(x)).map(x=>cloudOf(x)?`<span class="tag man cloud" title="added manually – cloud provider IP, ${AU.cloud}-day block">✍ ☁ ${esc(x)} · ${AU.cloud}-day block</span>`:isIP(x)?`<span class="tag man" title="added manually">✍ ${esc(x)}</span>`:`<span class="tag bad" title="not an IP / CIDR - ignored">✖ ${esc(x)}</span>`))).join("")||'<span class="note">ยังไม่ได้เลือก IP</span>';
+  $(pg.p+"_sel").innerHTML=([...pg.sel].map(ip=>cloudOf(ip)?`<span class="tag cloud" title="cloud provider IP – auto unblock after ${AU.cloud} days without an attack">☁ ${ip} · unblock after ${AU.cloud} quiet days<button type="button" data-rm="${ip}" aria-label="remove ${ip}">×</button></span>`:`<span class="tag">${ip}<button type="button" data-rm="${ip}" aria-label="remove ${ip}">×</button></span>`)
+    .concat(man.filter(x=>!pg.sel.has(x)).map(x=>cloudOf(x)?`<span class="tag man cloud" title="added manually – cloud provider IP">✍ ☁ ${esc(x)} · unblock after ${AU.cloud} quiet days</span>`:isIP(x)?`<span class="tag man" title="added manually">✍ ${esc(x)}</span>`:`<span class="tag bad" title="not an IP / CIDR - ignored">✖ ${esc(x)}</span>`))).join("")||'<span class="note">ยังไม่ได้เลือก IP</span>';
 }
 function chart(el,days){
   const data=daily.slice(-days), n=data.length, W=days>7?1300:1000, H=days>7?230:200, L=34,R=8,T=28,B=34, cw=(W-L-R)/n, bw=days>7?.6:.4;
@@ -757,7 +770,7 @@ async function run(page){
       audit.push({t,user:USER,action:"block",ip,tk,desc,status:"blocked",ver:"yes",cont});});
     r.className=ok.length?"result ok":"result running";
     const nc=ok.filter(cloudOf).length;
-    r.textContent=`${ok.length?`✔ Block ${ok.length} IP บน policy 2169031 และ verify บน WAF แล้ว · ${tk} · หมดอายุ: ${nc?`cloud ${nc} IP ใน ${AU.cloud} วัน, `:""}${ok.length-nc?`อื่น ๆ ${ok.length-nc} IP ใน ${AU.def} วัน`:""} (unblock อัตโนมัติ) · ย้ายไปหน้า Blocked IPs`:"ไม่มี IP ที่ block ได้"}${rej.length?` · ✖ rejected: ${rej.join(", ")}`:""} · บันทึกลง imperva_audit.csv`;
+    r.textContent=`${ok.length?`✔ Block ${ok.length} IP บน policy 2169031 และ verify บน WAF แล้ว · ${tk} · unblock อัตโนมัติเมื่อไม่โจมตี: ${nc?`cloud ${nc} IP ครบ ${AU.cloud} วัน, `:""}${ok.length-nc?`อื่น ๆ ${ok.length-nc} IP ครบ ${AU.def} วัน`:""} · ย้ายไปหน้า Blocked IPs`:"ไม่มี IP ที่ block ได้"}${rej.length?` · ✖ rejected: ${rej.join(", ")}`:""} · บันทึกลง imperva_audit.csv`;
   } else {
     ips.forEach(ip=>{const i=blocked.findIndex(b=>b.ip===ip); if(i>=0) blocked.splice(i,1); td.u++;
       audit.push({t,user:USER,action:"unblock",ip,tk,desc,status:"unblocked",ver:"removed",cont});});
@@ -799,13 +812,14 @@ $("aq").addEventListener("input",renderAudit); $("aact").addEventListener("chang
 
 // ---------- v3.9 Auto unblock page
 let auFilter="all"; const auSel=new Set();
-const AUF=[["all","All"],["soon","Expiring soon"],["due","Due · unblock"],["extend","Still attacking"],["keep","Kept"],["cloud","Cloud provider"],["custom","Custom period"]];
+const AUF=[["all","All"],["splunk","Policy 2169031"],["other","Other policies"],["cloud","Cloud provider"],["attacking","Attacking now"],["soon","Unblock soon"],["due","Due"],["keep","Kept"]];
+const allBlocked=()=>blocked.concat(otherBlocked);
+function auMatch(x,f){ return f==="all"||(f==="splunk"?x.i.pol===2169031:f==="other"?x.i.pol!==2169031:f==="cloud"?x.i.cl:f==="due"?x.i.st==="due"||x.i.st==="other":x.i.st===f); }
 function auRows(){ const q=normQ($("au_q").value);
-  return blocked.map(b=>({b,i:expInfo(b)})).filter(x=>has(q,x.b.ip,x.b.tk,x.b.desc,x.b.by))
-    .filter(x=>auFilter==="all"||(auFilter==="cloud"?x.i.cl:auFilter==="custom"?x.i.custom&&x.i.st!=="keep":x.i.st===auFilter))
-    .sort((a,c)=>(a.i.exp??Infinity)-(c.i.exp??Infinity)); }
+  return allBlocked().map(b=>({b,i:expInfo(b)})).filter(x=>has(q,x.b.ip,x.b.tk,x.b.desc,x.b.by,POLICY[x.i.pol]))
+    .filter(x=>auMatch(x,auFilter)).sort((a,c)=>(a.i.unb??Infinity)-(c.i.unb??Infinity)); }
 function auChart(){ const W=560,H=150,L=26,Rr=6,T=10,B=24,days=30, bk=Array(days).fill(0);
-  blocked.forEach(b=>{const i=expInfo(b); if(i.exp&&i.left>0&&i.left<=days) bk[Math.floor(i.left)]++;});
+  allBlocked().forEach(b=>{const i=expInfo(b); if(i.unb&&i.left>0&&i.left<=days) bk[Math.floor(i.left)]++;});
   const mx=Math.max(2,...bk), cw=(W-L-Rr)/days, y=v=>T+(H-T-B)*(1-v/mx);
   let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="IPs expiring per day in the next 30 days">`;
   for(let v=0;v<=mx;v++) s+=`<line class="gl" x1="${L}" x2="${W-Rr}" y1="${y(v)}" y2="${y(v)}"/><text x="${L-6}" y="${y(v)+3}" text-anchor="end">${v}</text>`;
@@ -813,59 +827,67 @@ function auChart(){ const W=560,H=150,L=26,Rr=6,T=10,B=24,days=30, bk=Array(days
   [0,7,14,21,29].forEach(d=>{ s+=`<text x="${(L+d*cw+cw/2).toFixed(1)}" y="${H-8}" text-anchor="middle">${d===0?"today":"+"+d+"d"}</text>`; });
   $("au_chart").innerHTML=s+"</svg>"; $("au_chartNote").textContent=`${bk.reduce((a,c)=>a+c,0)} IP · สีส้ม = ภายใน ${AU.remind} วัน`; }
 function renderAuto(){
-  const all=blocked.map(expInfo), cnt={all:all.length, cloud:all.filter(i=>i.cl).length, custom:all.filter(i=>i.custom&&i.st!=="keep").length};
-  ["soon","due","extend","keep"].forEach(k=>cnt[k]=all.filter(i=>i.st===k).length);
-  $("nAuto").textContent=cnt.due+cnt.extend;
-  $("au_kAll").textContent=all.length; $("au_kAllSub").textContent=`cloud ${cnt.cloud} (${AU.cloud} d) · others ${all.length-cnt.cloud} (${AU.def} d)`;
-  $("au_kSoon").textContent=cnt.soon; $("au_kDue").textContent=cnt.due; $("au_kDueSub").textContent=`${AU.mode==="auto"?"unblocked":"reported"} at the next run${cnt.extend?` · ${cnt.extend} extended`:""}`;
+  const items=allBlocked().map(b=>({b,i:expInfo(b)})), cnt={};
+  AUF.forEach(([k])=>cnt[k]=items.filter(x=>auMatch(x,k)).length);
+  const dueM=items.filter(x=>x.i.st==="due").length, dueO=items.filter(x=>x.i.st==="other").length;
+  $("nAuto").textContent=dueM;
+  $("au_kAll").textContent=items.length; $("au_kAllSub").textContent=`policy 2169031: ${cnt.splunk} · other policies: ${cnt.other} · cloud ${cnt.cloud}`;
+  $("au_kSoon").textContent=cnt.attacking;
+  $("au_kDue").textContent=dueM; $("au_kDueSub").textContent=`${AU.mode==="auto"?"unblocked":"reported"} at the next run${dueO?` · ${dueO} in other policies (shown only)`:""}`;
   $("au_kKeep").textContent=cnt.keep; $("au_kDone").textContent=auLog.filter(l=>l.act==="auto_unblock"&&now0-l.t<=30*DAY).length;
-  $("au_unmanaged").textContent="3 IP บน policy ไม่มีวันที่ block (เพิ่มนอก Splunk) — ไม่อยู่ในการ unblock อัตโนมัติ";
+  $("au_unmanaged").textContent=AU.scope==="all"?"unblock ได้ทุก policy ที่เปิดใช้งาน":"policy อื่นแสดงอย่างเดียว ไม่ถูกแก้ (Unblock from = Policy 2169031 only)";
   $("au_mReport").setAttribute("aria-pressed",AU.mode==="report"); $("au_mAuto").setAttribute("aria-pressed",AU.mode==="auto");
   $("au_modeNote").textContent=AU.mode==="auto"?"ครบเวลาแล้ว unblock จริงบน WAF ทุกรอบ":"แสดงรายการที่จะ unblock ใน log แต่ยังไม่ unblock จริง (แนะนำช่วงแรก)";
+  $("au_sSplunk").setAttribute("aria-pressed",AU.scope==="splunk"); $("au_sAll").setAttribute("aria-pressed",AU.scope==="all");
+  $("au_scopeNote").textContent=AU.scope==="all"?"แก้ policy ของทีมอื่นด้วย – ต้องปรับ SOAR playbook ให้ unblock policy อื่นได้":"IP ใน policy อื่นแสดงในตารางและบอกว่าครบเวลาแล้ว แต่ไม่ unblock";
   $("au_filters").innerHTML=AUF.map(([k,l])=>`<button type="button" data-f="${k}" aria-pressed="${auFilter===k}">${l}<span class="n">${cnt[k]}</span></button>`).join("");
   $("au_tbl").innerHTML=auRows().map(({b,i})=>{ const o=OWN[b.ip];
-    return `<tr data-ip="${b.ip}" class="${auSel.has(b.ip)?"selected":""}"><td><span class="box"></span></td><td class="ip">${b.ip}</td>
-    <td class="nw">${o?`<span class="own o-${o[0]}">${OWN_LABEL[o[0]]}</span>`:'<span class="note">ISP / other</span>'}</td><td class="mono nw">${fmt(b.t)}</td><td class="nw">${esc(b.by)}</td><td class="mono nw">${esc(b.tk)}</td><td class="small">${esc(b.desc)}</td>
-    <td>${durBadge(b,i)}</td><td class="mono nw">${i.exp?fmt(i.exp).slice(0,10):"-"}</td><td>${leftCell(i)}</td>
-    <td class="num">${b.hits?`<b class="bk">${b.hits.toLocaleString()}</b>`:'<span class="note">0</span>'}</td><td><span class="pill ${EST[i.st][0]}">${EST[i.st][1]}</span></td></tr>`;}).join("")
-    ||'<tr><td colspan="12" class="note">ไม่มี IP ในตัวกรองนี้</td></tr>';
-  const due=all.filter(i=>i.st==="due").length;
-  $("au_plan").innerHTML=`Next run: <b>${Math.min(due,AU.max)}</b> to ${AU.mode==="auto"?"unblock":"report (would unblock)"} · <b>${cnt.extend}</b> to extend (still attacking) · <b>${cnt.keep}</b> kept`;
-  const A={auto_unblock:["a-unblock","auto unblock"],auto_extend:["a-extend","auto extend"],report_only:["a-report","report only"],set_period:["a-set","set block period"],unblock:["a-unblock","unblock (manual)"],settings:["a-set","settings"]};
+    return `<tr data-ip="${b.ip}" class="${auSel.has(b.ip)?"selected":""}"><td>${i.managed?'<span class="box"></span>':""}</td><td class="ip">${b.ip}</td>
+    <td class="nw">${o?`<span class="own o-${o[0]}">${OWN_LABEL[o[0]]}</span>`:'<span class="note">ISP / other</span>'}</td>
+    <td class="nw"><span class="mono">${i.pol}</span> <span class="note">${esc(POLICY[i.pol]||"")}</span></td>
+    <td class="mono nw">${i.since?fmt(i.since).slice(0,10):"-"}${b.t?"":' <span class="note">(listed)</span>'}</td><td class="mono nw">${esc(b.tk||"-")}</td><td class="small">${esc(b.desc||"-")}</td>
+    <td>${seenCell(b)}</td><td class="num">${b.hits?`<b class="bk">${b.hits.toLocaleString()}</b>`:'<span class="note">0</span>'}</td>
+    <td>${durBadge(b,i)}</td><td class="mono nw">${i.unb?fmt(i.unb).slice(0,10):"-"}</td><td>${leftCell(i)}</td><td><span class="pill ${EST[i.st][0]}">${stLabel(i)}</span></td></tr>`;}).join("")
+    ||'<tr><td colspan="13" class="note">ไม่มี IP ในตัวกรองนี้</td></tr>';
+  $("au_plan").innerHTML=`Next run: <b>${Math.min(dueM,AU.max)}</b> to ${AU.mode==="auto"?"unblock":"report (would unblock)"} · <b>${cnt.attacking}</b> still attacking · <b>${cnt.keep}</b> kept${dueO?` · <b>${dueO}</b> due in other policies (not changed)`:""}`;
+  const A={auto_unblock:["a-unblock","auto unblock"],report_only:["a-report","report only"],set_period:["a-set","set unblock rule"],unblock:["a-unblock","unblock (manual)"],settings:["a-set","settings"]};
   $("au_log").innerHTML=auLog.slice().sort((a,c)=>c.t-a.t).map(l=>`<tr><td class="mono nw">${fmt(l.t)}</td><td class="ip">${esc(l.ip)}</td><td><span class="${A[l.act][0]}">${A[l.act][1]}</span></td><td class="nw">${esc(l.st)}</td><td class="mono nw">${esc(l.tk)}</td><td class="small">${esc(l.det)}</td></tr>`).join("");
   $("au_actbar").hidden=!auSel.size; $("au_selInfo").textContent=`${auSel.size} IP selected`;
   auChart();
 }
-$("au_tbl").addEventListener("click",e=>{const tr=e.target.closest("tr[data-ip]"); if(!tr) return; const ip=tr.dataset.ip; auSel.has(ip)?auSel.delete(ip):auSel.add(ip); renderAuto();});
+$("au_tbl").addEventListener("click",e=>{const tr=e.target.closest("tr[data-ip]"); if(!tr) return; const ip=tr.dataset.ip;
+  const b=allBlocked().find(x=>x.ip===ip); if(b&&!expInfo(b).managed){toast(`${ip} อยู่ใน policy ${b.pol} (${POLICY[b.pol]}) – แสดงอย่างเดียว (Unblock from = Policy 2169031 only)`);return;}
+  auSel.has(ip)?auSel.delete(ip):auSel.add(ip); renderAuto();});
+$("au_sSplunk").addEventListener("click",()=>{AU.scope="splunk"; auSel.clear(); renderAll();});
+$("au_sAll").addEventListener("click",()=>{AU.scope="all"; renderAll();});
 $("au_filters").addEventListener("click",e=>{const b=e.target.closest("[data-f]"); if(!b) return; auFilter=b.dataset.f; renderAuto();});
 $("au_q").addEventListener("input",renderAuto);
 $("au_mReport").addEventListener("click",()=>{AU.mode="report"; renderAll();});
 $("au_mAuto").addEventListener("click",()=>{AU.mode="auto"; renderAll();});
 const auNum=(id,min,max,def)=>{const v=parseInt($(id).value,10); return isNaN(v)?def:Math.max(min,Math.min(max,v));};
-function auRead(){ AU.def=+$("au_def").value; AU.cloud=+$("au_cloud").value; AU.atk=$("au_atk").checked; AU.atkDays=auNum("au_atkDays",1,30,7);
-  AU.ext=auNum("au_ext",1,180,30); AU.extCloud=auNum("au_extCloud",1,30,7); AU.remind=auNum("au_remind",1,60,7); AU.max=auNum("au_max",1,50,50); renderAll(); }
-["au_def","au_cloud","au_atk","au_atkDays","au_ext","au_extCloud","au_remind","au_max"].forEach(id=>$(id).addEventListener("change",auRead));
-$("au_save").addEventListener("click",()=>{ auRead(); auLog.push({t:Date.now(),ip:"-",act:"settings",st:"saved",tk:"-",det:`mode=${AU.mode} period=${AU.def}d cloud=${AU.cloud}d still_attacking=${AU.atk?`${AU.atkDays}d→+${AU.ext}d (cloud +${AU.extCloud}d)`:"off"} max=${AU.max}`});
-  audit.push({t:Date.now(),user:USER,action:"auto_unblock_settings",ip:"-",tk:"-",desc:`period ${AU.def}d, cloud ${AU.cloud}d, mode ${AU.mode}`,status:"saved",ver:"-",cont:"-"}); renderAll(); toast("Settings saved · written to the audit log"); });
+function auRead(){ AU.def=+$("au_def").value; AU.cloud=+$("au_cloud").value; AU.remind=auNum("au_remind",1,60,7); AU.max=auNum("au_max",1,50,50); renderAll(); }
+["au_def","au_cloud","au_remind","au_max"].forEach(id=>$(id).addEventListener("change",auRead));
+$("au_save").addEventListener("click",()=>{ auRead(); auLog.push({t:Date.now(),ip:"-",act:"settings",st:"saved",tk:"-",det:`mode=${AU.mode} unblock_after=${AU.def}d cloud=${AU.cloud}d scope=${AU.scope==="all"?"all policies":"policy 2169031"} max=${AU.max}`});
+  audit.push({t:Date.now(),user:USER,action:"auto_unblock_settings",ip:"-",tk:"-",desc:`unblock after ${AU.def}d / cloud ${AU.cloud}d quiet, mode ${AU.mode}`,status:"saved",ver:"-",cont:"-"}); renderAll(); toast("Settings saved · written to the audit log"); });
 $("au_clear").addEventListener("click",()=>{auSel.clear(); renderAuto();});
 $("au_apply").addEventListener("click",()=>{ const v=$("au_setDur").value, why=$("au_setWhy").value.trim()||"-";
-  auSel.forEach(ip=>{ const b=blocked.find(x=>x.ip===ip); if(!b) return; b.dur=v==="default"?undefined:v==="keep"?"keep":+v; b.ext=null;
-    auLog.push({t:Date.now(),ip,act:"set_period",st:"saved",tk:b.tk,det:`block period → ${v==="default"?"default":v==="keep"?"Keep (no expiry)":v+" days"} · ${why}`}); });
-  toast(`Block period set for ${auSel.size} IP · written to the audit log`); auSel.clear(); $("au_setWhy").value=""; renderAll(); });
+  auSel.forEach(ip=>{ const b=allBlocked().find(x=>x.ip===ip); if(!b) return; b.dur=v==="default"?undefined:v==="keep"?"keep":+v;
+    auLog.push({t:Date.now(),ip,act:"set_period",st:"saved",tk:b.tk||"-",det:`unblock after → ${v==="default"?"default":v==="keep"?"Keep (never unblock)":v+" days without an attack"} · ${why}`}); });
+  toast(`Unblock rule set for ${auSel.size} IP · written to the audit log`); auSel.clear(); $("au_setWhy").value=""; renderAll(); });
 $("au_unblock").addEventListener("click",()=>{ const ips=[...auSel], t=Date.now(), why=$("au_setWhy").value.trim()||"-";
-  ips.forEach(ip=>{ const k=blocked.findIndex(x=>x.ip===ip); if(k<0) return; const b=blocked.splice(k,1)[0];
-    auLog.push({t,ip,act:"unblock",st:"unblocked · verified",tk:b.tk,det:`unblocked now · ${why}`}); audit.push({t,user:USER,action:"unblock",ip,tk:b.tk,desc:why,status:"unblocked",ver:"removed",cont:soarSeq++}); });
+  ips.forEach(ip=>{ const list=blocked.some(x=>x.ip===ip)?blocked:otherBlocked, k=list.findIndex(x=>x.ip===ip); if(k<0) return; const b=list.splice(k,1)[0];
+    auLog.push({t,ip,act:"unblock",st:"unblocked · verified",tk:b.tk||"-",det:`unblocked now from policy ${b.pol||2169031} · ${why}`}); audit.push({t,user:USER,action:"unblock",ip,tk:b.tk||"-",desc:why,status:"unblocked",ver:"removed",cont:soarSeq++}); });
   toast(`🔓 ${ips.length} IP unblocked on policy 2169031 (simulated) · audit log`); auSel.clear(); renderAll(); });
 $("au_run").addEventListener("click",async()=>{ const btn=$("au_run"), res=$("au_res"); btn.disabled=true; res.hidden=false; res.className="result info";
   res.textContent="กำลังตรวจ IP ที่ครบเวลา → SOAR → Imperva policy 2169031 → verify…"; await sleep(1300);
-  const t=Date.now(), items=blocked.map(b=>({b,i:expInfo(b)})), due=items.filter(x=>x.i.st==="due").slice(0,AU.max), ext=items.filter(x=>x.i.st==="extend");
-  ext.forEach(({b,i})=>{ const add=i.cl?AU.extCloud:AU.ext; b.ext=t+add*DAY; auLog.push({t,ip:b.ip,act:"auto_extend",st:"extended",tk:b.tk,det:`still attacking: ${(b.hits||0).toLocaleString()} blocked requests in ${AU.atkDays} days → +${add} days`}); });
-  if(AU.mode==="auto"){ due.forEach(({b,i})=>{ blocked.splice(blocked.indexOf(b),1);
-      auLog.push({t,ip:b.ip,act:"auto_unblock",st:"unblocked · verified",tk:b.tk,det:`${i.cl?`cloud provider IP (${cloudOf(b.ip)}) – `:""}block period ended (${i.days} days)`});
-      audit.push({t,user:"auto-unblock",action:"unblock",ip:b.ip,tk:b.tk,desc:`auto unblock: block period ended (${i.days} days)`,status:"unblocked",ver:"removed",cont:soarSeq++}); });
-    res.className="result ok"; res.textContent=`✔ Unblocked ${due.length} IP · extended ${ext.length} IP · verified on the WAF · written to the audit log`;
-  } else { due.forEach(({b,i})=>auLog.push({t,ip:b.ip,act:"report_only",st:"would unblock",tk:b.tk,det:`block period ended (${i.days} days) – Report only, not unblocked`}));
-    res.className="result info"; res.textContent=`Report only: ${due.length} IP would be unblocked (not sent to the WAF) · extended ${ext.length} IP · switch Mode to Auto unblock to unblock them`; }
+  const t=Date.now(), items=allBlocked().map(b=>({b,i:expInfo(b)})), due=items.filter(x=>x.i.st==="due").slice(0,AU.max);
+  const why=({b,i})=>`${i.cl?`cloud provider IP (${cloudOf(b.ip)}) – `:""}no attack for ${i.days} days (${b.seen?"last seen "+fmt(b.seen).slice(0,10):"not seen since the block"})${i.pol!==2169031?` · policy ${i.pol}`:""}`;
+  if(AU.mode==="auto"){ due.forEach(x=>{ const list=x.b.pol?otherBlocked:blocked; list.splice(list.indexOf(x.b),1);
+      auLog.push({t,ip:x.b.ip,act:"auto_unblock",st:"unblocked · verified",tk:x.b.tk||"-",det:why(x)});
+      audit.push({t,user:"auto-unblock",action:"unblock",ip:x.b.ip,tk:x.b.tk||"-",desc:"auto unblock: "+why(x),status:"unblocked",ver:"removed",cont:soarSeq++}); });
+    res.className="result ok"; res.textContent=`✔ Unblocked ${due.length} IP · verified on the WAF · written to the audit log`;
+  } else { due.forEach(x=>auLog.push({t,ip:x.b.ip,act:"report_only",st:"would unblock",tk:x.b.tk||"-",det:why(x)+" – Report only, not unblocked"}));
+    res.className="result info"; res.textContent=`Report only: ${due.length} IP would be unblocked (not sent to the WAF) · switch Mode to Auto unblock to unblock them`; }
   btn.disabled=false; auSel.clear(); renderAll(); });
 
 const TITLES={dash:"Imperva WAF – IOC Block",history:"Imperva IOC Block – Older detections",blocked:"Imperva IOC Block – Blocked IPs / Unblock",auto:"Imperva IOC Block – Auto unblock",rules:"Imperva IOC Block – Detection rules",audit:"Imperva IOC Block – Audit log"};
