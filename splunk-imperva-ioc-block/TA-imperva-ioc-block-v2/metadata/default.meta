@@ -1,0 +1,161 @@
+[]
+access = read : [ * ], write : [ admin ]
+export = none
+
+# Only admin / imperva_blocker may run the command that changes the WAF
+[commands/impervablock]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = none
+
+# All five dashboards (Block 7 days, Older detections, Blocked IPs, Detection rules, Audit log)
+[views]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+
+[passwords]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+
+[imperva]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+
+[commands/vtcheck]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = none
+
+[commands/impervalist]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = none
+
+# KV store registry: analysts must be able to write descriptions
+# export = none: usable from any app (Search, ES, other dashboards); still only admin/imperva_blocker
+[collections/imperva_block_registry]
+access = read : [ admin, imperva_blocker ], write : [ admin, imperva_blocker ]
+export = none
+
+[transforms/imperva_block_registry]
+access = read : [ admin, imperva_blocker ], write : [ admin, imperva_blocker ]
+export = none
+
+[macros/imperva_ioc_notables]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = none
+
+[macros/imperva_ioc_fields]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = none
+
+[commands/impervarules]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = none
+
+[commands/impervarulecheck]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = none
+
+# Detection rules: changed from the "Detection rules" dashboard by admin / imperva_blocker
+[collections/imperva_ioc_rules]
+access = read : [ admin, imperva_blocker ], write : [ admin, imperva_blocker ]
+export = none
+
+[transforms/imperva_ioc_rules]
+access = read : [ admin, imperva_blocker ], write : [ admin, imperva_blocker ]
+export = none
+
+# Audit CSV: the dashboards append to it (outputlookup) as the logged-in analyst
+[transforms/imperva_audit]
+access = read : [ admin, imperva_blocker ], write : [ admin, imperva_blocker ]
+export = none
+
+[lookups/imperva_audit.csv]
+access = read : [ admin, imperva_blocker ], write : [ admin, imperva_blocker ]
+export = none
+
+[commands/impervadismiss]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = none
+
+[collections/imperva_ioc_dismissed]
+access = read : [ admin, imperva_blocker ], write : [ admin, imperva_blocker ]
+export = none
+
+[transforms/imperva_ioc_dismissed]
+access = read : [ admin, imperva_blocker ], write : [ admin, imperva_blocker ]
+export = none
+
+[collections/imperva_ip_activity_30d]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = none
+
+[transforms/imperva_ip_activity_30d]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = none
+
+[collections/imperva_ip_activity]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = none
+
+[transforms/imperva_ip_activity]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = none
+
+[collections/imperva_cache]
+access = read : [ admin, imperva_blocker ], write : [ admin, imperva_blocker ]
+export = none
+
+# export = none: the macros also work from the Search app (troubleshooting / ad-hoc SPL)
+[macros]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = none
+
+[savedsearches]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+
+[commands/impervapolicycheck]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = none
+
+[commands/impervanotes]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = none
+
+# Decision aid (1.3.0): written by the saved searches, read by the dashboards
+[collections/imperva_ip_context_24h]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = none
+
+[transforms/imperva_ip_context_24h]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = none
+
+[collections/imperva_ip_context_30d]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = none
+
+[transforms/imperva_ip_context_30d]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = none
+
+# ---- V2 Auto unblock
+[commands/impervaautounblock]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = none
+
+[collections/imperva_auto_unblock]
+access = read : [ admin, imperva_blocker ], write : [ admin, imperva_blocker ]
+export = none
+
+[transforms/imperva_auto_unblock]
+access = read : [ admin, imperva_blocker ], write : [ admin, imperva_blocker ]
+export = none
+
+[collections/imperva_blocked_seen]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = none
+
+[transforms/imperva_blocked_seen]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = none
+
+# V2: import from V1 - admin only (copies credentials)
+[commands/impervav1import]
+access = read : [ admin ], write : [ admin ]
+export = none

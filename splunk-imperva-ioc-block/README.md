@@ -1,5 +1,7 @@
 # Splunk → Imperva WAF: Manual IOC IP Block Button
 
+> **V2** (`TA-imperva-ioc-block-v2`, auto unblock, cloud IPs blockable) is a separate app installed next to this one: see [README_V2.md](README_V2.md).
+
 A Splunk app (`TA-imperva-ioc-block`) with a dashboard. A SOC analyst picks a malicious IP IOC,
 confirms it, and presses **Submit**. The app then adds the IP to the **Blacklisted IPs ACL**
 of one or more Imperva Cloud WAF sites.
