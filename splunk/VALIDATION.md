@@ -166,6 +166,8 @@ Dashboard Studio JSON from the **verified** SPL.
 | `userAccountControl` | text flags: ACCOUNTDISABLE, DONT_EXPIRE_PASSWD, INTERDOMAIN_TRUST_ACCOUNT, NORMAL_ACCOUNT, PASSWD_NOTREQD | `mvfind`; trust accounts excluded via LDAP filter (bit 2048) |
 | 47xx events | `user` = target, `src_user` = actor (100 %); 4724 `user` 85 % → fallback `mvindex(Account_Name,-1)` | – |
 | 4728/4729 | `user` = member **CN** (not sAMAccountName); `Group_Name` 100 %; `Member_Name` 0 % | match on `$sel_cn$` as well as `$sel_user$` |
+| 4728/4729 (S10) | `user` = member CN with spaces (89–94 %); last `Account_Name` = member **DN** (98 %); never = group or actor | CN match confirmed |
+| 4732/4733 (S10) | `user` has no CN/DN – member is SID-only (`Account Name: -`) | also match `mvindex(Security_ID,-1)` → `DOMAIN\\user` |
 | 4740 | `Caller_Computer_Name` 97 % | new "Lockout sources" panel |
 | DC coverage | **2 of 9 DCs send no Security logs**; 3 DC names lack "DC" | DC list from LDAP (bit 8192), new coverage panel + KPI |
 

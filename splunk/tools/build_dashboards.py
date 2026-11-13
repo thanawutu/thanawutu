@@ -30,6 +30,7 @@ REASON = ('eval code=lower(coalesce(Sub_Status,Error_Code,Failure_Code,"-")), '
           'code="0xc0000224","Must change password",code="0xc000006f","Outside logon hours",'
           'code="0xc0000070","Workstation restricted",true(),code)')
 OU = 'OU=replace(distinguishedName,"^.*?,(?=(OU|CN|DC)=)","")'
+BS4 = "\\" * 4   # SPL string "\\\\" = regex for one literal backslash
 PRIV = ('(?i)^(Domain Admins|Enterprise Admins|Schema Admins|Administrators|Account Operators|Backup Operators|'
         'Server Operators|Print Operators|DnsAdmins|Group Policy Creator Owners|Enterprise Key Admins|Key Admins)$')
 
@@ -112,8 +113,8 @@ ds("t_used", f'''
 ds("c_timeline", '| search user="$sel_user$" | timechart span=1h sum(count) AS count by Result', "auth")
 ds("t_changes", f'''
 {SRC} EventCode IN (4720,4722,4723,4724,4725,4726,4738,4740,4767,4728,4729,4732,4733,4756,4757)
-| eval target=lower(coalesce(user,mvindex(Account_Name,-1)))
-| where target=lower("$sel_user$") OR target=lower("$sel_cn$")
+| eval target=lower(coalesce(user,mvindex(Account_Name,-1))), sid_user=lower(replace(mvindex(Security_ID,-1),"^.*{BS4}",""))
+| where target=lower("$sel_user$") OR target=lower("$sel_cn$") OR sid_user=lower("$sel_user$")
 | eval Action=case(EventCode=4720,"Created",EventCode=4722,"Enabled",EventCode=4723,"Password change",EventCode=4724,"Password reset",EventCode=4725,"Disabled",EventCode=4726,"Deleted",EventCode=4738,"Changed",EventCode=4740,"Locked out",EventCode=4767,"Unlocked",EventCode=4728 OR EventCode=4732 OR EventCode=4756,"Added to group",EventCode=4729 OR EventCode=4733 OR EventCode=4757,"Removed from group")
 | eval By=coalesce(src_user,mvindex(Account_Name,0)), Group=coalesce(Group_Name,"-"), Caller=coalesce(Caller_Computer_Name,"-"), DC=upper(mvindex(split(host,"."),0)), Time=strftime(_time,"%Y-%m-%d %H:%M:%S")
 | table Time Action By Group Caller DC EventCode | sort -Time | head 200
