@@ -177,4 +177,6 @@ Security observations to report: (1) DC logging gap, (2) enabled accounts with `
 | Authentication DM content (S7b) | 4624 ≈ raw minus machine accounts (1.38 M vs 2.29 M); 4625 ≈ raw (112.5 k vs 113 k); **4771 / 4776 absent**; other products (sig 52xx/54xx…) also present | filter `sourcetype="WinEventLog"`; 4771/4776 kept on raw search |
 | DM fields (S7c) | user unknown 0.1 %, dest unknown 0.2 %, **src unknown 29 %**, machine 0.8 %, `DOMAIN\\` or `@` in user 1.9 %, dest FQDN 93 % | strip domain from user, short dest, exclude `src=unknown` from spray |
 
-Pending (not supplied): S6 (30-day check of 4720/4743/4757), S8 (AD count match), S15 (4771/4776 code fields).
+| 4771 / 4776 (S15) | 4771: `Failure_Code` **and** `Error_Code` 100 % (codes 0x12, 0x18); 4776: `Error_Code` 100 % (0x0, 0xc0000064, 0xc000006a, 0xc0000072, 0xc0000234); `user` 100 %, `src` 98–100 % | coalesce order `Sub_Status, Failure_Code, Error_Code`; all observed codes mapped to reasons; 4776 `0x0` (success) excluded |
+
+Pending (optional): S6 (30-day check of 4720/4743/4757), S8 (AD count match).

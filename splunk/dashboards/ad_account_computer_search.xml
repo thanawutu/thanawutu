@@ -51,7 +51,7 @@
   </search>
   <search id="base_kerb">
     <query><![CDATA[index="$idx$" source="WinEventLog:Security" (EventCode=4771 OR EventCode=4776) user="$acct$"
-| eval code=lower(coalesce(Sub_Status,Error_Code,Failure_Code,"-")), Reason=case(EventCode=4624 OR EventCode=4740,"-",code="0xc000006a" OR code="0x18","Bad password",code="0xc0000064" OR code="0x6","Unknown user",code="0xc0000234","Locked out",code="0xc0000072" OR code="0x12","Disabled/locked",code="0xc0000071" OR code="0x17","Password expired",code="0xc0000193","Account expired",code="0xc0000224","Must change password",code="0xc000006f","Outside logon hours",code="0xc0000070","Workstation restricted",true(),code)
+| eval code=lower(coalesce(Sub_Status,Failure_Code,Error_Code,"-")), Reason=case(EventCode=4624 OR EventCode=4740,"-",code="0xc000006a" OR code="0x18","Bad password",code="0xc0000064" OR code="0x6","Unknown user",code="0xc0000234","Locked out",code="0xc0000072" OR code="0x12","Disabled/locked",code="0xc0000071" OR code="0x17","Password expired",code="0xc0000193","Account expired",code="0xc0000224","Must change password",code="0xc000006f","Outside logon hours",code="0xc0000070","Workstation restricted",true(),code)
 | where EventCode=4771 OR (code!="0x0" AND code!="-")
 | where NOT like(user,"%$$") AND user!="-" AND lower(user)!="anonymous logon"
 | eval user=lower(user), src=coalesce(src,Source_Network_Address,Workstation_Name,"-"), Protocol=if(EventCode=4771,"Kerberos","NTLM"), DC=upper(mvindex(split(host,"."),0))

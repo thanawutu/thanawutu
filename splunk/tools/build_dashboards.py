@@ -22,7 +22,7 @@ LT = ('eval LogonType=case(Logon_Type=2,"2 Interactive",Logon_Type=3,"3 Network"
       'Logon_Type=5,"5 Service",Logon_Type=7,"7 Unlock",Logon_Type=8,"8 NetworkCleartext",'
       'Logon_Type=9,"9 NewCredentials",Logon_Type=10,"10 RemoteInteractive",Logon_Type=11,"11 CachedInteractive",'
       'isnotnull(Logon_Type),tostring(Logon_Type),true(),"-")')
-REASON = ('eval code=lower(coalesce(Sub_Status,Error_Code,Failure_Code,"-")), '
+REASON = ('eval code=lower(coalesce(Sub_Status,Failure_Code,Error_Code,"-")), '
           'Reason=case(EventCode=4624 OR EventCode=4740,"-",'
           'code="0xc000006a" OR code="0x18","Bad password",code="0xc0000064" OR code="0x6","Unknown user",'
           'code="0xc0000234","Locked out",code="0xc0000072" OR code="0x12","Disabled/locked",'
