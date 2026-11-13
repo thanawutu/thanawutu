@@ -8,6 +8,7 @@
     <input type="text" token="idx"><label>Windows index</label><default>wineventlog</default></input>
     <input type="dropdown" token="stale"><label>Stale (days)</label><choice value="30">30</choice><choice value="60">60</choice><choice value="90">90</choice><choice value="180">180</choice><default>90</default></input>
     <input type="dropdown" token="spray"><label>Spray threshold (accounts)</label><choice value="5">5</choice><choice value="10">10</choice><choice value="20">20</choice><choice value="50">50</choice><default>10</default></input>
+    <input type="dropdown" token="lgfilter"><label>Local group actors</label><choice value="| search *">All actors</choice><choice value="| where substr(By,len(By))!=printf(&quot;%c&quot;,36)">Exclude computer accounts (GPO)</choice><default>| search *</default></input>
     <input type="time" token="tr"><label>Event time range</label><default><earliest>-24h@h</earliest><latest>now</latest></default></input>
   </fieldset>
 
@@ -21,7 +22,7 @@
 | eval PwdNotRequired=if(isnotnull(mvfind(userAccountControl,"PASSWD_NOTREQD")),"Yes","No")
 | eval DaysSinceLogon=if(lastLogon_e>0,round((now()-lastLogon_e)/86400,0),"never")
 | eval PwdAgeDays=case(pwd_e>0,round((now()-pwd_e)/86400,0), pwdLastSet="(never)","must change", true(),"-")
-| eval Created=strftime(created_e,"%Y-%m-%d"), Manager=replace(mvindex(split(manager,","),0),"^CN=",""), Groups=coalesce(mvcount(memberOf),0), OU=replace(distinguishedName,"^.*?,(?=(OU|CN|DC)=)","")]]></query>
+| eval Created=strftime(created_e,"%Y-%m-%d"), Manager=replace(mvindex(split(manager,","),0),"^CN=",""), Groups=coalesce(mvcount(memberOf),0), OU=replace(replace(replace(distinguishedName,"^.*?,(?=(OU|CN|DC)=)",""),",?DC=.*$$",""),"(OU|CN)=",""), OU=mvjoin(mvindex(split(OU,","),0,1)," < ")]]></query>
     <earliest>0</earliest><latest>now</latest>
   </search>
   <search id="base_computers">
@@ -32,7 +33,7 @@
 | eval Status=if(isnotnull(mvfind(userAccountControl,"ACCOUNTDISABLE")),"Disabled","Enabled")
 | eval Role=case(isnotnull(mvfind(userAccountControl,"SERVER_TRUST_ACCOUNT")),"Domain Controller", isnotnull(mvfind(userAccountControl,"PARTIAL_SECRETS_ACCOUNT")),"RODC", match(operatingSystem,"(?i)server"),"Server", isnull(operatingSystem),"Unknown", true(),"Workstation")
 | eval DaysSinceLogon=if(lastLogon_e>0,round((now()-lastLogon_e)/86400,0),"never")
-| eval Created=strftime(created_e,"%Y-%m-%d"), ManagedBy=replace(mvindex(split(managedBy,","),0),"^CN=",""), OU=replace(distinguishedName,"^.*?,(?=(OU|CN|DC)=)","")
+| eval Created=strftime(created_e,"%Y-%m-%d"), ManagedBy=replace(mvindex(split(managedBy,","),0),"^CN=",""), OU=replace(replace(replace(distinguishedName,"^.*?,(?=(OU|CN|DC)=)",""),",?DC=.*$$",""),"(OU|CN)=",""), OU=mvjoin(mvindex(split(OU,","),0,1)," < ")
 | fillnull value="-" operatingSystem operatingSystemVersion ManagedBy]]></query>
     <earliest>0</earliest><latest>now</latest>
   </search>
@@ -116,7 +117,7 @@
     </panel>
     <panel>
       <single><title>Failed logons (4625)</title>
-        <search base="base_auth"><query><![CDATA[| where Result="Failure" | stats sum(count) AS count | fillnull value=0 count]]></query></search>
+        <search base="base_auth"><query><![CDATA[| where Result="Failure" | stats sum(count) AS count | fillnull value=0 count | appendpipe [stats count AS n | where n=0 | eval count=0 | fields count]]]></query></search>
         <option name="drilldown">none</option>
         <option name="colorMode">block</option>
         <option name="useColors">1</option>
@@ -126,7 +127,7 @@
     </panel>
     <panel>
       <single><title>Kerberos/NTLM failures</title>
-        <search base="base_kerb"><query><![CDATA[| stats sum(count) AS count | fillnull value=0 count]]></query></search>
+        <search base="base_kerb"><query><![CDATA[| stats sum(count) AS count | fillnull value=0 count | appendpipe [stats count AS n | where n=0 | eval count=0 | fields count]]]></query></search>
         <option name="drilldown">none</option>
         <option name="colorMode">block</option>
         <option name="useColors">1</option>
@@ -163,7 +164,7 @@
   <row>
     <panel>
       <table><title>AD accounts — click a row</title>
-        <search base="base_users"><query><![CDATA[| table sAMAccountName cn displayName mail title department Manager Status PwdNotRequired PwdNeverExpires DaysSinceLogon PwdAgeDays Groups Created OU objectSid | sort sAMAccountName]]></query></search>
+        <search base="base_users"><query><![CDATA[| eval _cn=cn, _sid=objectSid | table sAMAccountName displayName department title Status PwdNotRequired PwdNeverExpires DaysSinceLogon PwdAgeDays Groups OU _cn _sid | sort sAMAccountName]]></query></search>
         <option name="count">10</option>
         <option name="drilldown">row</option>
         <format type="color" field="Status"><colorPalette type="map">{"Enabled":#1B5E3B,"Disabled":#4A5058,"Locked":#8A2A24}</colorPalette></format>
@@ -171,8 +172,8 @@
         <format type="color" field="PwdNotRequired"><colorPalette type="map">{"Yes":#8A2A24}</colorPalette></format>
         <drilldown>
           <set token="sel_user">$row.sAMAccountName$</set>
-          <set token="sel_cn">$row.cn$</set>
-          <set token="sel_sid">$row.objectSid$</set>
+          <set token="sel_cn">$row._cn$</set>
+          <set token="sel_sid">$row._sid$</set>
         </drilldown>
       </table>
     </panel>
@@ -236,7 +237,7 @@
   <row>
     <panel>
       <table><title>AD computers — click a row</title>
-        <search base="base_computers"><query><![CDATA[| table name dNSHostName Role operatingSystem operatingSystemVersion Status DaysSinceLogon ManagedBy Created OU | sort name]]></query></search>
+        <search base="base_computers"><query><![CDATA[| table name Role operatingSystem Status DaysSinceLogon ManagedBy OU | sort name]]></query></search>
         <option name="count">10</option>
         <option name="drilldown">row</option>
         <format type="color" field="Status"><colorPalette type="map">{"Enabled":#1B5E3B,"Disabled":#4A5058,"Locked":#8A2A24}</colorPalette></format>
@@ -401,6 +402,7 @@
                        match(member_sid,"^S-1-5-"),"Well-known", true(),"Resolved name"),
        Privileged=if(match(Group,"(?i)^(Administrators|Remote Desktop Users|Backup Operators|Remote Management Users|Hyper-V Administrators|Event Log Readers)$$"),"YES","-")
 | table Time Server Action Group Privileged MemberType member_sid By
+$lgfilter$
 | sort -Time | head 500]]></query><earliest>$tr.earliest$</earliest><latest>$tr.latest$</latest></search>
         <option name="count">10</option>
         <option name="drilldown">none</option>

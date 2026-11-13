@@ -29,7 +29,8 @@ REASON = ('eval code=lower(coalesce(Sub_Status,Failure_Code,Error_Code,"-")), '
           'code="0xc0000071" OR code="0x17","Password expired",code="0xc0000193","Account expired",'
           'code="0xc0000224","Must change password",code="0xc000006f","Outside logon hours",'
           'code="0xc0000070","Workstation restricted",true(),code)')
-OU = 'OU=replace(distinguishedName,"^.*?,(?=(OU|CN|DC)=)","")'
+OU = ('OU=replace(replace(replace(distinguishedName,"^.*?,(?=(OU|CN|DC)=)",""),",?DC=.*$$",""),"(OU|CN)=",""), '
+      'OU=mvjoin(mvindex(split(OU,","),0,1)," < ")')
 PRIV = ('(?i)^(Domain Admins|Enterprise Admins|Schema Admins|Administrators|Account Operators|Backup Operators|'
         'Server Operators|Print Operators|DnsAdmins|Group Policy Creator Owners|Enterprise Key Admins|Key Admins)$')
 
@@ -113,13 +114,13 @@ ds("k_users", "| stats count", "users")
 ds("k_dislock", '| where Status!="Enabled" | stats count', "users")
 ds("k_notreqd", '| where PwdNotRequired="Yes" AND Status!="Disabled" | stats count', "users")
 ds("k_comps", "| stats count", "computers")
-ds("k_fail", '| where Result="Failure" | stats sum(count) AS count | fillnull value=0 count', "auth")
-ds("k_krb", '| stats sum(count) AS count | fillnull value=0 count', "kerb")
+ds("k_fail", '| where Result="Failure" | stats sum(count) AS count | fillnull value=0 count | appendpipe [stats count AS n | where n=0 | eval count=0 | fields count]', "auth")
+ds("k_krb", '| stats sum(count) AS count | fillnull value=0 count | appendpipe [stats count AS n | where n=0 | eval count=0 | fields count]', "kerb")
 ds("k_lock", '| table count', "lockouts")
 ds("k_dcmiss", '| where Status="NOT LOGGING" | stats count', "dc_cov")
 
 # Accounts
-ds("t_users", "| table sAMAccountName cn displayName mail title department Manager Status PwdNotRequired PwdNeverExpires DaysSinceLogon PwdAgeDays Groups Created OU objectSid | sort sAMAccountName", "users")
+ds("t_users", "| eval _cn=cn, _sid=objectSid | table sAMAccountName displayName department title Status PwdNotRequired PwdNeverExpires DaysSinceLogon PwdAgeDays Groups OU _cn _sid | sort sAMAccountName", "users")
 ds("t_groups", f'''| search sAMAccountName="$sel_user$" | fields memberOf | mvexpand memberOf
 | eval Group=replace(mvindex(split(memberOf,","),0),"^CN=",""), Privileged=if(match(Group,"{PRIV}"),"YES","-")
 | table Group Privileged | sort -Privileged Group''', "users")
@@ -141,7 +142,7 @@ ds("t_changes", f'''
 ''')
 
 # Computers
-ds("t_comps", "| table name dNSHostName Role operatingSystem operatingSystemVersion Status DaysSinceLogon ManagedBy Created OU | sort name", "computers")
+ds("t_comps", "| table name Role operatingSystem Status DaysSinceLogon ManagedBy OU | sort name", "computers")
 ds("c_os", "| stats count by operatingSystem | sort -count", "computers")
 ds("t_logged", f'''
 {SRC} EventCode IN (4624,4625) (dest="$sel_comp$" OR dest="$sel_comp$.*")
@@ -185,6 +186,7 @@ ds("t_localgrp", f'''
                        match(member_sid,"^S-1-5-"),"Well-known", true(),"Resolved name"),
        Privileged=if(match(Group,"(?i)^(Administrators|Remote Desktop Users|Backup Operators|Remote Management Users|Hyper-V Administrators|Event Log Readers)$$"),"YES","-")
 | table Time Server Action Group Privileged MemberType member_sid By
+$lgfilter$
 | sort -Time | head 500
 ''')
 ds("t_risky", '| where Status!="Disabled" AND (PwdNotRequired="Yes" OR PwdNeverExpires="Yes") | table sAMAccountName displayName department Status PwdNotRequired PwdNeverExpires PwdAgeDays DaysSinceLogon OU | sort -PwdNotRequired sAMAccountName', "users")
@@ -197,6 +199,9 @@ INPUTS = [
     dict(id="idx", type="text", label="Windows index", default="wineventlog"),
     dict(id="stale", type="dropdown", label="Stale (days)", default="90", choices=["30", "60", "90", "180"]),
     dict(id="spray", type="dropdown", label="Spray threshold (accounts)", default="10", choices=["5", "10", "20", "50"]),
+    dict(id="lgfilter", type="dropdown", label="Local group actors", default="| search *",
+         choices=[("All actors", "| search *"),
+                  ("Exclude computer accounts (GPO)", '| where substr(By,len(By))!=printf("%c",36)')]),
     dict(id="tr", type="time", label="Event time range", default=("-24h@h", "now")),
 ]
 INPUT_IDS = {i["id"] for i in INPUTS}
@@ -234,7 +239,7 @@ for n, (d, t, thr) in enumerate(kpis):
 
 v("md_acc", "markdown", None, None, (L, 195, FW, 40), 2, md="## Accounts")
 v("viz_users", "table", "AD accounts — click a row", "t_users", (L, 240, FW, 340), 3,
-  drill=[("sel_user", "sAMAccountName"), ("sel_cn", "cn"), ("sel_sid", "objectSid")],
+  drill=[("sel_user", "sAMAccountName"), ("sel_cn", "_cn"), ("sel_sid", "_sid")],
   colors={"Status": "Status", "PwdNeverExpires": "PwdNeverExpires", "PwdNotRequired": "PwdNotRequired"})
 v("viz_groups", "table", "Group membership: $sel_user$", "t_groups", (L, 590, HW, 300), 4, colors={"Privileged": "Privileged"})
 v("viz_used", "table", "Computers used by $sel_user$ (click → Computer)", "t_used", (RX, 590, HW, 300), 4,
@@ -285,7 +290,7 @@ def studio():
         elif i["type"] == "dropdown":
             d["inputs"][key] = {"type": "input.dropdown", "title": i["label"],
                                 "options": {"token": i["id"], "defaultValue": i["default"],
-                                            "items": [{"label": c, "value": c} for c in i["choices"]]}}
+                                            "items": [{"label": c[0], "value": c[1]} if isinstance(c, tuple) else {"label": c, "value": c} for c in i["choices"]]}}
         else:
             d["inputs"][key] = {"type": "input.timerange", "title": i["label"],
                                 "options": {"token": i["id"], "defaultValue": ",".join(i["default"])}}
@@ -345,8 +350,9 @@ def simplexml():
         if i["type"] == "text":
             o += [f'    <input type="text" token="{i["id"]}"><label>{esc(i["label"])}</label><default>{i["default"]}</default></input>']
         elif i["type"] == "dropdown":
-            ch = "".join(f'<choice value="{c}">{c}</choice>' for c in i["choices"])
-            o += [f'    <input type="dropdown" token="{i["id"]}"><label>{esc(i["label"])}</label>{ch}<default>{i["default"]}</default></input>']
+            cs = [c if isinstance(c, tuple) else (c, c) for c in i["choices"]]
+            ch = "".join(f'<choice value="{esc(v).replace(chr(34), "&quot;")}">{esc(l)}</choice>' for l, v in cs)
+            o += [f'    <input type="dropdown" token="{i["id"]}"><label>{esc(i["label"])}</label>{ch}<default>{esc(i["default"])}</default></input>']
         else:
             o += [f'    <input type="time" token="{i["id"]}"><label>{esc(i["label"])}</label>'
                   f'<default><earliest>{i["default"][0]}</earliest><latest>{i["default"][1]}</latest></default></input>']

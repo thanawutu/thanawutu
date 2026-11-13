@@ -90,6 +90,24 @@
         ]
       }
     },
+    "input_lgfilter": {
+      "type": "input.dropdown",
+      "title": "Local group actors",
+      "options": {
+        "token": "lgfilter",
+        "defaultValue": "| search *",
+        "items": [
+          {
+            "label": "All actors",
+            "value": "| search *"
+          },
+          {
+            "label": "Exclude computer accounts (GPO)",
+            "value": "| where substr(By,len(By))!=printf(\"%c\",36)"
+          }
+        ]
+      }
+    },
     "input_tr": {
       "type": "input.timerange",
       "title": "Event time range",
@@ -104,7 +122,7 @@
       "type": "ds.search",
       "name": "users",
       "options": {
-        "query": "| ldapsearch domain=\"$domain$\"\n    search=\"(&(objectCategory=person)(objectClass=user)(!(userAccountControl:1.2.840.113556.1.4.803:=2048))(|(sAMAccountName=$acct$)(cn=$acct$)(displayName=$acct$)(mail=$acct$)(userPrincipalName=$acct$)))\"\n    attrs=\"sAMAccountName,cn,objectSid,displayName,userPrincipalName,mail,title,department,manager,userAccountControl,lockoutTime,lastLogonTimestamp,pwdLastSet,whenCreated,memberOf,distinguishedName\"\n| eval lastLogon_e=strptime(lastLogonTimestamp,\"%Y-%m-%dT%H:%M:%S.%6NZ\"), pwd_e=strptime(pwdLastSet,\"%Y-%m-%dT%H:%M:%S.%6NZ\"), lock_e=strptime(lockoutTime,\"%Y-%m-%dT%H:%M:%S.%6NZ\"), created_e=strptime(whenCreated,\"%Y-%m-%d %H:%M:%S%:z\")\n| eval Status=case(isnotnull(mvfind(userAccountControl,\"ACCOUNTDISABLE\")),\"Disabled\", lock_e>0,\"Locked\", true(),\"Enabled\")\n| eval PwdNeverExpires=if(isnotnull(mvfind(userAccountControl,\"DONT_EXPIRE_PASSWD\")),\"Yes\",\"No\")\n| eval PwdNotRequired=if(isnotnull(mvfind(userAccountControl,\"PASSWD_NOTREQD\")),\"Yes\",\"No\")\n| eval DaysSinceLogon=if(lastLogon_e>0,round((now()-lastLogon_e)/86400,0),\"never\")\n| eval PwdAgeDays=case(pwd_e>0,round((now()-pwd_e)/86400,0), pwdLastSet=\"(never)\",\"must change\", true(),\"-\")\n| eval Created=strftime(created_e,\"%Y-%m-%d\"), Manager=replace(mvindex(split(manager,\",\"),0),\"^CN=\",\"\"), Groups=coalesce(mvcount(memberOf),0), OU=replace(distinguishedName,\"^.*?,(?=(OU|CN|DC)=)\",\"\")",
+        "query": "| ldapsearch domain=\"$domain$\"\n    search=\"(&(objectCategory=person)(objectClass=user)(!(userAccountControl:1.2.840.113556.1.4.803:=2048))(|(sAMAccountName=$acct$)(cn=$acct$)(displayName=$acct$)(mail=$acct$)(userPrincipalName=$acct$)))\"\n    attrs=\"sAMAccountName,cn,objectSid,displayName,userPrincipalName,mail,title,department,manager,userAccountControl,lockoutTime,lastLogonTimestamp,pwdLastSet,whenCreated,memberOf,distinguishedName\"\n| eval lastLogon_e=strptime(lastLogonTimestamp,\"%Y-%m-%dT%H:%M:%S.%6NZ\"), pwd_e=strptime(pwdLastSet,\"%Y-%m-%dT%H:%M:%S.%6NZ\"), lock_e=strptime(lockoutTime,\"%Y-%m-%dT%H:%M:%S.%6NZ\"), created_e=strptime(whenCreated,\"%Y-%m-%d %H:%M:%S%:z\")\n| eval Status=case(isnotnull(mvfind(userAccountControl,\"ACCOUNTDISABLE\")),\"Disabled\", lock_e>0,\"Locked\", true(),\"Enabled\")\n| eval PwdNeverExpires=if(isnotnull(mvfind(userAccountControl,\"DONT_EXPIRE_PASSWD\")),\"Yes\",\"No\")\n| eval PwdNotRequired=if(isnotnull(mvfind(userAccountControl,\"PASSWD_NOTREQD\")),\"Yes\",\"No\")\n| eval DaysSinceLogon=if(lastLogon_e>0,round((now()-lastLogon_e)/86400,0),\"never\")\n| eval PwdAgeDays=case(pwd_e>0,round((now()-pwd_e)/86400,0), pwdLastSet=\"(never)\",\"must change\", true(),\"-\")\n| eval Created=strftime(created_e,\"%Y-%m-%d\"), Manager=replace(mvindex(split(manager,\",\"),0),\"^CN=\",\"\"), Groups=coalesce(mvcount(memberOf),0), OU=replace(replace(replace(distinguishedName,\"^.*?,(?=(OU|CN|DC)=)\",\"\"),\",?DC=.*$$\",\"\"),\"(OU|CN)=\",\"\"), OU=mvjoin(mvindex(split(OU,\",\"),0,1),\" < \")",
         "queryParameters": {
           "earliest": "0",
           "latest": "now"
@@ -115,7 +133,7 @@
       "type": "ds.search",
       "name": "computers",
       "options": {
-        "query": "| ldapsearch domain=\"$domain$\"\n    search=\"(&(objectClass=computer)(|(name=$comp$)(dNSHostName=$comp$)))\"\n    attrs=\"name,dNSHostName,operatingSystem,operatingSystemVersion,description,managedBy,userAccountControl,lastLogonTimestamp,whenCreated,distinguishedName\"\n| eval lastLogon_e=strptime(lastLogonTimestamp,\"%Y-%m-%dT%H:%M:%S.%6NZ\"), created_e=strptime(whenCreated,\"%Y-%m-%d %H:%M:%S%:z\")\n| eval Status=if(isnotnull(mvfind(userAccountControl,\"ACCOUNTDISABLE\")),\"Disabled\",\"Enabled\")\n| eval Role=case(isnotnull(mvfind(userAccountControl,\"SERVER_TRUST_ACCOUNT\")),\"Domain Controller\", isnotnull(mvfind(userAccountControl,\"PARTIAL_SECRETS_ACCOUNT\")),\"RODC\", match(operatingSystem,\"(?i)server\"),\"Server\", isnull(operatingSystem),\"Unknown\", true(),\"Workstation\")\n| eval DaysSinceLogon=if(lastLogon_e>0,round((now()-lastLogon_e)/86400,0),\"never\")\n| eval Created=strftime(created_e,\"%Y-%m-%d\"), ManagedBy=replace(mvindex(split(managedBy,\",\"),0),\"^CN=\",\"\"), OU=replace(distinguishedName,\"^.*?,(?=(OU|CN|DC)=)\",\"\")\n| fillnull value=\"-\" operatingSystem operatingSystemVersion ManagedBy",
+        "query": "| ldapsearch domain=\"$domain$\"\n    search=\"(&(objectClass=computer)(|(name=$comp$)(dNSHostName=$comp$)))\"\n    attrs=\"name,dNSHostName,operatingSystem,operatingSystemVersion,description,managedBy,userAccountControl,lastLogonTimestamp,whenCreated,distinguishedName\"\n| eval lastLogon_e=strptime(lastLogonTimestamp,\"%Y-%m-%dT%H:%M:%S.%6NZ\"), created_e=strptime(whenCreated,\"%Y-%m-%d %H:%M:%S%:z\")\n| eval Status=if(isnotnull(mvfind(userAccountControl,\"ACCOUNTDISABLE\")),\"Disabled\",\"Enabled\")\n| eval Role=case(isnotnull(mvfind(userAccountControl,\"SERVER_TRUST_ACCOUNT\")),\"Domain Controller\", isnotnull(mvfind(userAccountControl,\"PARTIAL_SECRETS_ACCOUNT\")),\"RODC\", match(operatingSystem,\"(?i)server\"),\"Server\", isnull(operatingSystem),\"Unknown\", true(),\"Workstation\")\n| eval DaysSinceLogon=if(lastLogon_e>0,round((now()-lastLogon_e)/86400,0),\"never\")\n| eval Created=strftime(created_e,\"%Y-%m-%d\"), ManagedBy=replace(mvindex(split(managedBy,\",\"),0),\"^CN=\",\"\"), OU=replace(replace(replace(distinguishedName,\"^.*?,(?=(OU|CN|DC)=)\",\"\"),\",?DC=.*$$\",\"\"),\"(OU|CN)=\",\"\"), OU=mvjoin(mvindex(split(OU,\",\"),0,1),\" < \")\n| fillnull value=\"-\" operatingSystem operatingSystemVersion ManagedBy",
         "queryParameters": {
           "earliest": "0",
           "latest": "now"
@@ -191,7 +209,7 @@
       "name": "k_fail",
       "options": {
         "extend": "ds_auth",
-        "query": "| where Result=\"Failure\" | stats sum(count) AS count | fillnull value=0 count"
+        "query": "| where Result=\"Failure\" | stats sum(count) AS count | fillnull value=0 count | appendpipe [stats count AS n | where n=0 | eval count=0 | fields count]"
       }
     },
     "ds_k_krb": {
@@ -199,7 +217,7 @@
       "name": "k_krb",
       "options": {
         "extend": "ds_kerb",
-        "query": "| stats sum(count) AS count | fillnull value=0 count"
+        "query": "| stats sum(count) AS count | fillnull value=0 count | appendpipe [stats count AS n | where n=0 | eval count=0 | fields count]"
       }
     },
     "ds_k_lock": {
@@ -223,7 +241,7 @@
       "name": "t_users",
       "options": {
         "extend": "ds_users",
-        "query": "| table sAMAccountName cn displayName mail title department Manager Status PwdNotRequired PwdNeverExpires DaysSinceLogon PwdAgeDays Groups Created OU objectSid | sort sAMAccountName"
+        "query": "| eval _cn=cn, _sid=objectSid | table sAMAccountName displayName department title Status PwdNotRequired PwdNeverExpires DaysSinceLogon PwdAgeDays Groups OU _cn _sid | sort sAMAccountName"
       }
     },
     "ds_t_groups": {
@@ -261,7 +279,7 @@
       "name": "t_comps",
       "options": {
         "extend": "ds_computers",
-        "query": "| table name dNSHostName Role operatingSystem operatingSystemVersion Status DaysSinceLogon ManagedBy Created OU | sort name"
+        "query": "| table name Role operatingSystem Status DaysSinceLogon ManagedBy OU | sort name"
       }
     },
     "ds_c_os": {
@@ -345,7 +363,7 @@
       "type": "ds.search",
       "name": "t_localgrp",
       "options": {
-        "query": "index=\"$idx$\" source=\"WinEventLog:Security\" EventCode IN (4732,4733) (host=\"$comp$\" OR host=\"$comp$.*\")\n| eval member_sid=if(mvcount(Security_ID)>=3,mvindex(Security_ID,1),mvindex(Security_ID,-1))\n| fields _time host EventCode Group_Name src_user Account_Name member_sid\n| append [| ldapsearch domain=\"$domain$\" search=\"(objectClass=domain)\" attrs=\"objectSid\" | rename objectSid AS domain_sid | fields domain_sid]\n| eventstats values(domain_sid) AS domain_sid\n| where isnotnull(EventCode)\n| eval Action=if(EventCode=4732,\"Added\",\"Removed\"), Server=upper(mvindex(split(host,\".\"),0)), Group=coalesce(Group_Name,\"-\"),\n       By=coalesce(src_user,mvindex(Account_Name,0)), Time=strftime(_time,\"%Y-%m-%d %H:%M:%S\"),\n       MemberType=case(match(member_sid,\"^S-1-5-21-\") AND replace(member_sid,\"-\\d+$$\",\"\")=domain_sid,\"Domain account\",\n                       match(member_sid,\"^S-1-5-21-\"),\"Local / other domain\", match(member_sid,\"^S-1-5-32-\"),\"Builtin group\",\n                       match(member_sid,\"^S-1-5-\"),\"Well-known\", true(),\"Resolved name\"),\n       Privileged=if(match(Group,\"(?i)^(Administrators|Remote Desktop Users|Backup Operators|Remote Management Users|Hyper-V Administrators|Event Log Readers)$$\"),\"YES\",\"-\")\n| table Time Server Action Group Privileged MemberType member_sid By\n| sort -Time | head 500"
+        "query": "index=\"$idx$\" source=\"WinEventLog:Security\" EventCode IN (4732,4733) (host=\"$comp$\" OR host=\"$comp$.*\")\n| eval member_sid=if(mvcount(Security_ID)>=3,mvindex(Security_ID,1),mvindex(Security_ID,-1))\n| fields _time host EventCode Group_Name src_user Account_Name member_sid\n| append [| ldapsearch domain=\"$domain$\" search=\"(objectClass=domain)\" attrs=\"objectSid\" | rename objectSid AS domain_sid | fields domain_sid]\n| eventstats values(domain_sid) AS domain_sid\n| where isnotnull(EventCode)\n| eval Action=if(EventCode=4732,\"Added\",\"Removed\"), Server=upper(mvindex(split(host,\".\"),0)), Group=coalesce(Group_Name,\"-\"),\n       By=coalesce(src_user,mvindex(Account_Name,0)), Time=strftime(_time,\"%Y-%m-%d %H:%M:%S\"),\n       MemberType=case(match(member_sid,\"^S-1-5-21-\") AND replace(member_sid,\"-\\d+$$\",\"\")=domain_sid,\"Domain account\",\n                       match(member_sid,\"^S-1-5-21-\"),\"Local / other domain\", match(member_sid,\"^S-1-5-32-\"),\"Builtin group\",\n                       match(member_sid,\"^S-1-5-\"),\"Well-known\", true(),\"Resolved name\"),\n       Privileged=if(match(Group,\"(?i)^(Administrators|Remote Desktop Users|Backup Operators|Remote Management Users|Hyper-V Administrators|Event Log Readers)$$\"),\"YES\",\"-\")\n| table Time Server Action Group Privileged MemberType member_sid By\n$lgfilter$\n| sort -Time | head 500"
       }
     },
     "ds_t_risky": {
@@ -607,11 +625,11 @@
               },
               {
                 "token": "sel_cn",
-                "key": "row.cn.value"
+                "key": "row._cn.value"
               },
               {
                 "token": "sel_sid",
-                "key": "row.objectSid.value"
+                "key": "row._sid.value"
               }
             ]
           }
@@ -1503,6 +1521,7 @@
       "input_idx",
       "input_stale",
       "input_spray",
+      "input_lgfilter",
       "input_tr"
     ]
   }
