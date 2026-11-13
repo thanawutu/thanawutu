@@ -148,6 +148,22 @@ ds("t_lockcaller", f'''
 | stats dc(k) AS Lockouts dc(user) AS Accounts values(user) AS Users max(_time) AS Last by Caller
 | eval Users=mvjoin(mvindex(Users,0,4),", "), Last=strftime(Last,"%Y-%m-%d %H:%M") | sort -Lockouts | head 20
 ''')
+ds("t_localgrp", f'''
+{SRC} EventCode IN (4732,4733) (host="$comp$" OR host="$comp$.*")
+| eval member_sid=if(mvcount(Security_ID)>=3,mvindex(Security_ID,1),mvindex(Security_ID,-1))
+| fields _time host EventCode Group_Name src_user Account_Name member_sid
+| append [| ldapsearch domain="$domain$" search="(objectClass=domain)" attrs="objectSid" | rename objectSid AS domain_sid | fields domain_sid]
+| eventstats values(domain_sid) AS domain_sid
+| where isnotnull(EventCode)
+| eval Action=if(EventCode=4732,"Added","Removed"), Server=upper(mvindex(split(host,"."),0)), Group=coalesce(Group_Name,"-"),
+       By=coalesce(src_user,mvindex(Account_Name,0)), Time=strftime(_time,"%Y-%m-%d %H:%M:%S"),
+       MemberType=case(match(member_sid,"^S-1-5-21-") AND replace(member_sid,"-\\d+$$","")=domain_sid,"Domain account",
+                       match(member_sid,"^S-1-5-21-"),"Local / other domain", match(member_sid,"^S-1-5-32-"),"Builtin group",
+                       match(member_sid,"^S-1-5-"),"Well-known", true(),"Resolved name"),
+       Privileged=if(match(Group,"(?i)^(Administrators|Remote Desktop Users|Backup Operators|Remote Management Users|Hyper-V Administrators|Event Log Readers)$$"),"YES","-")
+| table Time Server Action Group Privileged MemberType member_sid By
+| sort -Time | head 500
+''')
 ds("t_risky", '| where Status!="Disabled" AND (PwdNotRequired="Yes" OR PwdNeverExpires="Yes") | table sAMAccountName displayName department Status PwdNotRequired PwdNeverExpires PwdAgeDays DaysSinceLogon OU | sort -PwdNotRequired sAMAccountName', "users")
 
 # ---------------------------------------------------------------- inputs
@@ -172,6 +188,8 @@ COLORS = {
     "Role": {"Domain Controller": "#4B3A8C", "RODC": "#4B3A8C", "Server": "#1D4E79", "Workstation": "#3C444D", "Unknown": "#4A5058"},
     "Action": {"Added to group": "#7A5A12", "Locked out": "#8A2A24", "Deleted": "#8A2A24", "Disabled": "#4A5058",
                "Password reset": "#1D4E79", "Created": "#1B5E3B"},
+    "LocalAction": {"Added": "#7A5A12", "Removed": "#1D4E79"},
+    "MemberType": {"Domain account": "#1B5E3B", "Local / other domain": "#7A5A12", "Builtin group": "#4B3A8C"},
     "StatusDC": {"Logging": "#1B5E3B", "NOT LOGGING": "#8A2A24"},
 }
 L, RX, HW, FW = 20, 725, 695, 1400   # left x, right x, half width, full width
@@ -218,7 +236,9 @@ v("viz_lockcaller", "table", "Lockout sources (4740 Caller_Computer_Name)", "t_l
 v("viz_dccov", "table", "Domain controller log coverage (last 24h)", "dc_cov", (RX, 2610, HW, 300), 12, colors={"Status": "StatusDC"})
 v("viz_risky", "table", "Risky enabled accounts: PASSWD_NOTREQD / password never expires", "t_risky", (L, 2920, FW, 320), 13,
   colors={"Status": "Status", "PwdNotRequired": "PwdNotRequired", "PwdNeverExpires": "PwdNeverExpires"})
-HEIGHT = 3260
+v("viz_localgrp", "table", "Local group changes on servers (4732/4733 · T1098)", "t_localgrp", (L, 3250, FW, 340), 14,
+  colors={"Action": "LocalAction", "Privileged": "Privileged", "MemberType": "MemberType"})
+HEIGHT = 3610
 DEPENDS = {"viz_groups": "sel_user", "viz_used": "sel_user", "viz_timeline": "sel_user", "viz_changes": "sel_user",
            "viz_logged": "sel_comp", "viz_compchg": "sel_comp"}
 

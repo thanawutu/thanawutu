@@ -335,4 +335,29 @@
       </table>
     </panel>
   </row>
+  <row>
+    <panel>
+      <table><title>Local group changes on servers (4732/4733 · T1098)</title>
+        <search><query><![CDATA[index="$idx$" source="WinEventLog:Security" EventCode IN (4732,4733) (host="$comp$" OR host="$comp$.*")
+| eval member_sid=if(mvcount(Security_ID)>=3,mvindex(Security_ID,1),mvindex(Security_ID,-1))
+| fields _time host EventCode Group_Name src_user Account_Name member_sid
+| append [| ldapsearch domain="$domain$" search="(objectClass=domain)" attrs="objectSid" | rename objectSid AS domain_sid | fields domain_sid]
+| eventstats values(domain_sid) AS domain_sid
+| where isnotnull(EventCode)
+| eval Action=if(EventCode=4732,"Added","Removed"), Server=upper(mvindex(split(host,"."),0)), Group=coalesce(Group_Name,"-"),
+       By=coalesce(src_user,mvindex(Account_Name,0)), Time=strftime(_time,"%Y-%m-%d %H:%M:%S"),
+       MemberType=case(match(member_sid,"^S-1-5-21-") AND replace(member_sid,"-\d+$$","")=domain_sid,"Domain account",
+                       match(member_sid,"^S-1-5-21-"),"Local / other domain", match(member_sid,"^S-1-5-32-"),"Builtin group",
+                       match(member_sid,"^S-1-5-"),"Well-known", true(),"Resolved name"),
+       Privileged=if(match(Group,"(?i)^(Administrators|Remote Desktop Users|Backup Operators|Remote Management Users|Hyper-V Administrators|Event Log Readers)$$"),"YES","-")
+| table Time Server Action Group Privileged MemberType member_sid By
+| sort -Time | head 500]]></query><earliest>$tr.earliest$</earliest><latest>$tr.latest$</latest></search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <format type="color" field="Action"><colorPalette type="map">{"Added":#7A5A12,"Removed":#1D4E79}</colorPalette></format>
+        <format type="color" field="Privileged"><colorPalette type="map">{"YES":#8A2A24}</colorPalette></format>
+        <format type="color" field="MemberType"><colorPalette type="map">{"Domain account":#1B5E3B,"Local / other domain":#7A5A12,"Builtin group":#4B3A8C}</colorPalette></format>
+      </table>
+    </panel>
+  </row>
 </form>

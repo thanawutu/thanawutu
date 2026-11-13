@@ -303,6 +303,13 @@
         "query": "index=\"$idx$\" source=\"WinEventLog:Security\" EventCode=4740 user=\"$acct$\"\n| eval Caller=upper(coalesce(Caller_Computer_Name,\"-\")), k=user.\"|\".floor(_time/60)\n| stats dc(k) AS Lockouts dc(user) AS Accounts values(user) AS Users max(_time) AS Last by Caller\n| eval Users=mvjoin(mvindex(Users,0,4),\", \"), Last=strftime(Last,\"%Y-%m-%d %H:%M\") | sort -Lockouts | head 20"
       }
     },
+    "ds_t_localgrp": {
+      "type": "ds.search",
+      "name": "t_localgrp",
+      "options": {
+        "query": "index=\"$idx$\" source=\"WinEventLog:Security\" EventCode IN (4732,4733) (host=\"$comp$\" OR host=\"$comp$.*\")\n| eval member_sid=if(mvcount(Security_ID)>=3,mvindex(Security_ID,1),mvindex(Security_ID,-1))\n| fields _time host EventCode Group_Name src_user Account_Name member_sid\n| append [| ldapsearch domain=\"$domain$\" search=\"(objectClass=domain)\" attrs=\"objectSid\" | rename objectSid AS domain_sid | fields domain_sid]\n| eventstats values(domain_sid) AS domain_sid\n| where isnotnull(EventCode)\n| eval Action=if(EventCode=4732,\"Added\",\"Removed\"), Server=upper(mvindex(split(host,\".\"),0)), Group=coalesce(Group_Name,\"-\"),\n       By=coalesce(src_user,mvindex(Account_Name,0)), Time=strftime(_time,\"%Y-%m-%d %H:%M:%S\"),\n       MemberType=case(match(member_sid,\"^S-1-5-21-\") AND replace(member_sid,\"-\\d+$$\",\"\")=domain_sid,\"Domain account\",\n                       match(member_sid,\"^S-1-5-21-\"),\"Local / other domain\", match(member_sid,\"^S-1-5-32-\"),\"Builtin group\",\n                       match(member_sid,\"^S-1-5-\"),\"Well-known\", true(),\"Resolved name\"),\n       Privileged=if(match(Group,\"(?i)^(Administrators|Remote Desktop Users|Backup Operators|Remote Management Users|Hyper-V Administrators|Event Log Readers)$$\"),\"YES\",\"-\")\n| table Time Server Action Group Privileged MemberType member_sid By\n| sort -Time | head 500"
+      }
+    },
     "ds_t_risky": {
       "type": "ds.chain",
       "name": "t_risky",
@@ -993,6 +1000,61 @@
           }
         ]
       }
+    },
+    "viz_localgrp": {
+      "type": "splunk.table",
+      "title": "Local group changes on servers (4732/4733 · T1098)",
+      "dataSources": {
+        "primary": "ds_t_localgrp"
+      },
+      "options": {
+        "columnFormat": {
+          "Action": {
+            "data": "> table | seriesByName(\"Action\")",
+            "rowBackgroundColors": "> table | seriesByName(\"Action\") | matchValue(c_Action_LocalAction)"
+          },
+          "Privileged": {
+            "data": "> table | seriesByName(\"Privileged\")",
+            "rowBackgroundColors": "> table | seriesByName(\"Privileged\") | matchValue(c_Privileged_Privileged)"
+          },
+          "MemberType": {
+            "data": "> table | seriesByName(\"MemberType\")",
+            "rowBackgroundColors": "> table | seriesByName(\"MemberType\") | matchValue(c_MemberType_MemberType)"
+          }
+        }
+      },
+      "context": {
+        "c_Action_LocalAction": [
+          {
+            "match": "Added",
+            "value": "#7A5A12"
+          },
+          {
+            "match": "Removed",
+            "value": "#1D4E79"
+          }
+        ],
+        "c_Privileged_Privileged": [
+          {
+            "match": "YES",
+            "value": "#8A2A24"
+          }
+        ],
+        "c_MemberType_MemberType": [
+          {
+            "match": "Domain account",
+            "value": "#1B5E3B"
+          },
+          {
+            "match": "Local / other domain",
+            "value": "#7A5A12"
+          },
+          {
+            "match": "Builtin group",
+            "value": "#4B3A8C"
+          }
+        ]
+      }
     }
   },
   "defaults": {
@@ -1011,7 +1073,7 @@
     "type": "absolute",
     "options": {
       "width": 1440,
-      "height": 3260,
+      "height": 3610,
       "display": "auto-scale",
       "backgroundColor": "#111418"
     },
@@ -1284,6 +1346,16 @@
           "y": 2920,
           "w": 1400,
           "h": 320
+        }
+      },
+      {
+        "item": "viz_localgrp",
+        "type": "block",
+        "position": {
+          "x": 20,
+          "y": 3250,
+          "w": 1400,
+          "h": 340
         }
       }
     ],
