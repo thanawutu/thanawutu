@@ -414,6 +414,25 @@
         "query": "| where Status=\"Enabled\" AND tonumber(DaysSinceLogon)<=$stale$ | eval name_u=upper(name) | lookup s1_agent_inventory.csv agent AS name_u OUTPUT LastSeen EDR_Version EDR_MachineType EDR_Network EDR_Infected EDR_Active EDR_Decommissioned EDR_ActiveThreats EDR_LastUser | eval EDR=case(isnull(LastSeen),\"Missing\", lower(EDR_Decommissioned)=\"true\",\"Decommissioned\", now()-LastSeen>7*86400,\"Stale (>7d)\", true(),\"Installed\"), EDR_SeenDays=if(isnull(LastSeen),\"-\",round((now()-LastSeen)/86400,0)) | stats count AS Computers count(eval(EDR=\"Installed\")) AS EDR_OK by Role | eval Coverage=round(EDR_OK/Computers*100,1).\"%\" | sort -Computers"
       }
     },
+    "ds_t_srvos": {
+      "type": "ds.chain",
+      "name": "t_srvos",
+      "options": {
+        "extend": "ds_computers",
+        "query": "| where Status=\"Enabled\" AND tonumber(DaysSinceLogon)<=$stale$ | eval name_u=upper(name) | lookup s1_agent_inventory.csv agent AS name_u OUTPUT LastSeen EDR_Version EDR_MachineType EDR_Network EDR_Infected EDR_Active EDR_Decommissioned EDR_ActiveThreats EDR_LastUser | eval EDR=case(isnull(LastSeen),\"Missing\", lower(EDR_Decommissioned)=\"true\",\"Decommissioned\", now()-LastSeen>7*86400,\"Stale (>7d)\", true(),\"Installed\"), EDR_SeenDays=if(isnull(LastSeen),\"-\",round((now()-LastSeen)/86400,0)) | where Role=\"Server\" | eval EOL=if(match(operatingSystem,\"(?i)2000|2003|2008\"),\"YES\",\"-\") | stats count(eval(EDR!=\"Installed\")) AS NoEDR count(eval(EDR=\"Installed\")) AS WithEDR by operatingSystem EOL | eval Coverage=round(WithEDR/(WithEDR+NoEDR)*100,1).\"%\" | sort -NoEDR"
+      }
+    },
+    "ds_t_s1notad": {
+      "type": "ds.search",
+      "name": "t_s1notad",
+      "options": {
+        "query": "| inputlookup s1_agent_inventory.csv\n| join type=left agent [| ldapsearch domain=\"$domain$\" search=\"(objectClass=computer)\" attrs=\"name\" | eval agent=upper(name), in_ad=\"yes\" | fields agent in_ad]\n| where isnull(in_ad)\n| eval OS=case(match(EDR_OsName,\"(?i)windows\"),\"Windows\", match(EDR_OsName,\"(?i)mac|os x\"),\"macOS\",\n               match(EDR_OsName,\"(?i)linux|ubuntu|red hat|rhel|centos|oracle|suse|debian|rocky|alma\"),\"Linux\", true(),\"Other\"),\n       Activity=if(now()-LastSeen<=7*86400,\"active\",\"stale\")\n| stats count AS Agents count(eval(Activity=\"active\")) AS Active dc(EDR_Domain) AS Domains by EDR_MachineType OS\n| rename EDR_MachineType AS MachineType | sort -Agents",
+        "queryParameters": {
+          "earliest": "0",
+          "latest": "now"
+        }
+      }
+    },
     "ds_t_edrmiss": {
       "type": "ds.chain",
       "name": "t_edrmiss",
@@ -1524,6 +1543,37 @@
           }
         ]
       }
+    },
+    "viz_srvos": {
+      "type": "splunk.table",
+      "title": "Active servers: EDR coverage by OS (EOL = 2000/2003/2008)",
+      "dataSources": {
+        "primary": "ds_t_srvos"
+      },
+      "options": {
+        "columnFormat": {
+          "EOL": {
+            "data": "> table | seriesByName(\"EOL\")",
+            "rowBackgroundColors": "> table | seriesByName(\"EOL\") | matchValue(c_EOL_EOL)"
+          }
+        }
+      },
+      "context": {
+        "c_EOL_EOL": [
+          {
+            "match": "YES",
+            "value": "#8A2A24"
+          }
+        ]
+      }
+    },
+    "viz_s1notad": {
+      "type": "splunk.table",
+      "title": "SentinelOne agents not in this AD (other domains / Linux / macOS)",
+      "dataSources": {
+        "primary": "ds_t_s1notad"
+      },
+      "options": {}
     }
   },
   "defaults": {
@@ -1542,7 +1592,7 @@
     "type": "absolute",
     "options": {
       "width": 1440,
-      "height": 4890,
+      "height": 5230,
       "display": "auto-scale",
       "backgroundColor": "#111418"
     },
@@ -1944,6 +1994,26 @@
           "x": 20,
           "y": 4550,
           "w": 1400,
+          "h": 320
+        }
+      },
+      {
+        "item": "viz_srvos",
+        "type": "block",
+        "position": {
+          "x": 20,
+          "y": 4890,
+          "w": 695,
+          "h": 320
+        }
+      },
+      {
+        "item": "viz_s1notad",
+        "type": "block",
+        "position": {
+          "x": 725,
+          "y": 4890,
+          "w": 695,
           "h": 320
         }
       }

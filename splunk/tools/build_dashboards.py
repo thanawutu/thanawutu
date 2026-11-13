@@ -208,6 +208,20 @@ ds("k_edrmiss", f'{ACTIVE} {EDR_EVAL} | where EDR!="Installed" | stats count', "
 ds("k_edrinf", f'{EDR_EVAL} | where lower(EDR_Infected)="true" OR tonumber(EDR_ActiveThreats)>0 | stats count', "computers")
 ds("t_edrrole", f'{ACTIVE} {EDR_EVAL} | stats count AS Computers count(eval(EDR="Installed")) AS EDR_OK by Role '
    '| eval Coverage=round(EDR_OK/Computers*100,1)."%" | sort -Computers', "computers")
+ds("t_srvos", f'{ACTIVE} {EDR_EVAL} | where Role="Server" '
+   '| eval EOL=if(match(operatingSystem,"(?i)2000|2003|2008"),"YES","-") '
+   '| stats count(eval(EDR!="Installed")) AS NoEDR count(eval(EDR="Installed")) AS WithEDR by operatingSystem EOL '
+   '| eval Coverage=round(WithEDR/(WithEDR+NoEDR)*100,1)."%" | sort -NoEDR', "computers")
+ds("t_s1notad", f'''
+| inputlookup {EDR_LOOKUP}
+| join type=left agent [| ldapsearch domain="$domain$" search="(objectClass=computer)" attrs="name" | eval agent=upper(name), in_ad="yes" | fields agent in_ad]
+| where isnull(in_ad)
+| eval OS=case(match(EDR_OsName,"(?i)windows"),"Windows", match(EDR_OsName,"(?i)mac|os x"),"macOS",
+               match(EDR_OsName,"(?i)linux|ubuntu|red hat|rhel|centos|oracle|suse|debian|rocky|alma"),"Linux", true(),"Other"),
+       Activity=if(now()-LastSeen<=7*86400,"active","stale")
+| stats count AS Agents count(eval(Activity="active")) AS Active dc(EDR_Domain) AS Domains by EDR_MachineType OS
+| rename EDR_MachineType AS MachineType | sort -Agents
+''', time="all")
 ds("t_edrmiss", f'{ACTIVE} {EDR_EVAL} | where EDR!="Installed" '
    '| table name Role operatingSystem DaysSinceLogon EDR EDR_SeenDays OU | sort EDR -DaysSinceLogon name', "computers")
 ds("t_edrinf", f'{EDR_EVAL} | where lower(EDR_Infected)="true" OR tonumber(EDR_ActiveThreats)>0 | table name Role EDR_Infected EDR_ActiveThreats EDR_LastUser EDR_Network EDR_SeenDays', "computers")
@@ -259,6 +273,7 @@ COLORS = {
     "EDR": {"Installed": "#1B5E3B", "Missing": "#8A2A24", "Stale (>7d)": "#7A5A12", "Decommissioned": "#4A5058"},
     "Risk": {"critical": "#8A2A24", "high": "#8A2A24", "medium": "#7A5A12", "low": "#1D4E79"},
     "Signed": {"false": "#7A5A12"},
+    "EOL": {"YES": "#8A2A24"},
     "StatusDC": {"Logging": "#1B5E3B", "NOT LOGGING": "#8A2A24"},
 }
 L, RX, HW, FW = 20, 725, 695, 1400   # left x, right x, half width, full width
@@ -330,7 +345,10 @@ v("viz_software", "table", "Installed software on $sel_comp$ (SentinelOne, 30 d)
 v("viz_edragent", "table", "EDR agent details: $sel_comp$", "t_edragent", (RX, 2230, HW, 300), 8.5)
 v("viz_riskyapps", "table", "Risky applications across fleet (SentinelOne riskLevel ≠ none)", "t_riskyapps", (L, 4550, FW, 320), 16,
   colors={"Risk": "Risk"})
-HEIGHT = 4890
+v("viz_srvos", "table", "Active servers: EDR coverage by OS (EOL = 2000/2003/2008)", "t_srvos", (L, 4890, HW, 320), 17,
+  colors={"EOL": "EOL"})
+v("viz_s1notad", "table", "SentinelOne agents not in this AD (other domains / Linux / macOS)", "t_s1notad", (RX, 4890, HW, 320), 17)
+HEIGHT = 5230
 DEPENDS = {"viz_groups": "sel_user", "viz_used": "sel_user", "viz_timeline": "sel_user", "viz_changes": "sel_user",
            "viz_logged": "sel_comp", "viz_compchg": "sel_comp", "viz_software": "sel_comp", "viz_edragent": "sel_comp"}
 

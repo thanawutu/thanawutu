@@ -185,5 +185,7 @@ Security observations to report: (1) DC logging gap, (2) enabled accounts with `
 | S1 agents cadence (S17b) | steady **~3,850 agents/day**, ~2 snapshots/agent/day; `lastActiveDate` = `%Y-%m-%dT%H:%M:%S.%6NZ` | first `strptime` pattern matches; daily schedule over 24 h is sufficient |
 | S1 lookup backfill | 3,881 agents; 3,515 active ≤ 7 d, 366 stale (max 84 d); LastSeen parsed (min age 1 d) | – |
 | AD ↔ S1 name match (S16b, enabled computers) | Workstation **97.8 %** (2,630/2,688), **Server 24.7 %** (281/1,139), Other 49.4 % (118/239) | names match (upper short name); server gap → S18; new *EDR coverage by role* panel |
+| Uncovered AD servers by OS (S18a) | 858 without EDR: **473 on EOL OS** (2000/2003/2008/2008 R2, ~0 % coverage), 2012 R2 6 %, 2016 18 %, 2019 56 %, 2022/2025 74 % | new *Active servers: EDR coverage by OS* panel (EOL flagged) |
+| S1 agents not in AD (S18b/S19) | 845 agents: Windows servers in **other domains** ~276, **Linux** servers ~192, laptops/desktops in other domains ~330, macOS ~14, same-domain renamed/deleted ~16; >15-char names mostly Linux, 15-char match helps 1 → **no name normalisation needed** | new *S1 agents not in this AD* panel |
 
 Pending (optional): S6 (30-day check of 4720/4743/4757), S8 (AD count match).

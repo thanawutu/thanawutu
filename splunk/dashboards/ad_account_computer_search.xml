@@ -505,4 +505,28 @@ $lgfilter$
       </table>
     </panel>
   </row>
+  <row>
+    <panel>
+      <table><title>Active servers: EDR coverage by OS (EOL = 2000/2003/2008)</title>
+        <search base="base_computers"><query><![CDATA[| where Status="Enabled" AND tonumber(DaysSinceLogon)<=$stale$ | eval name_u=upper(name) | lookup s1_agent_inventory.csv agent AS name_u OUTPUT LastSeen EDR_Version EDR_MachineType EDR_Network EDR_Infected EDR_Active EDR_Decommissioned EDR_ActiveThreats EDR_LastUser | eval EDR=case(isnull(LastSeen),"Missing", lower(EDR_Decommissioned)="true","Decommissioned", now()-LastSeen>7*86400,"Stale (>7d)", true(),"Installed"), EDR_SeenDays=if(isnull(LastSeen),"-",round((now()-LastSeen)/86400,0)) | where Role="Server" | eval EOL=if(match(operatingSystem,"(?i)2000|2003|2008"),"YES","-") | stats count(eval(EDR!="Installed")) AS NoEDR count(eval(EDR="Installed")) AS WithEDR by operatingSystem EOL | eval Coverage=round(WithEDR/(WithEDR+NoEDR)*100,1)."%" | sort -NoEDR]]></query></search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <format type="color" field="EOL"><colorPalette type="map">{"YES":#8A2A24}</colorPalette></format>
+      </table>
+    </panel>
+    <panel>
+      <table><title>SentinelOne agents not in this AD (other domains / Linux / macOS)</title>
+        <search><query><![CDATA[| inputlookup s1_agent_inventory.csv
+| join type=left agent [| ldapsearch domain="$domain$" search="(objectClass=computer)" attrs="name" | eval agent=upper(name), in_ad="yes" | fields agent in_ad]
+| where isnull(in_ad)
+| eval OS=case(match(EDR_OsName,"(?i)windows"),"Windows", match(EDR_OsName,"(?i)mac|os x"),"macOS",
+               match(EDR_OsName,"(?i)linux|ubuntu|red hat|rhel|centos|oracle|suse|debian|rocky|alma"),"Linux", true(),"Other"),
+       Activity=if(now()-LastSeen<=7*86400,"active","stale")
+| stats count AS Agents count(eval(Activity="active")) AS Active dc(EDR_Domain) AS Domains by EDR_MachineType OS
+| rename EDR_MachineType AS MachineType | sort -Agents]]></query><earliest>0</earliest><latest>now</latest></search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
 </form>
