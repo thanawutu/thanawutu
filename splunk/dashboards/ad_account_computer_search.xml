@@ -37,15 +37,32 @@
     <earliest>0</earliest><latest>now</latest>
   </search>
   <search id="base_auth">
-    <query><![CDATA[index="$idx$" source="WinEventLog:Security" EventCode IN (4624,4625,4740,4771,4776) user="$acct$" (dest="$comp$" OR dest="$comp$.*" OR Workstation_Name="$comp$")
-| where NOT like(user,"%$$") AND user!="-" AND lower(user)!="anonymous logon"
-| eval user=lower(user), dest_short=upper(mvindex(split(dest,"."),0)), src=coalesce(src,Source_Network_Address,Workstation_Name,"-")
-| eval Result=case(EventCode=4624,"Success",EventCode=4740,"Lockout",true(),"Failure")
-| eval LogonType=case(Logon_Type=2,"2 Interactive",Logon_Type=3,"3 Network",Logon_Type=4,"4 Batch",Logon_Type=5,"5 Service",Logon_Type=7,"7 Unlock",Logon_Type=8,"8 NetworkCleartext",Logon_Type=9,"9 NewCredentials",Logon_Type=10,"10 RemoteInteractive",Logon_Type=11,"11 CachedInteractive",isnotnull(Logon_Type),tostring(Logon_Type),true(),"-")
+    <query><![CDATA[| tstats summariesonly=true count from datamodel=Authentication
+    where nodename=Authentication sourcetype="WinEventLog" (Authentication.signature_id=4624 OR Authentication.signature_id=4625)
+      Authentication.user="*$acct$" (Authentication.dest="$comp$" OR Authentication.dest="$comp$.*")
+    by _time span=1h Authentication.user Authentication.dest Authentication.src Authentication.action
+| rename Authentication.* AS *
+| eval user=lower(mvindex(split(mvindex(split(user,"@"),0),"\\"),-1))
+| search user="$acct$"
+| where NOT like(user,"%$$") AND user!="-" AND lower(user)!="anonymous logon" AND user!="unknown"
+| eval dest_short=upper(mvindex(split(dest,"."),0)), Result=if(action="success","Success","Failure")
+| stats sum(count) AS count by _time user dest_short src Result]]></query>
+    <earliest>$tr.earliest$</earliest><latest>$tr.latest$</latest>
+  </search>
+  <search id="base_kerb">
+    <query><![CDATA[index="$idx$" source="WinEventLog:Security" (EventCode=4771 OR EventCode=4776) user="$acct$"
 | eval code=lower(coalesce(Sub_Status,Error_Code,Failure_Code,"-")), Reason=case(EventCode=4624 OR EventCode=4740,"-",code="0xc000006a" OR code="0x18","Bad password",code="0xc0000064" OR code="0x6","Unknown user",code="0xc0000234","Locked out",code="0xc0000072" OR code="0x12","Disabled/locked",code="0xc0000071" OR code="0x17","Password expired",code="0xc0000193","Account expired",code="0xc0000224","Must change password",code="0xc000006f","Outside logon hours",code="0xc0000070","Workstation restricted",true(),code)
-| fillnull value="-" dest_short
+| where EventCode=4771 OR (code!="0x0" AND code!="-")
+| where NOT like(user,"%$$") AND user!="-" AND lower(user)!="anonymous logon"
+| eval user=lower(user), src=coalesce(src,Source_Network_Address,Workstation_Name,"-"), Protocol=if(EventCode=4771,"Kerberos","NTLM"), DC=upper(mvindex(split(host,"."),0))
 | bin _time span=1h
-| stats count by _time user dest_short src Result LogonType Reason EventCode]]></query>
+| stats count by _time user src DC Protocol Reason]]></query>
+    <earliest>$tr.earliest$</earliest><latest>$tr.latest$</latest>
+  </search>
+  <search id="base_lockouts">
+    <query><![CDATA[index="$idx$" source="WinEventLog:Security" EventCode=4740 user="$acct$"
+| eval k=user."|".floor(_time/60)
+| stats dc(k) AS count]]></query>
     <earliest>$tr.earliest$</earliest><latest>$tr.latest$</latest>
   </search>
   <search id="base_dc_cov">
@@ -98,7 +115,7 @@
       </single>
     </panel>
     <panel>
-      <single><title>Failed logons</title>
+      <single><title>Failed logons (4625)</title>
         <search base="base_auth"><query><![CDATA[| where Result="Failure" | stats sum(count) AS count | fillnull value=0 count]]></query></search>
         <option name="drilldown">none</option>
         <option name="colorMode">block</option>
@@ -108,8 +125,18 @@
       </single>
     </panel>
     <panel>
+      <single><title>Kerberos/NTLM failures</title>
+        <search base="base_kerb"><query><![CDATA[| stats sum(count) AS count | fillnull value=0 count]]></query></search>
+        <option name="drilldown">none</option>
+        <option name="colorMode">block</option>
+        <option name="useColors">1</option>
+        <option name="rangeValues">[99, 999]</option>
+        <option name="rangeColors">["0x53A051", "0xF8BE34", "0xDC4E41"]</option>
+      </single>
+    </panel>
+    <panel>
       <single><title>Lockouts (4740)</title>
-        <search base="base_auth"><query><![CDATA[| where Result="Lockout" | stats sum(count) AS count | fillnull value=0 count]]></query></search>
+        <search base="base_lockouts"><query><![CDATA[| table count]]></query></search>
         <option name="drilldown">none</option>
         <option name="colorMode">block</option>
         <option name="useColors">1</option>
@@ -282,8 +309,8 @@
   </row>
   <row>
     <panel>
-      <table><title>Top failed-logon accounts (brute force, T1110.001)</title>
-        <search base="base_auth"><query><![CDATA[| where Result="Failure" | stats sum(count) AS Failures dc(dest_short) AS Targets dc(src) AS Sources values(Reason) AS Reasons by user | sort -Failures | head 20]]></query></search>
+      <table><title>Top failed-logon accounts – 4625 (brute force, T1110.001)</title>
+        <search base="base_auth"><query><![CDATA[| where Result="Failure" | stats sum(count) AS Failures dc(dest_short) AS Targets dc(src) AS Sources by user | sort -Failures | head 20]]></query></search>
         <option name="count">10</option>
         <option name="drilldown">row</option>
         <drilldown>
@@ -296,8 +323,31 @@
       </table>
     </panel>
     <panel>
-      <table><title>Password-spray sources: failures across ≥ $spray$ accounts (T1110.003)</title>
-        <search base="base_auth"><query><![CDATA[| where Result="Failure" | stats sum(count) AS Failures dc(user) AS Accounts values(Reason) AS Reasons by src | where Accounts>=$spray$ | sort -Accounts | head 20]]></query></search>
+      <table><title>Password-spray sources – 4625: ≥ $spray$ accounts (T1110.003)</title>
+        <search base="base_auth"><query><![CDATA[| where Result="Failure" AND src!="unknown" | stats sum(count) AS Failures dc(user) AS Accounts dc(dest_short) AS Targets by src | where Accounts>=$spray$ | sort -Accounts | head 20]]></query></search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table><title>Kerberos (4771) / NTLM (4776) failures by account</title>
+        <search base="base_kerb"><query><![CDATA[| stats sum(count) AS Failures dc(src) AS Sources values(Protocol) AS Protocol values(Reason) AS Reasons by user | sort -Failures | head 20]]></query></search>
+        <option name="count">10</option>
+        <option name="drilldown">row</option>
+        <drilldown>
+          <set token="form.acct">$row.user$</set>
+          <set token="acct">$row.user$</set>
+          <set token="sel_user">$row.user$</set>
+          <set token="sel_cn">$row.user$</set>
+          <set token="sel_sid">$row.user$</set>
+        </drilldown>
+      </table>
+    </panel>
+    <panel>
+      <table><title>Kerberos / NTLM spray sources: ≥ $spray$ accounts (T1110.003)</title>
+        <search base="base_kerb"><query><![CDATA[| stats sum(count) AS Failures dc(user) AS Accounts values(Protocol) AS Protocol values(Reason) AS Reasons by src | where Accounts>=$spray$ | sort -Accounts | head 20]]></query></search>
         <option name="count">10</option>
         <option name="drilldown">none</option>
       </table>

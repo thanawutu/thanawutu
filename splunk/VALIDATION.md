@@ -173,4 +173,8 @@ Dashboard Studio JSON from the **verified** SPL.
 
 Security observations to report: (1) DC logging gap, (2) enabled accounts with `PASSWD_NOTREQD`,
 (3) Logon Type 8 (cleartext) present – review which services use it.
-Pending (not supplied): S6 (30-day check of 4720/4743/4757), S7 (data-model acceleration), S8 (AD count match).
+| Data models (S7) | Authentication & Change accelerated (Splunk_SA_CIM); Authentication complete 0.9993, summaries back to 2024 | logon panels use `tstats summariesonly=true` |
+| Authentication DM content (S7b) | 4624 ≈ raw minus machine accounts (1.38 M vs 2.29 M); 4625 ≈ raw (112.5 k vs 113 k); **4771 / 4776 absent**; other products (sig 52xx/54xx…) also present | filter `sourcetype="WinEventLog"`; 4771/4776 kept on raw search |
+| DM fields (S7c) | user unknown 0.1 %, dest unknown 0.2 %, **src unknown 29 %**, machine 0.8 %, `DOMAIN\\` or `@` in user 1.9 %, dest FQDN 93 % | strip domain from user, short dest, exclude `src=unknown` from spray |
+
+Pending (not supplied): S6 (30-day check of 4720/4743/4757), S8 (AD count match), S15 (4771/4776 code fields).

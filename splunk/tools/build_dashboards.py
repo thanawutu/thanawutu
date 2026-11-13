@@ -64,17 +64,37 @@ ds("computers", f'''
 | fillnull value="-" operatingSystem operatingSystemVersion ManagedBy
 ''', time="all")
 
-# Aggregated (transforming) so post-processing is not truncated at 500k events (~48M events/day here)
+BS2 = "\\" * 2   # SPL string "\\" = one literal backslash
+# Logons 4624/4625 from the accelerated Authentication data model (validated: complete 0.9993, Windows rows
+# = raw minus machine accounts). Restricted to WinEventLog because other products also feed the model.
 ds("auth", f'''
-{SRC} EventCode IN (4624,4625,4740,4771,4776) user="$acct$" (dest="$comp$" OR dest="$comp$.*" OR Workstation_Name="$comp$")
-| {NOT_MACHINE}
-| eval user=lower(user), {SHORT_DEST}, {SRC_FALLBACK}
-| eval Result=case(EventCode=4624,"Success",EventCode=4740,"Lockout",true(),"Failure")
-| {LT}
+| tstats summariesonly=true count from datamodel=Authentication
+    where nodename=Authentication sourcetype="WinEventLog" (Authentication.signature_id=4624 OR Authentication.signature_id=4625)
+      Authentication.user="*$acct$" (Authentication.dest="$comp$" OR Authentication.dest="$comp$.*")
+    by _time span=1h Authentication.user Authentication.dest Authentication.src Authentication.action
+| rename Authentication.* AS *
+| eval user=lower(mvindex(split(mvindex(split(user,"@"),0),"{BS2}"),-1))
+| search user="$acct$"
+| {NOT_MACHINE} AND user!="unknown"
+| eval {SHORT_DEST}, Result=if(action="success","Success","Failure")
+| stats sum(count) AS count by _time user dest_short src Result
+''')
+
+# Kerberos pre-auth (4771) and NTLM (4776) failures are NOT in the data model (validated) -> raw, aggregated
+ds("kerb", f'''
+{SRC} (EventCode=4771 OR EventCode=4776) user="$acct$"
 | {REASON}
-| fillnull value="-" dest_short
+| where EventCode=4771 OR (code!="0x0" AND code!="-")
+| {NOT_MACHINE}
+| eval user=lower(user), {SRC_FALLBACK}, Protocol=if(EventCode=4771,"Kerberos","NTLM"), DC=upper(mvindex(split(host,"."),0))
 | bin _time span=1h
-| stats count by _time user dest_short src Result LogonType Reason EventCode
+| stats count by _time user src DC Protocol Reason
+''')
+
+ds("lockouts", f'''
+{SRC} EventCode=4740 user="$acct$"
+| eval k=user."|".floor(_time/60)
+| stats dc(k) AS count
 ''')
 
 ds("dc_cov", '''
@@ -94,7 +114,8 @@ ds("k_dislock", '| where Status!="Enabled" | stats count', "users")
 ds("k_notreqd", '| where PwdNotRequired="Yes" AND Status!="Disabled" | stats count', "users")
 ds("k_comps", "| stats count", "computers")
 ds("k_fail", '| where Result="Failure" | stats sum(count) AS count | fillnull value=0 count', "auth")
-ds("k_lock", '| where Result="Lockout" | stats sum(count) AS count | fillnull value=0 count', "auth")
+ds("k_krb", '| stats sum(count) AS count | fillnull value=0 count', "kerb")
+ds("k_lock", '| table count', "lockouts")
 ds("k_dcmiss", '| where Status="NOT LOGGING" | stats count', "dc_cov")
 
 # Accounts
@@ -140,8 +161,10 @@ ds("t_compchg", f'''
 # Hygiene & threat
 ds("t_stale_u", '| where Status="Enabled" AND (DaysSinceLogon="never" OR tonumber(DaysSinceLogon)>$stale$) | table sAMAccountName displayName department DaysSinceLogon PwdAgeDays PwdNeverExpires OU | sort -DaysSinceLogon', "users")
 ds("t_stale_c", '| where Status="Enabled" AND (DaysSinceLogon="never" OR tonumber(DaysSinceLogon)>$stale$) | table name Role operatingSystem DaysSinceLogon OU | sort -DaysSinceLogon', "computers")
-ds("t_topfail", '| where Result="Failure" | stats sum(count) AS Failures dc(dest_short) AS Targets dc(src) AS Sources values(Reason) AS Reasons by user | sort -Failures | head 20', "auth")
-ds("t_spray", '| where Result="Failure" | stats sum(count) AS Failures dc(user) AS Accounts values(Reason) AS Reasons by src | where Accounts>=$spray$ | sort -Accounts | head 20', "auth")
+ds("t_topfail", '| where Result="Failure" | stats sum(count) AS Failures dc(dest_short) AS Targets dc(src) AS Sources by user | sort -Failures | head 20', "auth")
+ds("t_spray", '| where Result="Failure" AND src!="unknown" | stats sum(count) AS Failures dc(user) AS Accounts dc(dest_short) AS Targets by src | where Accounts>=$spray$ | sort -Accounts | head 20', "auth")
+ds("t_krbuser", '| stats sum(count) AS Failures dc(src) AS Sources values(Protocol) AS Protocol values(Reason) AS Reasons by user | sort -Failures | head 20', "kerb")
+ds("t_krbspray", '| stats sum(count) AS Failures dc(user) AS Accounts values(Protocol) AS Protocol values(Reason) AS Reasons by src | where Accounts>=$spray$ | sort -Accounts | head 20', "kerb")
 ds("t_lockcaller", f'''
 {SRC} EventCode=4740 user="$acct$"
 | eval Caller=upper(coalesce(Caller_Computer_Name,"-")), k=user."|".floor(_time/60)
@@ -203,10 +226,11 @@ v("md_head", "markdown", None, None, (L, 10, FW, 50), 0,
   md="Validated SPL · LDAP (SA-ldapsearch) + WinEventLog:Security · **click a row** to drill down")
 kpis = [("k_users", "Accounts", None), ("k_dislock", "Disabled / Locked", (1, 50)),
         ("k_notreqd", "PASSWD_NOTREQD (enabled)", (1, 1)), ("k_comps", "Computers", None),
-        ("k_fail", "Failed logons", (100, 1000)), ("k_lock", "Lockouts (4740)", (1, 20)),
+        ("k_fail", "Failed logons (4625)", (100, 1000)), ("k_krb", "Kerberos/NTLM failures", (100, 1000)),
+        ("k_lock", "Lockouts (4740)", (1, 20)),
         ("k_dcmiss", "DCs NOT logging", (1, 1))]
 for n, (d, t, thr) in enumerate(kpis):
-    v("viz_" + d, "single", t, d, (L + n * 201, 70, 191, 110), 1, thr=thr)
+    v("viz_" + d, "single", t, d, (L + n * 176, 70, 166, 110), 1, thr=thr)
 
 v("md_acc", "markdown", None, None, (L, 195, FW, 40), 2, md="## Accounts")
 v("viz_users", "table", "AD accounts — click a row", "t_users", (L, 240, FW, 340), 3,
@@ -229,16 +253,19 @@ v("viz_compchg", "table", "Computer account changes: $sel_comp$ (4741–4743)", 
 v("md_hyg", "markdown", None, None, (L, 1925, FW, 40), 9, md="## Hygiene & threat indicators")
 v("viz_stale_u", "table", "Stale enabled accounts (> $stale$ days)", "t_stale_u", (L, 1970, HW, 300), 10)
 v("viz_stale_c", "table", "Stale enabled computers (> $stale$ days)", "t_stale_c", (RX, 1970, HW, 300), 10, colors={"Role": "Role"})
-v("viz_topfail", "table", "Top failed-logon accounts (brute force, T1110.001)", "t_topfail", (L, 2280, HW, 320), 11,
+v("viz_topfail", "table", "Top failed-logon accounts – 4625 (brute force, T1110.001)", "t_topfail", (L, 2280, HW, 320), 11,
   drill=[("acct", "user"), ("sel_user", "user"), ("sel_cn", "user"), ("sel_sid", "user")])
-v("viz_spray", "table", "Password-spray sources: failures across ≥ $spray$ accounts (T1110.003)", "t_spray", (RX, 2280, HW, 320), 11)
-v("viz_lockcaller", "table", "Lockout sources (4740 Caller_Computer_Name)", "t_lockcaller", (L, 2610, HW, 300), 12)
-v("viz_dccov", "table", "Domain controller log coverage (last 24h)", "dc_cov", (RX, 2610, HW, 300), 12, colors={"Status": "StatusDC"})
-v("viz_risky", "table", "Risky enabled accounts: PASSWD_NOTREQD / password never expires", "t_risky", (L, 2920, FW, 320), 13,
+v("viz_spray", "table", "Password-spray sources – 4625: ≥ $spray$ accounts (T1110.003)", "t_spray", (RX, 2280, HW, 320), 11)
+v("viz_krbuser", "table", "Kerberos (4771) / NTLM (4776) failures by account", "t_krbuser", (L, 2610, HW, 320), 12,
+  drill=[("acct", "user"), ("sel_user", "user"), ("sel_cn", "user"), ("sel_sid", "user")])
+v("viz_krbspray", "table", "Kerberos / NTLM spray sources: ≥ $spray$ accounts (T1110.003)", "t_krbspray", (RX, 2610, HW, 320), 12)
+v("viz_lockcaller", "table", "Lockout sources (4740 Caller_Computer_Name)", "t_lockcaller", (L, 2940, HW, 300), 13)
+v("viz_dccov", "table", "Domain controller log coverage (last 24h)", "dc_cov", (RX, 2940, HW, 300), 13, colors={"Status": "StatusDC"})
+v("viz_risky", "table", "Risky enabled accounts: PASSWD_NOTREQD / password never expires", "t_risky", (L, 3250, FW, 320), 14,
   colors={"Status": "Status", "PwdNotRequired": "PwdNotRequired", "PwdNeverExpires": "PwdNeverExpires"})
-v("viz_localgrp", "table", "Local group changes on servers (4732/4733 · T1098)", "t_localgrp", (L, 3250, FW, 340), 14,
+v("viz_localgrp", "table", "Local group changes on servers (4732/4733 · T1098)", "t_localgrp", (L, 3580, FW, 340), 15,
   colors={"Action": "LocalAction", "Privileged": "Privileged", "MemberType": "MemberType"})
-HEIGHT = 3610
+HEIGHT = 3940
 DEPENDS = {"viz_groups": "sel_user", "viz_used": "sel_user", "viz_timeline": "sel_user", "viz_changes": "sel_user",
            "viz_logged": "sel_comp", "viz_compchg": "sel_comp"}
 
@@ -328,13 +355,13 @@ def simplexml():
         return ("<earliest>0</earliest><latest>now</latest>" if s["time"] == "all"
                 else "<earliest>$tr.earliest$</earliest><latest>$tr.latest$</latest>")
     for k, s in DS.items():           # global base searches
-        if not s["base"] and k in ("users", "computers", "auth", "dc_cov"):
+        if not s["base"] and k in ("users", "computers", "auth", "kerb", "lockouts", "dc_cov"):
             o += [f'  <search id="base_{k}">', f"    <query><![CDATA[{s['q']}]]></query>", f"    {times(s)}", "  </search>"]
     def search_el(dk):
         s = DS[dk]
         if s["base"]:
             return f'<search base="base_{s["base"]}"><query><![CDATA[{s["q"]}]]></query></search>'
-        if dk in ("users", "computers", "auth", "dc_cov"):
+        if dk in ("users", "computers", "auth", "kerb", "lockouts", "dc_cov"):
             return f'<search base="base_{dk}"><query>| table *</query></search>'
         return f'<search><query><![CDATA[{s["q"]}]]></query>{times(s)}</search>'
     rows = {}

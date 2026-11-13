@@ -126,7 +126,21 @@
       "type": "ds.search",
       "name": "auth",
       "options": {
-        "query": "index=\"$idx$\" source=\"WinEventLog:Security\" EventCode IN (4624,4625,4740,4771,4776) user=\"$acct$\" (dest=\"$comp$\" OR dest=\"$comp$.*\" OR Workstation_Name=\"$comp$\")\n| where NOT like(user,\"%$$\") AND user!=\"-\" AND lower(user)!=\"anonymous logon\"\n| eval user=lower(user), dest_short=upper(mvindex(split(dest,\".\"),0)), src=coalesce(src,Source_Network_Address,Workstation_Name,\"-\")\n| eval Result=case(EventCode=4624,\"Success\",EventCode=4740,\"Lockout\",true(),\"Failure\")\n| eval LogonType=case(Logon_Type=2,\"2 Interactive\",Logon_Type=3,\"3 Network\",Logon_Type=4,\"4 Batch\",Logon_Type=5,\"5 Service\",Logon_Type=7,\"7 Unlock\",Logon_Type=8,\"8 NetworkCleartext\",Logon_Type=9,\"9 NewCredentials\",Logon_Type=10,\"10 RemoteInteractive\",Logon_Type=11,\"11 CachedInteractive\",isnotnull(Logon_Type),tostring(Logon_Type),true(),\"-\")\n| eval code=lower(coalesce(Sub_Status,Error_Code,Failure_Code,\"-\")), Reason=case(EventCode=4624 OR EventCode=4740,\"-\",code=\"0xc000006a\" OR code=\"0x18\",\"Bad password\",code=\"0xc0000064\" OR code=\"0x6\",\"Unknown user\",code=\"0xc0000234\",\"Locked out\",code=\"0xc0000072\" OR code=\"0x12\",\"Disabled/locked\",code=\"0xc0000071\" OR code=\"0x17\",\"Password expired\",code=\"0xc0000193\",\"Account expired\",code=\"0xc0000224\",\"Must change password\",code=\"0xc000006f\",\"Outside logon hours\",code=\"0xc0000070\",\"Workstation restricted\",true(),code)\n| fillnull value=\"-\" dest_short\n| bin _time span=1h\n| stats count by _time user dest_short src Result LogonType Reason EventCode"
+        "query": "| tstats summariesonly=true count from datamodel=Authentication\n    where nodename=Authentication sourcetype=\"WinEventLog\" (Authentication.signature_id=4624 OR Authentication.signature_id=4625)\n      Authentication.user=\"*$acct$\" (Authentication.dest=\"$comp$\" OR Authentication.dest=\"$comp$.*\")\n    by _time span=1h Authentication.user Authentication.dest Authentication.src Authentication.action\n| rename Authentication.* AS *\n| eval user=lower(mvindex(split(mvindex(split(user,\"@\"),0),\"\\\\\"),-1))\n| search user=\"$acct$\"\n| where NOT like(user,\"%$$\") AND user!=\"-\" AND lower(user)!=\"anonymous logon\" AND user!=\"unknown\"\n| eval dest_short=upper(mvindex(split(dest,\".\"),0)), Result=if(action=\"success\",\"Success\",\"Failure\")\n| stats sum(count) AS count by _time user dest_short src Result"
+      }
+    },
+    "ds_kerb": {
+      "type": "ds.search",
+      "name": "kerb",
+      "options": {
+        "query": "index=\"$idx$\" source=\"WinEventLog:Security\" (EventCode=4771 OR EventCode=4776) user=\"$acct$\"\n| eval code=lower(coalesce(Sub_Status,Error_Code,Failure_Code,\"-\")), Reason=case(EventCode=4624 OR EventCode=4740,\"-\",code=\"0xc000006a\" OR code=\"0x18\",\"Bad password\",code=\"0xc0000064\" OR code=\"0x6\",\"Unknown user\",code=\"0xc0000234\",\"Locked out\",code=\"0xc0000072\" OR code=\"0x12\",\"Disabled/locked\",code=\"0xc0000071\" OR code=\"0x17\",\"Password expired\",code=\"0xc0000193\",\"Account expired\",code=\"0xc0000224\",\"Must change password\",code=\"0xc000006f\",\"Outside logon hours\",code=\"0xc0000070\",\"Workstation restricted\",true(),code)\n| where EventCode=4771 OR (code!=\"0x0\" AND code!=\"-\")\n| where NOT like(user,\"%$$\") AND user!=\"-\" AND lower(user)!=\"anonymous logon\"\n| eval user=lower(user), src=coalesce(src,Source_Network_Address,Workstation_Name,\"-\"), Protocol=if(EventCode=4771,\"Kerberos\",\"NTLM\"), DC=upper(mvindex(split(host,\".\"),0))\n| bin _time span=1h\n| stats count by _time user src DC Protocol Reason"
+      }
+    },
+    "ds_lockouts": {
+      "type": "ds.search",
+      "name": "lockouts",
+      "options": {
+        "query": "index=\"$idx$\" source=\"WinEventLog:Security\" EventCode=4740 user=\"$acct$\"\n| eval k=user.\"|\".floor(_time/60)\n| stats dc(k) AS count"
       }
     },
     "ds_dc_cov": {
@@ -180,12 +194,20 @@
         "query": "| where Result=\"Failure\" | stats sum(count) AS count | fillnull value=0 count"
       }
     },
+    "ds_k_krb": {
+      "type": "ds.chain",
+      "name": "k_krb",
+      "options": {
+        "extend": "ds_kerb",
+        "query": "| stats sum(count) AS count | fillnull value=0 count"
+      }
+    },
     "ds_k_lock": {
       "type": "ds.chain",
       "name": "k_lock",
       "options": {
-        "extend": "ds_auth",
-        "query": "| where Result=\"Lockout\" | stats sum(count) AS count | fillnull value=0 count"
+        "extend": "ds_lockouts",
+        "query": "| table count"
       }
     },
     "ds_k_dcmiss": {
@@ -285,7 +307,7 @@
       "name": "t_topfail",
       "options": {
         "extend": "ds_auth",
-        "query": "| where Result=\"Failure\" | stats sum(count) AS Failures dc(dest_short) AS Targets dc(src) AS Sources values(Reason) AS Reasons by user | sort -Failures | head 20"
+        "query": "| where Result=\"Failure\" | stats sum(count) AS Failures dc(dest_short) AS Targets dc(src) AS Sources by user | sort -Failures | head 20"
       }
     },
     "ds_t_spray": {
@@ -293,7 +315,23 @@
       "name": "t_spray",
       "options": {
         "extend": "ds_auth",
-        "query": "| where Result=\"Failure\" | stats sum(count) AS Failures dc(user) AS Accounts values(Reason) AS Reasons by src | where Accounts>=$spray$ | sort -Accounts | head 20"
+        "query": "| where Result=\"Failure\" AND src!=\"unknown\" | stats sum(count) AS Failures dc(user) AS Accounts dc(dest_short) AS Targets by src | where Accounts>=$spray$ | sort -Accounts | head 20"
+      }
+    },
+    "ds_t_krbuser": {
+      "type": "ds.chain",
+      "name": "t_krbuser",
+      "options": {
+        "extend": "ds_kerb",
+        "query": "| stats sum(count) AS Failures dc(src) AS Sources values(Protocol) AS Protocol values(Reason) AS Reasons by user | sort -Failures | head 20"
+      }
+    },
+    "ds_t_krbspray": {
+      "type": "ds.chain",
+      "name": "t_krbspray",
+      "options": {
+        "extend": "ds_kerb",
+        "query": "| stats sum(count) AS Failures dc(user) AS Accounts values(Protocol) AS Protocol values(Reason) AS Reasons by src | where Accounts>=$spray$ | sort -Accounts | head 20"
       }
     },
     "ds_t_lockcaller": {
@@ -396,9 +434,37 @@
     },
     "viz_k_fail": {
       "type": "splunk.singlevalue",
-      "title": "Failed logons",
+      "title": "Failed logons (4625)",
       "dataSources": {
         "primary": "ds_k_fail"
+      },
+      "options": {
+        "backgroundColor": "> majorValue | rangeValue(bgCfg)",
+        "majorColor": "#FFFFFF"
+      },
+      "context": {
+        "bgCfg": [
+          {
+            "to": 100,
+            "value": "#53A051"
+          },
+          {
+            "from": 100,
+            "to": 1000,
+            "value": "#F8BE34"
+          },
+          {
+            "from": 1000,
+            "value": "#DC4E41"
+          }
+        ]
+      }
+    },
+    "viz_k_krb": {
+      "type": "splunk.singlevalue",
+      "title": "Kerberos/NTLM failures",
+      "dataSources": {
+        "primary": "ds_k_krb"
       },
       "options": {
         "backgroundColor": "> majorValue | rangeValue(bgCfg)",
@@ -876,7 +942,7 @@
     },
     "viz_topfail": {
       "type": "splunk.table",
-      "title": "Top failed-logon accounts (brute force, T1110.001)",
+      "title": "Top failed-logon accounts – 4625 (brute force, T1110.001)",
       "dataSources": {
         "primary": "ds_t_topfail"
       },
@@ -909,9 +975,50 @@
     },
     "viz_spray": {
       "type": "splunk.table",
-      "title": "Password-spray sources: failures across ≥ $spray$ accounts (T1110.003)",
+      "title": "Password-spray sources – 4625: ≥ $spray$ accounts (T1110.003)",
       "dataSources": {
         "primary": "ds_t_spray"
+      },
+      "options": {}
+    },
+    "viz_krbuser": {
+      "type": "splunk.table",
+      "title": "Kerberos (4771) / NTLM (4776) failures by account",
+      "dataSources": {
+        "primary": "ds_t_krbuser"
+      },
+      "options": {},
+      "eventHandlers": [
+        {
+          "type": "drilldown.setToken",
+          "options": {
+            "tokens": [
+              {
+                "token": "acct",
+                "key": "row.user.value"
+              },
+              {
+                "token": "sel_user",
+                "key": "row.user.value"
+              },
+              {
+                "token": "sel_cn",
+                "key": "row.user.value"
+              },
+              {
+                "token": "sel_sid",
+                "key": "row.user.value"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "viz_krbspray": {
+      "type": "splunk.table",
+      "title": "Kerberos / NTLM spray sources: ≥ $spray$ accounts (T1110.003)",
+      "dataSources": {
+        "primary": "ds_t_krbspray"
       },
       "options": {}
     },
@@ -1073,7 +1180,7 @@
     "type": "absolute",
     "options": {
       "width": 1440,
-      "height": 3610,
+      "height": 3940,
       "display": "auto-scale",
       "backgroundColor": "#111418"
     },
@@ -1094,7 +1201,7 @@
         "position": {
           "x": 20,
           "y": 70,
-          "w": 191,
+          "w": 166,
           "h": 110
         }
       },
@@ -1102,9 +1209,9 @@
         "item": "viz_k_dislock",
         "type": "block",
         "position": {
-          "x": 221,
+          "x": 196,
           "y": 70,
-          "w": 191,
+          "w": 166,
           "h": 110
         }
       },
@@ -1112,9 +1219,9 @@
         "item": "viz_k_notreqd",
         "type": "block",
         "position": {
-          "x": 422,
+          "x": 372,
           "y": 70,
-          "w": 191,
+          "w": 166,
           "h": 110
         }
       },
@@ -1122,9 +1229,9 @@
         "item": "viz_k_comps",
         "type": "block",
         "position": {
-          "x": 623,
+          "x": 548,
           "y": 70,
-          "w": 191,
+          "w": 166,
           "h": 110
         }
       },
@@ -1132,9 +1239,19 @@
         "item": "viz_k_fail",
         "type": "block",
         "position": {
-          "x": 824,
+          "x": 724,
           "y": 70,
-          "w": 191,
+          "w": 166,
+          "h": 110
+        }
+      },
+      {
+        "item": "viz_k_krb",
+        "type": "block",
+        "position": {
+          "x": 900,
+          "y": 70,
+          "w": 166,
           "h": 110
         }
       },
@@ -1142,9 +1259,9 @@
         "item": "viz_k_lock",
         "type": "block",
         "position": {
-          "x": 1025,
+          "x": 1076,
           "y": 70,
-          "w": 191,
+          "w": 166,
           "h": 110
         }
       },
@@ -1152,9 +1269,9 @@
         "item": "viz_k_dcmiss",
         "type": "block",
         "position": {
-          "x": 1226,
+          "x": 1252,
           "y": 70,
-          "w": 191,
+          "w": 166,
           "h": 110
         }
       },
@@ -1319,11 +1436,31 @@
         }
       },
       {
-        "item": "viz_lockcaller",
+        "item": "viz_krbuser",
         "type": "block",
         "position": {
           "x": 20,
           "y": 2610,
+          "w": 695,
+          "h": 320
+        }
+      },
+      {
+        "item": "viz_krbspray",
+        "type": "block",
+        "position": {
+          "x": 725,
+          "y": 2610,
+          "w": 695,
+          "h": 320
+        }
+      },
+      {
+        "item": "viz_lockcaller",
+        "type": "block",
+        "position": {
+          "x": 20,
+          "y": 2940,
           "w": 695,
           "h": 300
         }
@@ -1333,7 +1470,7 @@
         "type": "block",
         "position": {
           "x": 725,
-          "y": 2610,
+          "y": 2940,
           "w": 695,
           "h": 300
         }
@@ -1343,7 +1480,7 @@
         "type": "block",
         "position": {
           "x": 20,
-          "y": 2920,
+          "y": 3250,
           "w": 1400,
           "h": 320
         }
@@ -1353,7 +1490,7 @@
         "type": "block",
         "position": {
           "x": 20,
-          "y": 3250,
+          "y": 3580,
           "w": 1400,
           "h": 340
         }
