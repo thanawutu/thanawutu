@@ -167,7 +167,7 @@ Dashboard Studio JSON from the **verified** SPL.
 | 47xx events | `user` = target, `src_user` = actor (100 %); 4724 `user` 85 % → fallback `mvindex(Account_Name,-1)` | – |
 | 4728/4729 | `user` = member **CN** (not sAMAccountName); `Group_Name` 100 %; `Member_Name` 0 % | match on `$sel_cn$` as well as `$sel_user$` |
 | 4728/4729 (S10) | `user` = member CN with spaces (89–94 %); last `Account_Name` = member **DN** (98 %); never = group or actor | CN match confirmed |
-| 4732/4733 (S10/S11) | member is a **raw SID** (`S-1-5-21-…`, 100 %), 3 SIDs per event; name never resolved | match `mvindex(Security_ID,1)` against LDAP `objectSid` (`$sel_sid$`) |
+| 4732/4733 (S10–S13) | member is a **raw SID**; 3 SIDs = actor, **member (pos 1)**, **group (pos 2, 98–100 % resolve to AD groups)**; LDAP `objectSid` is text `S-1-5-…`. 98 % of members are *not* objects in this domain (pending S14) | match `mvindex(Security_ID,1)` = `$sel_sid$` |
 | 4740 | `Caller_Computer_Name` 97 % | new "Lockout sources" panel |
 | DC coverage | **2 of 9 DCs send no Security logs**; 3 DC names lack "DC" | DC list from LDAP (bit 8192), new coverage panel + KPI |
 

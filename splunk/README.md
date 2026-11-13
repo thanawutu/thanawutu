@@ -32,3 +32,8 @@ Settings → User interface → Views → **New from XML** → paste the file, o
 
 Drilldowns are cross-linked: clicking a computer in "Computers used by" fills the Computer input,
 and clicking a user in a computer's logon list fills the Account input.
+
+## Input rules
+The Account / Computer text is inserted into an LDAP filter: use plain values or `*` wildcards only
+(`5324340`, `53243*`, `WS-*`). **Do not type quotes, parentheses, `&`, `|` or `\`** – they cause
+`ldapsearch ... invalid filter`.
