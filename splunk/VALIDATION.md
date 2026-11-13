@@ -182,5 +182,6 @@ Security observations to report: (1) DC logging gap, (2) enabled accounts with `
 | SentinelOne sourcetypes (S16a) | activities, **agents** (~51 k/7 d), applications (~412 k/7 d), groups, threats (~3.7 k/7 d), mgmt | – |
 | S1 applications cadence (S16a) | 429–2,552 agents/day, spiky → change feed, not full inventory | status lookup built from **agents** channel instead |
 | S1 agents fields (S17a) | computerName, lastActiveDate, updatedAt, domain, agentVersion, machineType, networkStatus, infected, activeThreats, isActive, isDecommissioned, operationalState, osName, isUpToDate, appsVulnerabilityStatus, lastLoggedInUserName, siteName, groupName – all 99.5 % | backfill SPL uses these names as-is |
+| S1 agents cadence (S17b) | steady **~3,850 agents/day**, ~2 snapshots/agent/day; `lastActiveDate` = `%Y-%m-%dT%H:%M:%S.%6NZ` | first `strptime` pattern matches; daily schedule over 24 h is sufficient |
 
 Pending (optional): S6 (30-day check of 4720/4743/4757), S8 (AD count match).
