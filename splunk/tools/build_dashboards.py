@@ -34,6 +34,17 @@ OU = ('OU=replace(replace(replace(distinguishedName,"^.*?,(?=(OU|CN|DC)=)",""),"
 PRIV = ('(?i)^(Domain Admins|Enterprise Admins|Schema Admins|Administrators|Account Operators|Backup Operators|'
         'Server Operators|Print Operators|DnsAdmins|Group Policy Creator Owners|Enterprise Key Admins|Key Admins)$')
 
+# ---- SentinelOne EDR enrichment (lookup s1_agent_inventory.csv is built daily by a scheduled search, see README)
+EDR_LOOKUP = "s1_agent_inventory.csv"
+S1 = 'index="$edridx$" sourcetype="sentinelone:channel:applications"'
+EDR_EVAL = (f'| eval name_u=upper(name) | lookup {EDR_LOOKUP} agent AS name_u OUTPUT LastSeen EDR_Version EDR_MachineType '
+            'EDR_Network EDR_Infected EDR_Active EDR_Decommissioned '
+            '| eval EDR=case(isnull(LastSeen),"Missing", lower(EDR_Decommissioned)="true","Decommissioned", '
+            'now()-LastSeen>7*86400,"Stale (>7d)", true(),"Installed"), '
+            'EDR_SeenDays=if(isnull(LastSeen),"-",round((now()-LastSeen)/86400,0))')
+ACTIVE = '| where Status="Enabled" AND tonumber(DaysSinceLogon)<=$stale$'
+RISKNUM = 'eval r=case(Risk="critical",4,Risk="high",3,Risk="medium",2,Risk="low",1,true(),0)'
+
 # ---------------------------------------------------------------- data sources
 # (id, query, base_or_None, time) ; time: "all" = 0..now, "tr" = time picker
 DS = {}
@@ -142,7 +153,7 @@ ds("t_changes", f'''
 ''')
 
 # Computers
-ds("t_comps", "| table name Role operatingSystem Status DaysSinceLogon ManagedBy OU | sort name", "computers")
+ds("t_comps", f"{EDR_EVAL} | table name Role operatingSystem Status DaysSinceLogon EDR EDR_Version EDR_SeenDays OU | sort name", "computers")
 ds("c_os", "| stats count by operatingSystem | sort -count", "computers")
 ds("t_logged", f'''
 {SRC} EventCode IN (4624,4625) (dest="$sel_comp$" OR dest="$sel_comp$.*")
@@ -191,12 +202,37 @@ $lgfilter$
 ''')
 ds("t_risky", '| where Status!="Disabled" AND (PwdNotRequired="Yes" OR PwdNeverExpires="Yes") | table sAMAccountName displayName department Status PwdNotRequired PwdNeverExpires PwdAgeDays DaysSinceLogon OU | sort -PwdNotRequired sAMAccountName', "users")
 
+ds("k_edrcov", f'{ACTIVE} {EDR_EVAL} | stats count(eval(EDR="Installed")) AS ok count AS total '
+   '| eval count=if(total>0,round(ok/total*100,1)."%","-") | table count', "computers")
+ds("k_edrmiss", f'{ACTIVE} {EDR_EVAL} | where EDR!="Installed" | stats count', "computers")
+ds("k_edrinf", f'{EDR_EVAL} | where lower(EDR_Infected)="true" | stats count', "computers")
+ds("t_edrmiss", f'{ACTIVE} {EDR_EVAL} | where EDR!="Installed" '
+   '| table name Role operatingSystem DaysSinceLogon EDR EDR_SeenDays OU | sort EDR -DaysSinceLogon name', "computers")
+ds("t_edrinf", f'{EDR_EVAL} | where lower(EDR_Infected)="true" | table name Role EDR_Version EDR_Network EDR_SeenDays OU', "computers")
+ds("t_edragent", f'''
+| inputlookup {EDR_LOOKUP} where agent="$sel_comp$"
+| eval LastSeen=strftime(LastSeen,"%Y-%m-%d %H:%M")
+| fields - agent
+| transpose 0 column_name=Field | rename "row 1" AS Value
+''', time="all")
+ds("t_software", f'''
+{S1} agentComputerName="$sel_comp$" earliest=-30d
+| stats latest(version) AS Version latest(publisher) AS Publisher latest(riskLevel) AS Risk latest(signed) AS Signed max(installedAt) AS InstalledAt by name
+| {RISKNUM} | sort -r name | fields - r | rename name AS Application
+''', time="all")
+ds("t_riskyapps", f'''
+{S1} agentComputerName="$comp$" riskLevel!="none"
+| stats dc(agentComputerName) AS Computers values(version) AS Versions latest(publisher) AS Publisher latest(riskLevel) AS Risk by name
+| {RISKNUM} | sort -r -Computers | fields - r | eval Versions=mvjoin(mvindex(Versions,0,4),", ") | rename name AS Application | head 100
+''')
+
 # ---------------------------------------------------------------- inputs
 INPUTS = [
     dict(id="acct", type="text", label="Account (sAMAccountName / CN / mail)", default="*"),
     dict(id="comp", type="text", label="Computer (name)", default="*"),
     dict(id="domain", type="text", label="LDAP domain stanza", default="default"),
     dict(id="idx", type="text", label="Windows index", default="wineventlog"),
+    dict(id="edridx", type="text", label="EDR index (SentinelOne)", default="sentinelone"),
     dict(id="stale", type="dropdown", label="Stale (days)", default="90", choices=["30", "60", "90", "180"]),
     dict(id="spray", type="dropdown", label="Spray threshold (accounts)", default="10", choices=["5", "10", "20", "50"]),
     dict(id="lgfilter", type="dropdown", label="Local group actors", default="| search *",
@@ -218,6 +254,9 @@ COLORS = {
                "Password reset": "#1D4E79", "Created": "#1B5E3B"},
     "LocalAction": {"Added": "#7A5A12", "Removed": "#1D4E79"},
     "MemberType": {"Domain account": "#1B5E3B", "Local / other domain": "#7A5A12", "Builtin group": "#4B3A8C"},
+    "EDR": {"Installed": "#1B5E3B", "Missing": "#8A2A24", "Stale (>7d)": "#7A5A12", "Decommissioned": "#4A5058"},
+    "Risk": {"critical": "#8A2A24", "high": "#8A2A24", "medium": "#7A5A12", "low": "#1D4E79"},
+    "Signed": {"false": "#7A5A12"},
     "StatusDC": {"Logging": "#1B5E3B", "NOT LOGGING": "#8A2A24"},
 }
 L, RX, HW, FW = 20, 725, 695, 1400   # left x, right x, half width, full width
@@ -249,7 +288,7 @@ v("viz_changes", "table", "AD changes to $sel_user$", "t_changes", (RX, 900, HW,
 
 v("md_comp", "markdown", None, None, (L, 1215, FW, 40), 6, md="## Computers")
 v("viz_comps", "table", "AD computers — click a row", "t_comps", (L, 1260, 1000, 340), 7,
-  drill=[("sel_comp", "name")], colors={"Status": "Status", "Role": "Role"})
+  drill=[("sel_comp", "name")], colors={"Status": "Status", "Role": "Role", "EDR": "EDR"})
 v("viz_os", "pie", "Computers by operating system", "c_os", (1030, 1260, 390, 340), 7)
 v("viz_logged", "table", "Accounts logged on to $sel_comp$ (click → Account)", "t_logged", (L, 1610, HW, 300), 8,
   drill=[("acct", "user"), ("sel_user", "user"), ("sel_cn", "user"), ("sel_sid", "user")])
@@ -270,9 +309,27 @@ v("viz_risky", "table", "Risky enabled accounts: PASSWD_NOTREQD / password never
   colors={"Status": "Status", "PwdNotRequired": "PwdNotRequired", "PwdNeverExpires": "PwdNeverExpires"})
 v("viz_localgrp", "table", "Local group changes on servers (4732/4733 · T1098)", "t_localgrp", (L, 3580, FW, 340), 15,
   colors={"Action": "LocalAction", "Privileged": "Privileged", "MemberType": "MemberType"})
-HEIGHT = 3940
+# shift everything below the computer table to make room for the EDR rows
+for x in V:
+    px, py, pw, ph = x["pos"]
+    if x["row"] == 8:
+        x["pos"] = (px, py + 310, pw, ph)
+    elif x["row"] >= 9:
+        x["pos"] = (px, py + 620, pw, ph)
+v("viz_k_edrcov", "single", "EDR coverage (active computers)", "k_edrcov", (L, 1610, 225, 110), 7.5)
+v("viz_k_edrmiss", "single", "Active computers without EDR", "k_edrmiss", (255, 1610, 225, 110), 7.5, thr=(1, 20))
+v("viz_k_edrinf", "single", "EDR agents infected", "k_edrinf", (490, 1610, 225, 110), 7.5, thr=(1, 1))
+v("viz_edrinf", "table", "SentinelOne agents reporting infected", "t_edrinf", (L, 1730, HW, 180), 7.6)
+v("viz_edrmiss", "table", "Active computers (≤ $stale$ d) without healthy EDR — click a row", "t_edrmiss", (RX, 1610, HW, 300), 7.5,
+  drill=[("sel_comp", "name")], colors={"EDR": "EDR", "Role": "Role"})
+v("viz_software", "table", "Installed software on $sel_comp$ (SentinelOne, 30 d)", "t_software", (L, 2230, HW, 300), 8.5,
+  colors={"Risk": "Risk", "Signed": "Signed"})
+v("viz_edragent", "table", "EDR agent details: $sel_comp$", "t_edragent", (RX, 2230, HW, 300), 8.5)
+v("viz_riskyapps", "table", "Risky applications across fleet (SentinelOne riskLevel ≠ none)", "t_riskyapps", (L, 4550, FW, 320), 16,
+  colors={"Risk": "Risk"})
+HEIGHT = 4890
 DEPENDS = {"viz_groups": "sel_user", "viz_used": "sel_user", "viz_timeline": "sel_user", "viz_changes": "sel_user",
-           "viz_logged": "sel_comp", "viz_compchg": "sel_comp"}
+           "viz_logged": "sel_comp", "viz_compchg": "sel_comp", "viz_software": "sel_comp", "viz_edragent": "sel_comp"}
 
 # ================================================================= Dashboard Studio JSON
 def studio():

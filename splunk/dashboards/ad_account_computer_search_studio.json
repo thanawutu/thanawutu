@@ -34,6 +34,14 @@
         "defaultValue": "wineventlog"
       }
     },
+    "input_edridx": {
+      "type": "input.text",
+      "title": "EDR index (SentinelOne)",
+      "options": {
+        "token": "edridx",
+        "defaultValue": "sentinelone"
+      }
+    },
     "input_stale": {
       "type": "input.dropdown",
       "title": "Stale (days)",
@@ -275,7 +283,7 @@
       "name": "t_comps",
       "options": {
         "extend": "ds_computers",
-        "query": "| table name Role operatingSystem Status DaysSinceLogon ManagedBy OU | sort name"
+        "query": "| eval name_u=upper(name) | lookup s1_agent_inventory.csv agent AS name_u OUTPUT LastSeen EDR_Version EDR_MachineType EDR_Network EDR_Infected EDR_Active EDR_Decommissioned | eval EDR=case(isnull(LastSeen),\"Missing\", lower(EDR_Decommissioned)=\"true\",\"Decommissioned\", now()-LastSeen>7*86400,\"Stale (>7d)\", true(),\"Installed\"), EDR_SeenDays=if(isnull(LastSeen),\"-\",round((now()-LastSeen)/86400,0)) | table name Role operatingSystem Status DaysSinceLogon EDR EDR_Version EDR_SeenDays OU | sort name"
       }
     },
     "ds_c_os": {
@@ -368,6 +376,75 @@
       "options": {
         "extend": "ds_users",
         "query": "| where Status!=\"Disabled\" AND (PwdNotRequired=\"Yes\" OR PwdNeverExpires=\"Yes\") | table sAMAccountName displayName department Status PwdNotRequired PwdNeverExpires PwdAgeDays DaysSinceLogon OU | sort -PwdNotRequired sAMAccountName"
+      }
+    },
+    "ds_k_edrcov": {
+      "type": "ds.chain",
+      "name": "k_edrcov",
+      "options": {
+        "extend": "ds_computers",
+        "query": "| where Status=\"Enabled\" AND tonumber(DaysSinceLogon)<=$stale$ | eval name_u=upper(name) | lookup s1_agent_inventory.csv agent AS name_u OUTPUT LastSeen EDR_Version EDR_MachineType EDR_Network EDR_Infected EDR_Active EDR_Decommissioned | eval EDR=case(isnull(LastSeen),\"Missing\", lower(EDR_Decommissioned)=\"true\",\"Decommissioned\", now()-LastSeen>7*86400,\"Stale (>7d)\", true(),\"Installed\"), EDR_SeenDays=if(isnull(LastSeen),\"-\",round((now()-LastSeen)/86400,0)) | stats count(eval(EDR=\"Installed\")) AS ok count AS total | eval count=if(total>0,round(ok/total*100,1).\"%\",\"-\") | table count"
+      }
+    },
+    "ds_k_edrmiss": {
+      "type": "ds.chain",
+      "name": "k_edrmiss",
+      "options": {
+        "extend": "ds_computers",
+        "query": "| where Status=\"Enabled\" AND tonumber(DaysSinceLogon)<=$stale$ | eval name_u=upper(name) | lookup s1_agent_inventory.csv agent AS name_u OUTPUT LastSeen EDR_Version EDR_MachineType EDR_Network EDR_Infected EDR_Active EDR_Decommissioned | eval EDR=case(isnull(LastSeen),\"Missing\", lower(EDR_Decommissioned)=\"true\",\"Decommissioned\", now()-LastSeen>7*86400,\"Stale (>7d)\", true(),\"Installed\"), EDR_SeenDays=if(isnull(LastSeen),\"-\",round((now()-LastSeen)/86400,0)) | where EDR!=\"Installed\" | stats count"
+      }
+    },
+    "ds_k_edrinf": {
+      "type": "ds.chain",
+      "name": "k_edrinf",
+      "options": {
+        "extend": "ds_computers",
+        "query": "| eval name_u=upper(name) | lookup s1_agent_inventory.csv agent AS name_u OUTPUT LastSeen EDR_Version EDR_MachineType EDR_Network EDR_Infected EDR_Active EDR_Decommissioned | eval EDR=case(isnull(LastSeen),\"Missing\", lower(EDR_Decommissioned)=\"true\",\"Decommissioned\", now()-LastSeen>7*86400,\"Stale (>7d)\", true(),\"Installed\"), EDR_SeenDays=if(isnull(LastSeen),\"-\",round((now()-LastSeen)/86400,0)) | where lower(EDR_Infected)=\"true\" | stats count"
+      }
+    },
+    "ds_t_edrmiss": {
+      "type": "ds.chain",
+      "name": "t_edrmiss",
+      "options": {
+        "extend": "ds_computers",
+        "query": "| where Status=\"Enabled\" AND tonumber(DaysSinceLogon)<=$stale$ | eval name_u=upper(name) | lookup s1_agent_inventory.csv agent AS name_u OUTPUT LastSeen EDR_Version EDR_MachineType EDR_Network EDR_Infected EDR_Active EDR_Decommissioned | eval EDR=case(isnull(LastSeen),\"Missing\", lower(EDR_Decommissioned)=\"true\",\"Decommissioned\", now()-LastSeen>7*86400,\"Stale (>7d)\", true(),\"Installed\"), EDR_SeenDays=if(isnull(LastSeen),\"-\",round((now()-LastSeen)/86400,0)) | where EDR!=\"Installed\" | table name Role operatingSystem DaysSinceLogon EDR EDR_SeenDays OU | sort EDR -DaysSinceLogon name"
+      }
+    },
+    "ds_t_edrinf": {
+      "type": "ds.chain",
+      "name": "t_edrinf",
+      "options": {
+        "extend": "ds_computers",
+        "query": "| eval name_u=upper(name) | lookup s1_agent_inventory.csv agent AS name_u OUTPUT LastSeen EDR_Version EDR_MachineType EDR_Network EDR_Infected EDR_Active EDR_Decommissioned | eval EDR=case(isnull(LastSeen),\"Missing\", lower(EDR_Decommissioned)=\"true\",\"Decommissioned\", now()-LastSeen>7*86400,\"Stale (>7d)\", true(),\"Installed\"), EDR_SeenDays=if(isnull(LastSeen),\"-\",round((now()-LastSeen)/86400,0)) | where lower(EDR_Infected)=\"true\" | table name Role EDR_Version EDR_Network EDR_SeenDays OU"
+      }
+    },
+    "ds_t_edragent": {
+      "type": "ds.search",
+      "name": "t_edragent",
+      "options": {
+        "query": "| inputlookup s1_agent_inventory.csv where agent=\"$sel_comp$\"\n| eval LastSeen=strftime(LastSeen,\"%Y-%m-%d %H:%M\")\n| fields - agent\n| transpose 0 column_name=Field | rename \"row 1\" AS Value",
+        "queryParameters": {
+          "earliest": "0",
+          "latest": "now"
+        }
+      }
+    },
+    "ds_t_software": {
+      "type": "ds.search",
+      "name": "t_software",
+      "options": {
+        "query": "index=\"$edridx$\" sourcetype=\"sentinelone:channel:applications\" agentComputerName=\"$sel_comp$\" earliest=-30d\n| stats latest(version) AS Version latest(publisher) AS Publisher latest(riskLevel) AS Risk latest(signed) AS Signed max(installedAt) AS InstalledAt by name\n| eval r=case(Risk=\"critical\",4,Risk=\"high\",3,Risk=\"medium\",2,Risk=\"low\",1,true(),0) | sort -r name | fields - r | rename name AS Application",
+        "queryParameters": {
+          "earliest": "0",
+          "latest": "now"
+        }
+      }
+    },
+    "ds_t_riskyapps": {
+      "type": "ds.search",
+      "name": "t_riskyapps",
+      "options": {
+        "query": "index=\"$edridx$\" sourcetype=\"sentinelone:channel:applications\" agentComputerName=\"$comp$\" riskLevel!=\"none\"\n| stats dc(agentComputerName) AS Computers values(version) AS Versions latest(publisher) AS Publisher latest(riskLevel) AS Risk by name\n| eval r=case(Risk=\"critical\",4,Risk=\"high\",3,Risk=\"medium\",2,Risk=\"low\",1,true(),0) | sort -r -Computers | fields - r | eval Versions=mvjoin(mvindex(Versions,0,4),\", \") | rename name AS Application | head 100"
       }
     }
   },
@@ -761,6 +838,10 @@
           "Role": {
             "data": "> table | seriesByName(\"Role\")",
             "rowBackgroundColors": "> table | seriesByName(\"Role\") | matchValue(c_Role_Role)"
+          },
+          "EDR": {
+            "data": "> table | seriesByName(\"EDR\")",
+            "rowBackgroundColors": "> table | seriesByName(\"EDR\") | matchValue(c_EDR_EDR)"
           }
         }
       },
@@ -798,6 +879,24 @@
           },
           {
             "match": "Unknown",
+            "value": "#4A5058"
+          }
+        ],
+        "c_EDR_EDR": [
+          {
+            "match": "Installed",
+            "value": "#1B5E3B"
+          },
+          {
+            "match": "Missing",
+            "value": "#8A2A24"
+          },
+          {
+            "match": "Stale (>7d)",
+            "value": "#7A5A12"
+          },
+          {
+            "match": "Decommissioned",
             "value": "#4A5058"
           }
         ]
@@ -1176,6 +1275,235 @@
           }
         ]
       }
+    },
+    "viz_k_edrcov": {
+      "type": "splunk.singlevalue",
+      "title": "EDR coverage (active computers)",
+      "dataSources": {
+        "primary": "ds_k_edrcov"
+      },
+      "options": {}
+    },
+    "viz_k_edrmiss": {
+      "type": "splunk.singlevalue",
+      "title": "Active computers without EDR",
+      "dataSources": {
+        "primary": "ds_k_edrmiss"
+      },
+      "options": {
+        "backgroundColor": "> majorValue | rangeValue(bgCfg)",
+        "majorColor": "#FFFFFF"
+      },
+      "context": {
+        "bgCfg": [
+          {
+            "to": 1,
+            "value": "#53A051"
+          },
+          {
+            "from": 1,
+            "to": 20,
+            "value": "#F8BE34"
+          },
+          {
+            "from": 20,
+            "value": "#DC4E41"
+          }
+        ]
+      }
+    },
+    "viz_k_edrinf": {
+      "type": "splunk.singlevalue",
+      "title": "EDR agents infected",
+      "dataSources": {
+        "primary": "ds_k_edrinf"
+      },
+      "options": {
+        "backgroundColor": "> majorValue | rangeValue(bgCfg)",
+        "majorColor": "#FFFFFF"
+      },
+      "context": {
+        "bgCfg": [
+          {
+            "to": 1,
+            "value": "#53A051"
+          },
+          {
+            "from": 1,
+            "value": "#DC4E41"
+          }
+        ]
+      }
+    },
+    "viz_edrinf": {
+      "type": "splunk.table",
+      "title": "SentinelOne agents reporting infected",
+      "dataSources": {
+        "primary": "ds_t_edrinf"
+      },
+      "options": {}
+    },
+    "viz_edrmiss": {
+      "type": "splunk.table",
+      "title": "Active computers (≤ $stale$ d) without healthy EDR — click a row",
+      "dataSources": {
+        "primary": "ds_t_edrmiss"
+      },
+      "options": {
+        "columnFormat": {
+          "EDR": {
+            "data": "> table | seriesByName(\"EDR\")",
+            "rowBackgroundColors": "> table | seriesByName(\"EDR\") | matchValue(c_EDR_EDR)"
+          },
+          "Role": {
+            "data": "> table | seriesByName(\"Role\")",
+            "rowBackgroundColors": "> table | seriesByName(\"Role\") | matchValue(c_Role_Role)"
+          }
+        }
+      },
+      "context": {
+        "c_EDR_EDR": [
+          {
+            "match": "Installed",
+            "value": "#1B5E3B"
+          },
+          {
+            "match": "Missing",
+            "value": "#8A2A24"
+          },
+          {
+            "match": "Stale (>7d)",
+            "value": "#7A5A12"
+          },
+          {
+            "match": "Decommissioned",
+            "value": "#4A5058"
+          }
+        ],
+        "c_Role_Role": [
+          {
+            "match": "Domain Controller",
+            "value": "#4B3A8C"
+          },
+          {
+            "match": "RODC",
+            "value": "#4B3A8C"
+          },
+          {
+            "match": "Server",
+            "value": "#1D4E79"
+          },
+          {
+            "match": "Workstation",
+            "value": "#3C444D"
+          },
+          {
+            "match": "Unknown",
+            "value": "#4A5058"
+          }
+        ]
+      },
+      "eventHandlers": [
+        {
+          "type": "drilldown.setToken",
+          "options": {
+            "tokens": [
+              {
+                "token": "sel_comp",
+                "key": "row.name.value"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "viz_software": {
+      "type": "splunk.table",
+      "title": "Installed software on $sel_comp$ (SentinelOne, 30 d)",
+      "dataSources": {
+        "primary": "ds_t_software"
+      },
+      "options": {
+        "columnFormat": {
+          "Risk": {
+            "data": "> table | seriesByName(\"Risk\")",
+            "rowBackgroundColors": "> table | seriesByName(\"Risk\") | matchValue(c_Risk_Risk)"
+          },
+          "Signed": {
+            "data": "> table | seriesByName(\"Signed\")",
+            "rowBackgroundColors": "> table | seriesByName(\"Signed\") | matchValue(c_Signed_Signed)"
+          }
+        }
+      },
+      "context": {
+        "c_Risk_Risk": [
+          {
+            "match": "critical",
+            "value": "#8A2A24"
+          },
+          {
+            "match": "high",
+            "value": "#8A2A24"
+          },
+          {
+            "match": "medium",
+            "value": "#7A5A12"
+          },
+          {
+            "match": "low",
+            "value": "#1D4E79"
+          }
+        ],
+        "c_Signed_Signed": [
+          {
+            "match": "false",
+            "value": "#7A5A12"
+          }
+        ]
+      }
+    },
+    "viz_edragent": {
+      "type": "splunk.table",
+      "title": "EDR agent details: $sel_comp$",
+      "dataSources": {
+        "primary": "ds_t_edragent"
+      },
+      "options": {}
+    },
+    "viz_riskyapps": {
+      "type": "splunk.table",
+      "title": "Risky applications across fleet (SentinelOne riskLevel ≠ none)",
+      "dataSources": {
+        "primary": "ds_t_riskyapps"
+      },
+      "options": {
+        "columnFormat": {
+          "Risk": {
+            "data": "> table | seriesByName(\"Risk\")",
+            "rowBackgroundColors": "> table | seriesByName(\"Risk\") | matchValue(c_Risk_Risk)"
+          }
+        }
+      },
+      "context": {
+        "c_Risk_Risk": [
+          {
+            "match": "critical",
+            "value": "#8A2A24"
+          },
+          {
+            "match": "high",
+            "value": "#8A2A24"
+          },
+          {
+            "match": "medium",
+            "value": "#7A5A12"
+          },
+          {
+            "match": "low",
+            "value": "#1D4E79"
+          }
+        ]
+      }
     }
   },
   "defaults": {
@@ -1194,7 +1522,7 @@
     "type": "absolute",
     "options": {
       "width": 1440,
-      "height": 3940,
+      "height": 4890,
       "display": "auto-scale",
       "backgroundColor": "#111418"
     },
@@ -1384,7 +1712,7 @@
         "type": "block",
         "position": {
           "x": 20,
-          "y": 1610,
+          "y": 1920,
           "w": 695,
           "h": 300
         }
@@ -1394,7 +1722,7 @@
         "type": "block",
         "position": {
           "x": 725,
-          "y": 1610,
+          "y": 1920,
           "w": 695,
           "h": 300
         }
@@ -1404,7 +1732,7 @@
         "type": "block",
         "position": {
           "x": 20,
-          "y": 1925,
+          "y": 2545,
           "w": 1400,
           "h": 40
         }
@@ -1414,7 +1742,7 @@
         "type": "block",
         "position": {
           "x": 20,
-          "y": 1970,
+          "y": 2590,
           "w": 695,
           "h": 300
         }
@@ -1424,7 +1752,7 @@
         "type": "block",
         "position": {
           "x": 725,
-          "y": 1970,
+          "y": 2590,
           "w": 695,
           "h": 300
         }
@@ -1434,7 +1762,7 @@
         "type": "block",
         "position": {
           "x": 20,
-          "y": 2280,
+          "y": 2900,
           "w": 695,
           "h": 320
         }
@@ -1444,7 +1772,7 @@
         "type": "block",
         "position": {
           "x": 725,
-          "y": 2280,
+          "y": 2900,
           "w": 695,
           "h": 320
         }
@@ -1454,7 +1782,7 @@
         "type": "block",
         "position": {
           "x": 20,
-          "y": 2610,
+          "y": 3230,
           "w": 695,
           "h": 320
         }
@@ -1464,7 +1792,7 @@
         "type": "block",
         "position": {
           "x": 725,
-          "y": 2610,
+          "y": 3230,
           "w": 695,
           "h": 320
         }
@@ -1474,7 +1802,7 @@
         "type": "block",
         "position": {
           "x": 20,
-          "y": 2940,
+          "y": 3560,
           "w": 695,
           "h": 300
         }
@@ -1484,7 +1812,7 @@
         "type": "block",
         "position": {
           "x": 725,
-          "y": 2940,
+          "y": 3560,
           "w": 695,
           "h": 300
         }
@@ -1494,7 +1822,7 @@
         "type": "block",
         "position": {
           "x": 20,
-          "y": 3250,
+          "y": 3870,
           "w": 1400,
           "h": 320
         }
@@ -1504,9 +1832,89 @@
         "type": "block",
         "position": {
           "x": 20,
-          "y": 3580,
+          "y": 4200,
           "w": 1400,
           "h": 340
+        }
+      },
+      {
+        "item": "viz_k_edrcov",
+        "type": "block",
+        "position": {
+          "x": 20,
+          "y": 1610,
+          "w": 225,
+          "h": 110
+        }
+      },
+      {
+        "item": "viz_k_edrmiss",
+        "type": "block",
+        "position": {
+          "x": 255,
+          "y": 1610,
+          "w": 225,
+          "h": 110
+        }
+      },
+      {
+        "item": "viz_k_edrinf",
+        "type": "block",
+        "position": {
+          "x": 490,
+          "y": 1610,
+          "w": 225,
+          "h": 110
+        }
+      },
+      {
+        "item": "viz_edrinf",
+        "type": "block",
+        "position": {
+          "x": 20,
+          "y": 1730,
+          "w": 695,
+          "h": 180
+        }
+      },
+      {
+        "item": "viz_edrmiss",
+        "type": "block",
+        "position": {
+          "x": 725,
+          "y": 1610,
+          "w": 695,
+          "h": 300
+        }
+      },
+      {
+        "item": "viz_software",
+        "type": "block",
+        "position": {
+          "x": 20,
+          "y": 2230,
+          "w": 695,
+          "h": 300
+        }
+      },
+      {
+        "item": "viz_edragent",
+        "type": "block",
+        "position": {
+          "x": 725,
+          "y": 2230,
+          "w": 695,
+          "h": 300
+        }
+      },
+      {
+        "item": "viz_riskyapps",
+        "type": "block",
+        "position": {
+          "x": 20,
+          "y": 4550,
+          "w": 1400,
+          "h": 320
         }
       }
     ],
@@ -1515,6 +1923,7 @@
       "input_comp",
       "input_domain",
       "input_idx",
+      "input_edridx",
       "input_stale",
       "input_spray",
       "input_lgfilter",

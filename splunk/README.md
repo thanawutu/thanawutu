@@ -37,3 +37,40 @@ and clicking a user in a computer's logon list fills the Account input.
 The Account / Computer text is inserted into an LDAP filter: use plain values or `*` wildcards only
 (`5324340`, `53243*`, `WS-*`). **Do not type quotes, parentheses, `&`, `|` or `\`** – they cause
 `ldapsearch ... invalid filter`.
+
+## SentinelOne EDR enrichment (lookup `s1_agent_inventory.csv`)
+The EDR coverage panels and the EDR columns of the computer table read a small lookup with one row per
+agent (fields extracted from `sentinelone:channel:applications` are search-time JSON, so `tstats` is not
+possible and a raw 4,000-host join on every load would be slow). Create it in the **same app as the dashboard**
+(e.g. `search`).
+
+**1. Backfill once** (Search & Reporting, time range is in the query):
+```spl
+index=sentinelone sourcetype="sentinelone:channel:applications" earliest=-30d
+| eval agent=upper(agentComputerName)
+| stats latest(_time) AS LastSeen latest(agentDomain) AS EDR_Domain latest(agentVersion) AS EDR_Version
+        latest(agentMachineType) AS EDR_MachineType latest(agentNetworkStatus) AS EDR_Network
+        latest(agentInfected) AS EDR_Infected latest(agentIsActive) AS EDR_Active
+        latest(agentIsDecommissioned) AS EDR_Decommissioned latest(agentOperationalState) AS EDR_OpState
+        latest(agentOsType) AS EDR_OsType by agent
+| outputlookup s1_agent_inventory.csv
+```
+
+**2. Schedule the daily update** – *Save As → Report*, name `S1 agent inventory – lookup`, then
+*Edit Schedule*: daily (e.g. 02:17), time range *Last 2 days*:
+```spl
+index=sentinelone sourcetype="sentinelone:channel:applications"
+| eval agent=upper(agentComputerName)
+| stats latest(_time) AS LastSeen latest(agentDomain) AS EDR_Domain latest(agentVersion) AS EDR_Version
+        latest(agentMachineType) AS EDR_MachineType latest(agentNetworkStatus) AS EDR_Network
+        latest(agentInfected) AS EDR_Infected latest(agentIsActive) AS EDR_Active
+        latest(agentIsDecommissioned) AS EDR_Decommissioned latest(agentOperationalState) AS EDR_OpState
+        latest(agentOsType) AS EDR_OsType by agent
+| inputlookup append=true s1_agent_inventory.csv
+| sort 0 -LastSeen | dedup agent
+| where LastSeen > relative_time(now(), "-90d")
+| outputlookup s1_agent_inventory.csv
+```
+EDR status in the dashboard: **Installed** (seen ≤ 7 d), **Stale (>7d)**, **Decommissioned**, **Missing** (no agent
+with that computer name). Coverage counts only *enabled* computers that logged on within the stale threshold.
+The software drill-down and the fleet risky-apps panel query the raw index directly.

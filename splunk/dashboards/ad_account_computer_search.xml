@@ -6,6 +6,7 @@
     <input type="text" token="comp"><label>Computer (name)</label><default>*</default></input>
     <input type="text" token="domain"><label>LDAP domain stanza</label><default>default</default></input>
     <input type="text" token="idx"><label>Windows index</label><default>wineventlog</default></input>
+    <input type="text" token="edridx"><label>EDR index (SentinelOne)</label><default>sentinelone</default></input>
     <input type="dropdown" token="stale"><label>Stale (days)</label><choice value="30">30</choice><choice value="60">60</choice><choice value="90">90</choice><choice value="180">180</choice><default>90</default></input>
     <input type="dropdown" token="spray"><label>Spray threshold (accounts)</label><choice value="5">5</choice><choice value="10">10</choice><choice value="20">20</choice><choice value="50">50</choice><default>10</default></input>
     <input type="dropdown" token="lgfilter"><label>Local group actors</label><choice value="| search *">All actors</choice><choice value="| where substr(By,len(By))!=printf(&quot;%c&quot;,36)">Exclude computer accounts (GPO)</choice><default>| search *</default></input>
@@ -237,11 +238,12 @@
   <row>
     <panel>
       <table><title>AD computers — click a row</title>
-        <search base="base_computers"><query><![CDATA[| table name Role operatingSystem Status DaysSinceLogon ManagedBy OU | sort name]]></query></search>
+        <search base="base_computers"><query><![CDATA[| eval name_u=upper(name) | lookup s1_agent_inventory.csv agent AS name_u OUTPUT LastSeen EDR_Version EDR_MachineType EDR_Network EDR_Infected EDR_Active EDR_Decommissioned | eval EDR=case(isnull(LastSeen),"Missing", lower(EDR_Decommissioned)="true","Decommissioned", now()-LastSeen>7*86400,"Stale (>7d)", true(),"Installed"), EDR_SeenDays=if(isnull(LastSeen),"-",round((now()-LastSeen)/86400,0)) | table name Role operatingSystem Status DaysSinceLogon EDR EDR_Version EDR_SeenDays OU | sort name]]></query></search>
         <option name="count">10</option>
         <option name="drilldown">row</option>
         <format type="color" field="Status"><colorPalette type="map">{"Enabled":#1B5E3B,"Disabled":#4A5058,"Locked":#8A2A24}</colorPalette></format>
         <format type="color" field="Role"><colorPalette type="map">{"Domain Controller":#4B3A8C,"RODC":#4B3A8C,"Server":#1D4E79,"Workstation":#3C444D,"Unknown":#4A5058}</colorPalette></format>
+        <format type="color" field="EDR"><colorPalette type="map">{"Installed":#1B5E3B,"Missing":#8A2A24,"Stale (>7d)":#7A5A12,"Decommissioned":#4A5058}</colorPalette></format>
         <drilldown>
           <set token="sel_comp">$row.name$</set>
         </drilldown>
@@ -252,6 +254,55 @@
         <search base="base_computers"><query><![CDATA[| stats count by operatingSystem | sort -count]]></query></search>
         <option name="charting.chart">pie</option>
       </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <single><title>EDR coverage (active computers)</title>
+        <search base="base_computers"><query><![CDATA[| where Status="Enabled" AND tonumber(DaysSinceLogon)<=$stale$ | eval name_u=upper(name) | lookup s1_agent_inventory.csv agent AS name_u OUTPUT LastSeen EDR_Version EDR_MachineType EDR_Network EDR_Infected EDR_Active EDR_Decommissioned | eval EDR=case(isnull(LastSeen),"Missing", lower(EDR_Decommissioned)="true","Decommissioned", now()-LastSeen>7*86400,"Stale (>7d)", true(),"Installed"), EDR_SeenDays=if(isnull(LastSeen),"-",round((now()-LastSeen)/86400,0)) | stats count(eval(EDR="Installed")) AS ok count AS total | eval count=if(total>0,round(ok/total*100,1)."%","-") | table count]]></query></search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <single><title>Active computers without EDR</title>
+        <search base="base_computers"><query><![CDATA[| where Status="Enabled" AND tonumber(DaysSinceLogon)<=$stale$ | eval name_u=upper(name) | lookup s1_agent_inventory.csv agent AS name_u OUTPUT LastSeen EDR_Version EDR_MachineType EDR_Network EDR_Infected EDR_Active EDR_Decommissioned | eval EDR=case(isnull(LastSeen),"Missing", lower(EDR_Decommissioned)="true","Decommissioned", now()-LastSeen>7*86400,"Stale (>7d)", true(),"Installed"), EDR_SeenDays=if(isnull(LastSeen),"-",round((now()-LastSeen)/86400,0)) | where EDR!="Installed" | stats count]]></query></search>
+        <option name="drilldown">none</option>
+        <option name="colorMode">block</option>
+        <option name="useColors">1</option>
+        <option name="rangeValues">[0, 19]</option>
+        <option name="rangeColors">["0x53A051", "0xF8BE34", "0xDC4E41"]</option>
+      </single>
+    </panel>
+    <panel>
+      <single><title>EDR agents infected</title>
+        <search base="base_computers"><query><![CDATA[| eval name_u=upper(name) | lookup s1_agent_inventory.csv agent AS name_u OUTPUT LastSeen EDR_Version EDR_MachineType EDR_Network EDR_Infected EDR_Active EDR_Decommissioned | eval EDR=case(isnull(LastSeen),"Missing", lower(EDR_Decommissioned)="true","Decommissioned", now()-LastSeen>7*86400,"Stale (>7d)", true(),"Installed"), EDR_SeenDays=if(isnull(LastSeen),"-",round((now()-LastSeen)/86400,0)) | where lower(EDR_Infected)="true" | stats count]]></query></search>
+        <option name="drilldown">none</option>
+        <option name="colorMode">block</option>
+        <option name="useColors">1</option>
+        <option name="rangeValues">[0]</option>
+        <option name="rangeColors">["0x53A051", "0xDC4E41"]</option>
+      </single>
+    </panel>
+    <panel>
+      <table><title>Active computers (≤ $stale$ d) without healthy EDR — click a row</title>
+        <search base="base_computers"><query><![CDATA[| where Status="Enabled" AND tonumber(DaysSinceLogon)<=$stale$ | eval name_u=upper(name) | lookup s1_agent_inventory.csv agent AS name_u OUTPUT LastSeen EDR_Version EDR_MachineType EDR_Network EDR_Infected EDR_Active EDR_Decommissioned | eval EDR=case(isnull(LastSeen),"Missing", lower(EDR_Decommissioned)="true","Decommissioned", now()-LastSeen>7*86400,"Stale (>7d)", true(),"Installed"), EDR_SeenDays=if(isnull(LastSeen),"-",round((now()-LastSeen)/86400,0)) | where EDR!="Installed" | table name Role operatingSystem DaysSinceLogon EDR EDR_SeenDays OU | sort EDR -DaysSinceLogon name]]></query></search>
+        <option name="count">10</option>
+        <option name="drilldown">row</option>
+        <format type="color" field="EDR"><colorPalette type="map">{"Installed":#1B5E3B,"Missing":#8A2A24,"Stale (>7d)":#7A5A12,"Decommissioned":#4A5058}</colorPalette></format>
+        <format type="color" field="Role"><colorPalette type="map">{"Domain Controller":#4B3A8C,"RODC":#4B3A8C,"Server":#1D4E79,"Workstation":#3C444D,"Unknown":#4A5058}</colorPalette></format>
+        <drilldown>
+          <set token="sel_comp">$row.name$</set>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table><title>SentinelOne agents reporting infected</title>
+        <search base="base_computers"><query><![CDATA[| eval name_u=upper(name) | lookup s1_agent_inventory.csv agent AS name_u OUTPUT LastSeen EDR_Version EDR_MachineType EDR_Network EDR_Infected EDR_Active EDR_Decommissioned | eval EDR=case(isnull(LastSeen),"Missing", lower(EDR_Decommissioned)="true","Decommissioned", now()-LastSeen>7*86400,"Stale (>7d)", true(),"Installed"), EDR_SeenDays=if(isnull(LastSeen),"-",round((now()-LastSeen)/86400,0)) | where lower(EDR_Infected)="true" | table name Role EDR_Version EDR_Network EDR_SeenDays OU]]></query></search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+      </table>
     </panel>
   </row>
   <row depends="$sel_comp$">
@@ -283,6 +334,29 @@
         <option name="count">10</option>
         <option name="drilldown">none</option>
         <format type="color" field="Action"><colorPalette type="map">{"Added to group":#7A5A12,"Locked out":#8A2A24,"Deleted":#8A2A24,"Disabled":#4A5058,"Password reset":#1D4E79,"Created":#1B5E3B}</colorPalette></format>
+      </table>
+    </panel>
+  </row>
+  <row depends="$sel_comp$">
+    <panel>
+      <table><title>Installed software on $sel_comp$ (SentinelOne, 30 d)</title>
+        <search><query><![CDATA[index="$edridx$" sourcetype="sentinelone:channel:applications" agentComputerName="$sel_comp$" earliest=-30d
+| stats latest(version) AS Version latest(publisher) AS Publisher latest(riskLevel) AS Risk latest(signed) AS Signed max(installedAt) AS InstalledAt by name
+| eval r=case(Risk="critical",4,Risk="high",3,Risk="medium",2,Risk="low",1,true(),0) | sort -r name | fields - r | rename name AS Application]]></query><earliest>0</earliest><latest>now</latest></search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <format type="color" field="Risk"><colorPalette type="map">{"critical":#8A2A24,"high":#8A2A24,"medium":#7A5A12,"low":#1D4E79}</colorPalette></format>
+        <format type="color" field="Signed"><colorPalette type="map">{"false":#7A5A12}</colorPalette></format>
+      </table>
+    </panel>
+    <panel>
+      <table><title>EDR agent details: $sel_comp$</title>
+        <search><query><![CDATA[| inputlookup s1_agent_inventory.csv where agent="$sel_comp$"
+| eval LastSeen=strftime(LastSeen,"%Y-%m-%d %H:%M")
+| fields - agent
+| transpose 0 column_name=Field | rename "row 1" AS Value]]></query><earliest>0</earliest><latest>now</latest></search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
       </table>
     </panel>
   </row>
@@ -409,6 +483,18 @@ $lgfilter$
         <format type="color" field="Action"><colorPalette type="map">{"Added":#7A5A12,"Removed":#1D4E79}</colorPalette></format>
         <format type="color" field="Privileged"><colorPalette type="map">{"YES":#8A2A24}</colorPalette></format>
         <format type="color" field="MemberType"><colorPalette type="map">{"Domain account":#1B5E3B,"Local / other domain":#7A5A12,"Builtin group":#4B3A8C}</colorPalette></format>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table><title>Risky applications across fleet (SentinelOne riskLevel ≠ none)</title>
+        <search><query><![CDATA[index="$edridx$" sourcetype="sentinelone:channel:applications" agentComputerName="$comp$" riskLevel!="none"
+| stats dc(agentComputerName) AS Computers values(version) AS Versions latest(publisher) AS Publisher latest(riskLevel) AS Risk by name
+| eval r=case(Risk="critical",4,Risk="high",3,Risk="medium",2,Risk="low",1,true(),0) | sort -r -Computers | fields - r | eval Versions=mvjoin(mvindex(Versions,0,4),", ") | rename name AS Application | head 100]]></query><earliest>$tr.earliest$</earliest><latest>$tr.latest$</latest></search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <format type="color" field="Risk"><colorPalette type="map">{"critical":#8A2A24,"high":#8A2A24,"medium":#7A5A12,"low":#1D4E79}</colorPalette></format>
       </table>
     </panel>
   </row>
