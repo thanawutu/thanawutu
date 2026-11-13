@@ -179,4 +179,8 @@ Security observations to report: (1) DC logging gap, (2) enabled accounts with `
 
 | 4771 / 4776 (S15) | 4771: `Failure_Code` **and** `Error_Code` 100 % (codes 0x12, 0x18); 4776: `Error_Code` 100 % (0x0, 0xc0000064, 0xc000006a, 0xc0000072, 0xc0000234); `user` 100 %, `src` 98–100 % | coalesce order `Sub_Status, Failure_Code, Error_Code`; all observed codes mapped to reasons; 4776 `0x0` (success) excluded |
 
+| SentinelOne sourcetypes (S16a) | activities, **agents** (~51 k/7 d), applications (~412 k/7 d), groups, threats (~3.7 k/7 d), mgmt | – |
+| S1 applications cadence (S16a) | 429–2,552 agents/day, spiky → change feed, not full inventory | status lookup built from **agents** channel instead |
+| S1 agents fields (S17a) | computerName, lastActiveDate, updatedAt, domain, agentVersion, machineType, networkStatus, infected, activeThreats, isActive, isDecommissioned, operationalState, osName, isUpToDate, appsVulnerabilityStatus, lastLoggedInUserName, siteName, groupName – all 99.5 % | backfill SPL uses these names as-is |
+
 Pending (optional): S6 (30-day check of 4720/4743/4757), S8 (AD count match).
