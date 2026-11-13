@@ -30,7 +30,6 @@ REASON = ('eval code=lower(coalesce(Sub_Status,Error_Code,Failure_Code,"-")), '
           'code="0xc0000224","Must change password",code="0xc000006f","Outside logon hours",'
           'code="0xc0000070","Workstation restricted",true(),code)')
 OU = 'OU=replace(distinguishedName,"^.*?,(?=(OU|CN|DC)=)","")'
-BS4 = "\\" * 4   # SPL string "\\\\" = regex for one literal backslash
 PRIV = ('(?i)^(Domain Admins|Enterprise Admins|Schema Admins|Administrators|Account Operators|Backup Operators|'
         'Server Operators|Print Operators|DnsAdmins|Group Policy Creator Owners|Enterprise Key Admins|Key Admins)$')
 
@@ -43,7 +42,7 @@ def ds(i, q, base=None, time="tr"):
 ds("users", f'''
 | ldapsearch domain="$domain$"
     search="(&(objectCategory=person)(objectClass=user)(!(userAccountControl:1.2.840.113556.1.4.803:=2048))(|(sAMAccountName=$acct$)(cn=$acct$)(displayName=$acct$)(mail=$acct$)(userPrincipalName=$acct$)))"
-    attrs="sAMAccountName,cn,displayName,userPrincipalName,mail,title,department,manager,userAccountControl,lockoutTime,lastLogonTimestamp,pwdLastSet,whenCreated,memberOf,distinguishedName"
+    attrs="sAMAccountName,cn,objectSid,displayName,userPrincipalName,mail,title,department,manager,userAccountControl,lockoutTime,lastLogonTimestamp,pwdLastSet,whenCreated,memberOf,distinguishedName"
 | eval lastLogon_e=strptime(lastLogonTimestamp,{ISO}), pwd_e=strptime(pwdLastSet,{ISO}), lock_e=strptime(lockoutTime,{ISO}), created_e=strptime(whenCreated,{WHENCREATED})
 | eval Status=case(isnotnull(mvfind(userAccountControl,"ACCOUNTDISABLE")),"Disabled", lock_e>0,"Locked", true(),"Enabled")
 | eval PwdNeverExpires=if(isnotnull(mvfind(userAccountControl,"DONT_EXPIRE_PASSWD")),"Yes","No")
@@ -99,7 +98,7 @@ ds("k_lock", '| where Result="Lockout" | stats sum(count) AS count | fillnull va
 ds("k_dcmiss", '| where Status="NOT LOGGING" | stats count', "dc_cov")
 
 # Accounts
-ds("t_users", "| table sAMAccountName cn displayName mail title department Manager Status PwdNotRequired PwdNeverExpires DaysSinceLogon PwdAgeDays Groups Created OU | sort sAMAccountName", "users")
+ds("t_users", "| table sAMAccountName cn displayName mail title department Manager Status PwdNotRequired PwdNeverExpires DaysSinceLogon PwdAgeDays Groups Created OU objectSid | sort sAMAccountName", "users")
 ds("t_groups", f'''| search sAMAccountName="$sel_user$" | fields memberOf | mvexpand memberOf
 | eval Group=replace(mvindex(split(memberOf,","),0),"^CN=",""), Privileged=if(match(Group,"{PRIV}"),"YES","-")
 | table Group Privileged | sort -Privileged Group''', "users")
@@ -113,8 +112,8 @@ ds("t_used", f'''
 ds("c_timeline", '| search user="$sel_user$" | timechart span=1h sum(count) AS count by Result', "auth")
 ds("t_changes", f'''
 {SRC} EventCode IN (4720,4722,4723,4724,4725,4726,4738,4740,4767,4728,4729,4732,4733,4756,4757)
-| eval target=lower(coalesce(user,mvindex(Account_Name,-1))), sid_user=lower(replace(mvindex(Security_ID,-1),"^.*{BS4}",""))
-| where target=lower("$sel_user$") OR target=lower("$sel_cn$") OR sid_user=lower("$sel_user$")
+| eval target=lower(coalesce(user,mvindex(Account_Name,-1))), member_sid=if(mvcount(Security_ID)>=3,mvindex(Security_ID,1),"-")
+| where target=lower("$sel_user$") OR target=lower("$sel_cn$") OR member_sid="$sel_sid$"
 | eval Action=case(EventCode=4720,"Created",EventCode=4722,"Enabled",EventCode=4723,"Password change",EventCode=4724,"Password reset",EventCode=4725,"Disabled",EventCode=4726,"Deleted",EventCode=4738,"Changed",EventCode=4740,"Locked out",EventCode=4767,"Unlocked",EventCode=4728 OR EventCode=4732 OR EventCode=4756,"Added to group",EventCode=4729 OR EventCode=4733 OR EventCode=4757,"Removed from group")
 | eval By=coalesce(src_user,mvindex(Account_Name,0)), Group=coalesce(Group_Name,"-"), Caller=coalesce(Caller_Computer_Name,"-"), DC=upper(mvindex(split(host,"."),0)), Time=strftime(_time,"%Y-%m-%d %H:%M:%S")
 | table Time Action By Group Caller DC EventCode | sort -Time | head 200
@@ -193,7 +192,7 @@ for n, (d, t, thr) in enumerate(kpis):
 
 v("md_acc", "markdown", None, None, (L, 195, FW, 40), 2, md="## Accounts")
 v("viz_users", "table", "AD accounts — click a row", "t_users", (L, 240, FW, 340), 3,
-  drill=[("sel_user", "sAMAccountName"), ("sel_cn", "cn")],
+  drill=[("sel_user", "sAMAccountName"), ("sel_cn", "cn"), ("sel_sid", "objectSid")],
   colors={"Status": "Status", "PwdNeverExpires": "PwdNeverExpires", "PwdNotRequired": "PwdNotRequired"})
 v("viz_groups", "table", "Group membership: $sel_user$", "t_groups", (L, 590, HW, 300), 4, colors={"Privileged": "Privileged"})
 v("viz_used", "table", "Computers used by $sel_user$ (click → Computer)", "t_used", (RX, 590, HW, 300), 4,
@@ -206,14 +205,14 @@ v("viz_comps", "table", "AD computers — click a row", "t_comps", (L, 1260, 100
   drill=[("sel_comp", "name")], colors={"Status": "Status", "Role": "Role"})
 v("viz_os", "pie", "Computers by operating system", "c_os", (1030, 1260, 390, 340), 7)
 v("viz_logged", "table", "Accounts logged on to $sel_comp$ (click → Account)", "t_logged", (L, 1610, HW, 300), 8,
-  drill=[("acct", "user"), ("sel_user", "user"), ("sel_cn", "user")])
+  drill=[("acct", "user"), ("sel_user", "user"), ("sel_cn", "user"), ("sel_sid", "user")])
 v("viz_compchg", "table", "Computer account changes: $sel_comp$ (4741–4743)", "t_compchg", (RX, 1610, HW, 300), 8, colors={"Action": "Action"})
 
 v("md_hyg", "markdown", None, None, (L, 1925, FW, 40), 9, md="## Hygiene & threat indicators")
 v("viz_stale_u", "table", "Stale enabled accounts (> $stale$ days)", "t_stale_u", (L, 1970, HW, 300), 10)
 v("viz_stale_c", "table", "Stale enabled computers (> $stale$ days)", "t_stale_c", (RX, 1970, HW, 300), 10, colors={"Role": "Role"})
 v("viz_topfail", "table", "Top failed-logon accounts (brute force, T1110.001)", "t_topfail", (L, 2280, HW, 320), 11,
-  drill=[("acct", "user"), ("sel_user", "user"), ("sel_cn", "user")])
+  drill=[("acct", "user"), ("sel_user", "user"), ("sel_cn", "user"), ("sel_sid", "user")])
 v("viz_spray", "table", "Password-spray sources: failures across ≥ $spray$ accounts (T1110.003)", "t_spray", (RX, 2280, HW, 320), 11)
 v("viz_lockcaller", "table", "Lockout sources (4740 Caller_Computer_Name)", "t_lockcaller", (L, 2610, HW, 300), 12)
 v("viz_dccov", "table", "Domain controller log coverage (last 24h)", "dc_cov", (RX, 2610, HW, 300), 12, colors={"Status": "StatusDC"})

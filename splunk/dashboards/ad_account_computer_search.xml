@@ -14,7 +14,7 @@
   <search id="base_users">
     <query><![CDATA[| ldapsearch domain="$domain$"
     search="(&(objectCategory=person)(objectClass=user)(!(userAccountControl:1.2.840.113556.1.4.803:=2048))(|(sAMAccountName=$acct$)(cn=$acct$)(displayName=$acct$)(mail=$acct$)(userPrincipalName=$acct$)))"
-    attrs="sAMAccountName,cn,displayName,userPrincipalName,mail,title,department,manager,userAccountControl,lockoutTime,lastLogonTimestamp,pwdLastSet,whenCreated,memberOf,distinguishedName"
+    attrs="sAMAccountName,cn,objectSid,displayName,userPrincipalName,mail,title,department,manager,userAccountControl,lockoutTime,lastLogonTimestamp,pwdLastSet,whenCreated,memberOf,distinguishedName"
 | eval lastLogon_e=strptime(lastLogonTimestamp,"%Y-%m-%dT%H:%M:%S.%6NZ"), pwd_e=strptime(pwdLastSet,"%Y-%m-%dT%H:%M:%S.%6NZ"), lock_e=strptime(lockoutTime,"%Y-%m-%dT%H:%M:%S.%6NZ"), created_e=strptime(whenCreated,"%Y-%m-%d %H:%M:%S%:z")
 | eval Status=case(isnotnull(mvfind(userAccountControl,"ACCOUNTDISABLE")),"Disabled", lock_e>0,"Locked", true(),"Enabled")
 | eval PwdNeverExpires=if(isnotnull(mvfind(userAccountControl,"DONT_EXPIRE_PASSWD")),"Yes","No")
@@ -136,7 +136,7 @@
   <row>
     <panel>
       <table><title>AD accounts — click a row</title>
-        <search base="base_users"><query><![CDATA[| table sAMAccountName cn displayName mail title department Manager Status PwdNotRequired PwdNeverExpires DaysSinceLogon PwdAgeDays Groups Created OU | sort sAMAccountName]]></query></search>
+        <search base="base_users"><query><![CDATA[| table sAMAccountName cn displayName mail title department Manager Status PwdNotRequired PwdNeverExpires DaysSinceLogon PwdAgeDays Groups Created OU objectSid | sort sAMAccountName]]></query></search>
         <option name="count">10</option>
         <option name="drilldown">row</option>
         <format type="color" field="Status"><colorPalette type="map">{"Enabled":#1B5E3B,"Disabled":#4A5058,"Locked":#8A2A24}</colorPalette></format>
@@ -145,6 +145,7 @@
         <drilldown>
           <set token="sel_user">$row.sAMAccountName$</set>
           <set token="sel_cn">$row.cn$</set>
+          <set token="sel_sid">$row.objectSid$</set>
         </drilldown>
       </table>
     </panel>
@@ -189,8 +190,8 @@
     <panel>
       <table><title>AD changes to $sel_user$</title>
         <search><query><![CDATA[index="$idx$" source="WinEventLog:Security" EventCode IN (4720,4722,4723,4724,4725,4726,4738,4740,4767,4728,4729,4732,4733,4756,4757)
-| eval target=lower(coalesce(user,mvindex(Account_Name,-1))), sid_user=lower(replace(mvindex(Security_ID,-1),"^.*\\\\",""))
-| where target=lower("$sel_user$") OR target=lower("$sel_cn$") OR sid_user=lower("$sel_user$")
+| eval target=lower(coalesce(user,mvindex(Account_Name,-1))), member_sid=if(mvcount(Security_ID)>=3,mvindex(Security_ID,1),"-")
+| where target=lower("$sel_user$") OR target=lower("$sel_cn$") OR member_sid="$sel_sid$"
 | eval Action=case(EventCode=4720,"Created",EventCode=4722,"Enabled",EventCode=4723,"Password change",EventCode=4724,"Password reset",EventCode=4725,"Disabled",EventCode=4726,"Deleted",EventCode=4738,"Changed",EventCode=4740,"Locked out",EventCode=4767,"Unlocked",EventCode=4728 OR EventCode=4732 OR EventCode=4756,"Added to group",EventCode=4729 OR EventCode=4733 OR EventCode=4757,"Removed from group")
 | eval By=coalesce(src_user,mvindex(Account_Name,0)), Group=coalesce(Group_Name,"-"), Caller=coalesce(Caller_Computer_Name,"-"), DC=upper(mvindex(split(host,"."),0)), Time=strftime(_time,"%Y-%m-%d %H:%M:%S")
 | table Time Action By Group Caller DC EventCode | sort -Time | head 200]]></query><earliest>$tr.earliest$</earliest><latest>$tr.latest$</latest></search>
@@ -241,6 +242,7 @@
           <set token="acct">$row.user$</set>
           <set token="sel_user">$row.user$</set>
           <set token="sel_cn">$row.user$</set>
+          <set token="sel_sid">$row.user$</set>
         </drilldown>
       </table>
     </panel>
@@ -289,6 +291,7 @@
           <set token="acct">$row.user$</set>
           <set token="sel_user">$row.user$</set>
           <set token="sel_cn">$row.user$</set>
+          <set token="sel_sid">$row.user$</set>
         </drilldown>
       </table>
     </panel>
