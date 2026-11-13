@@ -1,0 +1,372 @@
+<form version="1.1" theme="dark">
+  <label>AD Account &amp; Computer Search</label>
+  <description>Look up Active Directory user accounts and computer objects (LDAP via SA-ldapsearch) and correlate them with Windows Security events. Click a row to drill down.</description>
+
+  <!-- ============================================================ -->
+  <!-- INPUTS                                                        -->
+  <!-- ============================================================ -->
+  <fieldset submitButton="true" autoRun="true">
+    <input type="text" token="acct" searchWhenChanged="false">
+      <label>Account (sAMAccountName / name / mail)</label>
+      <default>*</default>
+      <initialValue>*</initialValue>
+    </input>
+    <input type="text" token="comp" searchWhenChanged="false">
+      <label>Computer (name)</label>
+      <default>*</default>
+      <initialValue>*</initialValue>
+    </input>
+    <input type="text" token="domain">
+      <label>LDAP domain stanza</label>
+      <default>default</default>
+    </input>
+    <input type="text" token="idx">
+      <label>Windows event index</label>
+      <default>wineventlog</default>
+    </input>
+    <input type="dropdown" token="stale">
+      <label>Stale threshold (days)</label>
+      <choice value="30">30</choice>
+      <choice value="60">60</choice>
+      <choice value="90">90</choice>
+      <choice value="180">180</choice>
+      <default>90</default>
+    </input>
+    <input type="time" token="tr">
+      <label>Event time range</label>
+      <default>
+        <earliest>-7d@h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+  </fieldset>
+
+  <!-- ============================================================ -->
+  <!-- BASE SEARCHES                                                 -->
+  <!-- ============================================================ -->
+
+  <!-- AD user objects -->
+  <search id="base_users">
+    <query><![CDATA[
+| ldapsearch domain="$domain$"
+    search="(&(objectCategory=person)(objectClass=user)(|(sAMAccountName=$acct$)(cn=$acct$)(displayName=$acct$)(mail=$acct$)(userPrincipalName=$acct$)))"
+    attrs="sAMAccountName,displayName,userPrincipalName,mail,title,department,manager,description,userAccountControl,lockoutTime,lastLogonTimestamp,pwdLastSet,whenCreated,whenChanged,memberOf,distinguishedName"
+| eval Status=case(isnotnull(mvfind(userAccountControl,"ACCOUNTDISABLE")),"Disabled",
+                   isnotnull(lockoutTime) AND lockoutTime!="0" AND lockoutTime!="1601-01-01T00:00:00Z","Locked",
+                   true(),"Enabled")
+| eval PwdNeverExpires=if(isnotnull(mvfind(userAccountControl,"DONT_EXPIRE_PASSWD")),"Yes","No")
+| eval lastLogon_e=coalesce(strptime(lastLogonTimestamp,"%Y-%m-%dT%H:%M:%S.%6NZ"),strptime(lastLogonTimestamp,"%Y-%m-%dT%H:%M:%SZ"))
+| eval pwdLastSet_e=coalesce(strptime(pwdLastSet,"%Y-%m-%dT%H:%M:%S.%6NZ"),strptime(pwdLastSet,"%Y-%m-%dT%H:%M:%SZ"))
+| eval DaysSinceLogon=if(isnull(lastLogon_e) OR lastLogon_e<0,"never",round((now()-lastLogon_e)/86400,0))
+| eval PwdAgeDays=if(isnull(pwdLastSet_e) OR pwdLastSet_e<0,"never",round((now()-pwdLastSet_e)/86400,0))
+| eval Manager=replace(mvindex(split(manager,","),0),"^CN=","")
+| eval Groups=mvcount(memberOf)
+| eval OU=replace(distinguishedName,"^CN=[^,]+,","")
+    ]]></query>
+    <earliest>0</earliest>
+    <latest>now</latest>
+  </search>
+
+  <!-- AD computer objects -->
+  <search id="base_computers">
+    <query><![CDATA[
+| ldapsearch domain="$domain$"
+    search="(&(objectClass=computer)(|(name=$comp$)(dNSHostName=$comp$)))"
+    attrs="name,dNSHostName,operatingSystem,operatingSystemVersion,description,managedBy,userAccountControl,lastLogonTimestamp,pwdLastSet,whenCreated,whenChanged,distinguishedName"
+| eval Status=if(isnotnull(mvfind(userAccountControl,"ACCOUNTDISABLE")),"Disabled","Enabled")
+| eval Role=case(isnotnull(mvfind(userAccountControl,"SERVER_TRUST_ACCOUNT")),"Domain Controller",
+                 match(operatingSystem,"(?i)server"),"Server",
+                 true(),"Workstation")
+| eval lastLogon_e=coalesce(strptime(lastLogonTimestamp,"%Y-%m-%dT%H:%M:%S.%6NZ"),strptime(lastLogonTimestamp,"%Y-%m-%dT%H:%M:%SZ"))
+| eval DaysSinceLogon=if(isnull(lastLogon_e) OR lastLogon_e<0,"never",round((now()-lastLogon_e)/86400,0))
+| eval ManagedBy=replace(mvindex(split(managedBy,","),0),"^CN=","")
+| eval OU=replace(distinguishedName,"^CN=[^,]+,","")
+    ]]></query>
+    <earliest>0</earliest>
+    <latest>now</latest>
+  </search>
+
+  <!-- Windows Security authentication events (CIM-style fields from Splunk Add-on for Microsoft Windows) -->
+  <search id="base_auth">
+    <query><![CDATA[
+index="$idx$" source="*WinEventLog:Security" EventCode IN (4624,4625,4740,4771,4776)
+  (user="$acct$" OR Account_Name="$acct$" OR Target_User_Name="$acct$")
+  (dest="$comp$*" OR ComputerName="$comp$*" OR src="$comp$*" OR Workstation_Name="$comp$*")
+| eval user=lower(coalesce(user,Target_User_Name,mvindex(Account_Name,-1)))
+| search user!="*$" user!="-" user!="anonymous logon"
+| eval dest=lower(coalesce(dest,ComputerName)), src=coalesce(src,Source_Network_Address,Workstation_Name,"-")
+| eval Result=case(EventCode=4624,"Success",EventCode=4740,"Lockout",true(),"Failure")
+| fields _time user dest src EventCode Result Logon_Type Failure_Reason Status Sub_Status
+    ]]></query>
+    <earliest>$tr.earliest$</earliest>
+    <latest>$tr.latest$</latest>
+  </search>
+
+  <!-- ============================================================ -->
+  <!-- ROW 1: KPIs                                                   -->
+  <!-- ============================================================ -->
+  <row>
+    <panel>
+      <single>
+        <title>Matching accounts</title>
+        <search base="base_users"><query>| stats count</query></search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Disabled / Locked accounts</title>
+        <search base="base_users"><query>| where Status!="Enabled" | stats count</query></search>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
+        <option name="rangeValues">[0,10]</option>
+        <option name="useColors">1</option>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Matching computers</title>
+        <search base="base_computers"><query>| stats count</query></search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Failed logons (time range)</title>
+        <search base="base_auth"><query>| where Result="Failure" | stats count</query></search>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
+        <option name="rangeValues">[10,100]</option>
+        <option name="useColors">1</option>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Account lockouts (4740)</title>
+        <search base="base_auth"><query>| where Result="Lockout" | stats count</query></search>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x53a051","0xdc4e41"]</option>
+        <option name="rangeValues">[0]</option>
+        <option name="useColors">1</option>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+  </row>
+
+  <!-- ============================================================ -->
+  <!-- ROW 2: ACCOUNT SEARCH                                         -->
+  <!-- ============================================================ -->
+  <row>
+    <panel>
+      <title>AD accounts — click a row for details</title>
+      <table>
+        <search base="base_users">
+          <query>| table sAMAccountName displayName mail title department Manager Status PwdNeverExpires DaysSinceLogon PwdAgeDays Groups whenCreated OU
+| sort sAMAccountName</query>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">row</option>
+        <format type="color" field="Status">
+          <colorPalette type="map">{"Enabled":#53A051,"Disabled":#708794,"Locked":#DC4E41}</colorPalette>
+        </format>
+        <format type="color" field="PwdNeverExpires">
+          <colorPalette type="map">{"Yes":#F8BE34}</colorPalette>
+        </format>
+        <drilldown>
+          <set token="sel_user">$row.sAMAccountName$</set>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <row depends="$sel_user$">
+    <panel>
+      <title>Group membership: $sel_user$</title>
+      <table>
+        <search base="base_users">
+          <query>| search sAMAccountName="$sel_user$"
+| fields memberOf | mvexpand memberOf
+| eval Group=replace(mvindex(split(memberOf,","),0),"^CN=",""),
+       Privileged=if(match(Group,"(?i)^(Domain Admins|Enterprise Admins|Schema Admins|Administrators|Account Operators|Backup Operators|Server Operators|Print Operators|DnsAdmins|Group Policy Creator Owners)$"),"YES","")
+| table Group Privileged memberOf | sort -Privileged Group</query>
+        </search>
+        <option name="count">10</option>
+        <format type="color" field="Privileged">
+          <colorPalette type="map">{"YES":#DC4E41}</colorPalette>
+        </format>
+      </table>
+    </panel>
+    <panel>
+      <title>Computers used by $sel_user$</title>
+      <table>
+        <search>
+          <query>index="$idx$" source="*WinEventLog:Security" EventCode=4624 (user="$sel_user$" OR Target_User_Name="$sel_user$")
+| eval dest=lower(coalesce(dest,ComputerName)), src=coalesce(src,Source_Network_Address,Workstation_Name,"-")
+| stats count AS Logons values(Logon_Type) AS LogonTypes values(src) AS Sources min(_time) AS First max(_time) AS Last BY dest
+| convert ctime(First) ctime(Last) | sort -Logons</query>
+          <earliest>$tr.earliest$</earliest>
+          <latest>$tr.latest$</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">row</option>
+        <drilldown>
+          <set token="form.comp">$row.dest$</set>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <row depends="$sel_user$">
+    <panel>
+      <title>Logon activity timeline: $sel_user$</title>
+      <chart>
+        <search base="base_auth">
+          <query>| search user="$sel_user$" | timechart count BY Result</query>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.fieldColors">{"Success":0x53A051,"Failure":0xDC4E41,"Lockout":0xF8BE34}</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>AD changes to $sel_user$ (account management)</title>
+      <table>
+        <search>
+          <query>index="$idx$" source="*WinEventLog:Security" EventCode IN (4720,4722,4723,4724,4725,4726,4738,4740,4767,4728,4729,4732,4733,4756,4757)
+  (Target_User_Name="$sel_user$" OR Member_Name="*$sel_user$*" OR user="$sel_user$")
+| eval Action=case(EventCode=4720,"Created",EventCode=4722,"Enabled",EventCode=4723,"Pwd change attempt",EventCode=4724,"Pwd reset",
+                   EventCode=4725,"Disabled",EventCode=4726,"Deleted",EventCode=4738,"Changed",EventCode=4740,"Locked out",
+                   EventCode=4767,"Unlocked",in(EventCode,4728,4732,4756),"Added to group",in(EventCode,4729,4733,4757),"Removed from group")
+| eval By=mvindex(Account_Name,0), Group=coalesce(Group_Name,"")
+| table _time Action By Group ComputerName EventCode | sort -_time</query>
+          <earliest>$tr.earliest$</earliest>
+          <latest>$tr.latest$</latest>
+        </search>
+        <option name="count">10</option>
+      </table>
+    </panel>
+  </row>
+
+  <!-- ============================================================ -->
+  <!-- ROW 3: COMPUTER SEARCH                                        -->
+  <!-- ============================================================ -->
+  <row>
+    <panel>
+      <title>AD computers — click a row for details</title>
+      <table>
+        <search base="base_computers">
+          <query>| table name dNSHostName Role operatingSystem operatingSystemVersion Status DaysSinceLogon ManagedBy description whenCreated OU
+| sort name</query>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">row</option>
+        <format type="color" field="Status">
+          <colorPalette type="map">{"Enabled":#53A051,"Disabled":#708794}</colorPalette>
+        </format>
+        <format type="color" field="Role">
+          <colorPalette type="map">{"Domain Controller":#7B56DB,"Server":#006D9C,"Workstation":#3C444D}</colorPalette>
+        </format>
+        <drilldown>
+          <set token="sel_comp">$row.name$</set>
+        </drilldown>
+      </table>
+    </panel>
+    <panel>
+      <title>Computers by operating system</title>
+      <chart>
+        <search base="base_computers">
+          <query>| stats count BY operatingSystem | sort -count</query>
+        </search>
+        <option name="charting.chart">pie</option>
+      </chart>
+    </panel>
+  </row>
+
+  <row depends="$sel_comp$">
+    <panel>
+      <title>Accounts that logged on to $sel_comp$</title>
+      <table>
+        <search>
+          <query>index="$idx$" source="*WinEventLog:Security" EventCode IN (4624,4625) (dest="$sel_comp$*" OR ComputerName="$sel_comp$*")
+| eval user=lower(coalesce(user,Target_User_Name,mvindex(Account_Name,-1)))
+| search user!="*$" user!="-" user!="anonymous logon"
+| eval Result=if(EventCode=4624,"Success","Failure"), src=coalesce(src,Source_Network_Address,Workstation_Name,"-")
+| stats count(eval(Result="Success")) AS Success count(eval(Result="Failure")) AS Failure values(Logon_Type) AS LogonTypes values(src) AS Sources max(_time) AS Last BY user
+| convert ctime(Last) | sort -Success</query>
+          <earliest>$tr.earliest$</earliest>
+          <latest>$tr.latest$</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">row</option>
+        <drilldown>
+          <set token="form.acct">$row.user$</set>
+          <set token="sel_user">$row.user$</set>
+        </drilldown>
+      </table>
+    </panel>
+    <panel>
+      <title>Computer account changes: $sel_comp$ (4741/4742/4743)</title>
+      <table>
+        <search>
+          <query>index="$idx$" source="*WinEventLog:Security" EventCode IN (4741,4742,4743) Target_User_Name="$sel_comp$*"
+| eval Action=case(EventCode=4741,"Created",EventCode=4742,"Changed",EventCode=4743,"Deleted"), By=mvindex(Account_Name,0)
+| table _time Action By ComputerName EventCode | sort -_time</query>
+          <earliest>$tr.earliest$</earliest>
+          <latest>$tr.latest$</latest>
+        </search>
+        <option name="count">10</option>
+      </table>
+    </panel>
+  </row>
+
+  <!-- ============================================================ -->
+  <!-- ROW 4: HYGIENE / STALE OBJECTS                                -->
+  <!-- ============================================================ -->
+  <row>
+    <panel>
+      <title>Stale enabled accounts (no logon &gt; $stale$ days)</title>
+      <table>
+        <search base="base_users">
+          <query>| where Status="Enabled" AND (DaysSinceLogon="never" OR tonumber(DaysSinceLogon)&gt;$stale$)
+| table sAMAccountName displayName department DaysSinceLogon PwdAgeDays PwdNeverExpires OU | sort -DaysSinceLogon</query>
+        </search>
+        <option name="count">10</option>
+      </table>
+    </panel>
+    <panel>
+      <title>Stale enabled computers (no logon &gt; $stale$ days)</title>
+      <table>
+        <search base="base_computers">
+          <query>| where Status="Enabled" AND (DaysSinceLogon="never" OR tonumber(DaysSinceLogon)&gt;$stale$)
+| table name operatingSystem Role DaysSinceLogon OU | sort -DaysSinceLogon</query>
+        </search>
+        <option name="count">10</option>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Top failed-logon accounts (password spray / brute force indicator)</title>
+      <table>
+        <search base="base_auth">
+          <query>| where Result="Failure"
+| stats count AS Failures dc(dest) AS Targets dc(src) AS Sources values(Sub_Status) AS SubStatus BY user
+| sort -Failures | head 20</query>
+        </search>
+        <option name="count">10</option>
+        <format type="color" field="Failures">
+          <colorPalette type="minMidMax" maxColor="#DC4E41" minColor="#3C444D"></colorPalette>
+          <scale type="minMidMax"></scale>
+        </format>
+        <option name="drilldown">row</option>
+        <drilldown>
+          <set token="form.acct">$row.user$</set>
+          <set token="sel_user">$row.user$</set>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+</form>
