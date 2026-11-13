@@ -1,0 +1,1291 @@
+<dashboard version="2" theme="dark">
+  <label>AD Account &amp; Computer Search</label>
+  <description>Search AD user accounts and computers (LDAP via SA-ldapsearch) and correlate with Windows Security events (Splunk_TA_windows). Click a row to drill down.</description>
+  <definition><![CDATA[
+{
+  "title": "AD Account & Computer Search",
+  "description": "Search AD user accounts and computers (LDAP via SA-ldapsearch) and correlate with Windows Security events (Splunk_TA_windows). Click a row to drill down.",
+  "inputs": {
+    "input_acct": {
+      "type": "input.text",
+      "title": "Account (sAMAccountName / CN / mail)",
+      "options": {
+        "token": "acct",
+        "defaultValue": "*"
+      }
+    },
+    "input_comp": {
+      "type": "input.text",
+      "title": "Computer (name)",
+      "options": {
+        "token": "comp",
+        "defaultValue": "*"
+      }
+    },
+    "input_domain": {
+      "type": "input.text",
+      "title": "LDAP domain stanza",
+      "options": {
+        "token": "domain",
+        "defaultValue": "default"
+      }
+    },
+    "input_idx": {
+      "type": "input.text",
+      "title": "Windows index",
+      "options": {
+        "token": "idx",
+        "defaultValue": "wineventlog"
+      }
+    },
+    "input_stale": {
+      "type": "input.dropdown",
+      "title": "Stale (days)",
+      "options": {
+        "token": "stale",
+        "defaultValue": "90",
+        "items": [
+          {
+            "label": "30",
+            "value": "30"
+          },
+          {
+            "label": "60",
+            "value": "60"
+          },
+          {
+            "label": "90",
+            "value": "90"
+          },
+          {
+            "label": "180",
+            "value": "180"
+          }
+        ]
+      }
+    },
+    "input_spray": {
+      "type": "input.dropdown",
+      "title": "Spray threshold (accounts)",
+      "options": {
+        "token": "spray",
+        "defaultValue": "10",
+        "items": [
+          {
+            "label": "5",
+            "value": "5"
+          },
+          {
+            "label": "10",
+            "value": "10"
+          },
+          {
+            "label": "20",
+            "value": "20"
+          },
+          {
+            "label": "50",
+            "value": "50"
+          }
+        ]
+      }
+    },
+    "input_tr": {
+      "type": "input.timerange",
+      "title": "Event time range",
+      "options": {
+        "token": "tr",
+        "defaultValue": "-24h@h,now"
+      }
+    }
+  },
+  "dataSources": {
+    "ds_users": {
+      "type": "ds.search",
+      "name": "users",
+      "options": {
+        "query": "| ldapsearch domain=\"$domain$\"\n    search=\"(&(objectCategory=person)(objectClass=user)(!(userAccountControl:1.2.840.113556.1.4.803:=2048))(|(sAMAccountName=$acct$)(cn=$acct$)(displayName=$acct$)(mail=$acct$)(userPrincipalName=$acct$)))\"\n    attrs=\"sAMAccountName,cn,displayName,userPrincipalName,mail,title,department,manager,userAccountControl,lockoutTime,lastLogonTimestamp,pwdLastSet,whenCreated,memberOf,distinguishedName\"\n| eval lastLogon_e=strptime(lastLogonTimestamp,\"%Y-%m-%dT%H:%M:%S.%6NZ\"), pwd_e=strptime(pwdLastSet,\"%Y-%m-%dT%H:%M:%S.%6NZ\"), lock_e=strptime(lockoutTime,\"%Y-%m-%dT%H:%M:%S.%6NZ\"), created_e=strptime(whenCreated,\"%Y-%m-%d %H:%M:%S%:z\")\n| eval Status=case(isnotnull(mvfind(userAccountControl,\"ACCOUNTDISABLE\")),\"Disabled\", lock_e>0,\"Locked\", true(),\"Enabled\")\n| eval PwdNeverExpires=if(isnotnull(mvfind(userAccountControl,\"DONT_EXPIRE_PASSWD\")),\"Yes\",\"No\")\n| eval PwdNotRequired=if(isnotnull(mvfind(userAccountControl,\"PASSWD_NOTREQD\")),\"Yes\",\"No\")\n| eval DaysSinceLogon=if(lastLogon_e>0,round((now()-lastLogon_e)/86400,0),\"never\")\n| eval PwdAgeDays=case(pwd_e>0,round((now()-pwd_e)/86400,0), pwdLastSet=\"(never)\",\"must change\", true(),\"-\")\n| eval Created=strftime(created_e,\"%Y-%m-%d\"), Manager=replace(mvindex(split(manager,\",\"),0),\"^CN=\",\"\"), Groups=coalesce(mvcount(memberOf),0), OU=replace(distinguishedName,\"^.*?,(?=(OU|CN|DC)=)\",\"\")",
+        "queryParameters": {
+          "earliest": "0",
+          "latest": "now"
+        }
+      }
+    },
+    "ds_computers": {
+      "type": "ds.search",
+      "name": "computers",
+      "options": {
+        "query": "| ldapsearch domain=\"$domain$\"\n    search=\"(&(objectClass=computer)(|(name=$comp$)(dNSHostName=$comp$)))\"\n    attrs=\"name,dNSHostName,operatingSystem,operatingSystemVersion,description,managedBy,userAccountControl,lastLogonTimestamp,whenCreated,distinguishedName\"\n| eval lastLogon_e=strptime(lastLogonTimestamp,\"%Y-%m-%dT%H:%M:%S.%6NZ\"), created_e=strptime(whenCreated,\"%Y-%m-%d %H:%M:%S%:z\")\n| eval Status=if(isnotnull(mvfind(userAccountControl,\"ACCOUNTDISABLE\")),\"Disabled\",\"Enabled\")\n| eval Role=case(isnotnull(mvfind(userAccountControl,\"SERVER_TRUST_ACCOUNT\")),\"Domain Controller\", isnotnull(mvfind(userAccountControl,\"PARTIAL_SECRETS_ACCOUNT\")),\"RODC\", match(operatingSystem,\"(?i)server\"),\"Server\", isnull(operatingSystem),\"Unknown\", true(),\"Workstation\")\n| eval DaysSinceLogon=if(lastLogon_e>0,round((now()-lastLogon_e)/86400,0),\"never\")\n| eval Created=strftime(created_e,\"%Y-%m-%d\"), ManagedBy=replace(mvindex(split(managedBy,\",\"),0),\"^CN=\",\"\"), OU=replace(distinguishedName,\"^.*?,(?=(OU|CN|DC)=)\",\"\")\n| fillnull value=\"-\" operatingSystem operatingSystemVersion ManagedBy",
+        "queryParameters": {
+          "earliest": "0",
+          "latest": "now"
+        }
+      }
+    },
+    "ds_auth": {
+      "type": "ds.search",
+      "name": "auth",
+      "options": {
+        "query": "index=\"$idx$\" source=\"WinEventLog:Security\" EventCode IN (4624,4625,4740,4771,4776) user=\"$acct$\" (dest=\"$comp$\" OR dest=\"$comp$.*\" OR Workstation_Name=\"$comp$\")\n| where NOT like(user,\"%$$\") AND user!=\"-\" AND lower(user)!=\"anonymous logon\"\n| eval user=lower(user), dest_short=upper(mvindex(split(dest,\".\"),0)), src=coalesce(src,Source_Network_Address,Workstation_Name,\"-\")\n| eval Result=case(EventCode=4624,\"Success\",EventCode=4740,\"Lockout\",true(),\"Failure\")\n| eval LogonType=case(Logon_Type=2,\"2 Interactive\",Logon_Type=3,\"3 Network\",Logon_Type=4,\"4 Batch\",Logon_Type=5,\"5 Service\",Logon_Type=7,\"7 Unlock\",Logon_Type=8,\"8 NetworkCleartext\",Logon_Type=9,\"9 NewCredentials\",Logon_Type=10,\"10 RemoteInteractive\",Logon_Type=11,\"11 CachedInteractive\",isnotnull(Logon_Type),tostring(Logon_Type),true(),\"-\")\n| eval code=lower(coalesce(Sub_Status,Error_Code,Failure_Code,\"-\")), Reason=case(EventCode=4624 OR EventCode=4740,\"-\",code=\"0xc000006a\" OR code=\"0x18\",\"Bad password\",code=\"0xc0000064\" OR code=\"0x6\",\"Unknown user\",code=\"0xc0000234\",\"Locked out\",code=\"0xc0000072\" OR code=\"0x12\",\"Disabled/locked\",code=\"0xc0000071\" OR code=\"0x17\",\"Password expired\",code=\"0xc0000193\",\"Account expired\",code=\"0xc0000224\",\"Must change password\",code=\"0xc000006f\",\"Outside logon hours\",code=\"0xc0000070\",\"Workstation restricted\",true(),code)\n| fillnull value=\"-\" dest_short\n| bin _time span=1h\n| stats count by _time user dest_short src Result LogonType Reason EventCode"
+      }
+    },
+    "ds_dc_cov": {
+      "type": "ds.search",
+      "name": "dc_cov",
+      "options": {
+        "query": "| ldapsearch domain=\"$domain$\" search=\"(&(objectClass=computer)(userAccountControl:1.2.840.113556.1.4.803:=8192))\" attrs=\"name,operatingSystem\"\n| eval host=upper(name)\n| join type=left host\n    [| tstats count latest(_time) AS last where index=\"$idx$\" source=\"WinEventLog:Security\" earliest=-24h by host\n     | eval host=upper(mvindex(split(host,\".\"),0)) | stats sum(count) AS count max(last) AS last by host]\n| eval Status=if(coalesce(count,0)>0,\"Logging\",\"NOT LOGGING\"), Events24h=coalesce(count,0), LastEvent=if(isnull(last),\"-\",strftime(last,\"%Y-%m-%d %H:%M\"))\n| table name operatingSystem Status Events24h LastEvent\n| sort -Status name",
+        "queryParameters": {
+          "earliest": "0",
+          "latest": "now"
+        }
+      }
+    },
+    "ds_k_users": {
+      "type": "ds.chain",
+      "name": "k_users",
+      "options": {
+        "extend": "ds_users",
+        "query": "| stats count"
+      }
+    },
+    "ds_k_dislock": {
+      "type": "ds.chain",
+      "name": "k_dislock",
+      "options": {
+        "extend": "ds_users",
+        "query": "| where Status!=\"Enabled\" | stats count"
+      }
+    },
+    "ds_k_notreqd": {
+      "type": "ds.chain",
+      "name": "k_notreqd",
+      "options": {
+        "extend": "ds_users",
+        "query": "| where PwdNotRequired=\"Yes\" AND Status!=\"Disabled\" | stats count"
+      }
+    },
+    "ds_k_comps": {
+      "type": "ds.chain",
+      "name": "k_comps",
+      "options": {
+        "extend": "ds_computers",
+        "query": "| stats count"
+      }
+    },
+    "ds_k_fail": {
+      "type": "ds.chain",
+      "name": "k_fail",
+      "options": {
+        "extend": "ds_auth",
+        "query": "| where Result=\"Failure\" | stats sum(count) AS count | fillnull value=0 count"
+      }
+    },
+    "ds_k_lock": {
+      "type": "ds.chain",
+      "name": "k_lock",
+      "options": {
+        "extend": "ds_auth",
+        "query": "| where Result=\"Lockout\" | stats sum(count) AS count | fillnull value=0 count"
+      }
+    },
+    "ds_k_dcmiss": {
+      "type": "ds.chain",
+      "name": "k_dcmiss",
+      "options": {
+        "extend": "ds_dc_cov",
+        "query": "| where Status=\"NOT LOGGING\" | stats count"
+      }
+    },
+    "ds_t_users": {
+      "type": "ds.chain",
+      "name": "t_users",
+      "options": {
+        "extend": "ds_users",
+        "query": "| table sAMAccountName cn displayName mail title department Manager Status PwdNotRequired PwdNeverExpires DaysSinceLogon PwdAgeDays Groups Created OU | sort sAMAccountName"
+      }
+    },
+    "ds_t_groups": {
+      "type": "ds.chain",
+      "name": "t_groups",
+      "options": {
+        "extend": "ds_users",
+        "query": "| search sAMAccountName=\"$sel_user$\" | fields memberOf | mvexpand memberOf\n| eval Group=replace(mvindex(split(memberOf,\",\"),0),\"^CN=\",\"\"), Privileged=if(match(Group,\"(?i)^(Domain Admins|Enterprise Admins|Schema Admins|Administrators|Account Operators|Backup Operators|Server Operators|Print Operators|DnsAdmins|Group Policy Creator Owners|Enterprise Key Admins|Key Admins)$\"),\"YES\",\"-\")\n| table Group Privileged | sort -Privileged Group"
+      }
+    },
+    "ds_t_used": {
+      "type": "ds.search",
+      "name": "t_used",
+      "options": {
+        "query": "index=\"$idx$\" source=\"WinEventLog:Security\" EventCode=4624 user=\"$sel_user$\"\n| eval dest_short=upper(mvindex(split(dest,\".\"),0)), src=coalesce(src,Source_Network_Address,Workstation_Name,\"-\")\n| eval LogonType=case(Logon_Type=2,\"2 Interactive\",Logon_Type=3,\"3 Network\",Logon_Type=4,\"4 Batch\",Logon_Type=5,\"5 Service\",Logon_Type=7,\"7 Unlock\",Logon_Type=8,\"8 NetworkCleartext\",Logon_Type=9,\"9 NewCredentials\",Logon_Type=10,\"10 RemoteInteractive\",Logon_Type=11,\"11 CachedInteractive\",isnotnull(Logon_Type),tostring(Logon_Type),true(),\"-\")\n| stats count AS Logons values(LogonType) AS LogonTypes dc(src) AS Sources max(_time) AS Last by dest_short\n| eval Last=strftime(Last,\"%Y-%m-%d %H:%M\") | rename dest_short AS Computer | sort -Logons"
+      }
+    },
+    "ds_c_timeline": {
+      "type": "ds.chain",
+      "name": "c_timeline",
+      "options": {
+        "extend": "ds_auth",
+        "query": "| search user=\"$sel_user$\" | timechart span=1h sum(count) AS count by Result"
+      }
+    },
+    "ds_t_changes": {
+      "type": "ds.search",
+      "name": "t_changes",
+      "options": {
+        "query": "index=\"$idx$\" source=\"WinEventLog:Security\" EventCode IN (4720,4722,4723,4724,4725,4726,4738,4740,4767,4728,4729,4732,4733,4756,4757)\n| eval target=lower(coalesce(user,mvindex(Account_Name,-1)))\n| where target=lower(\"$sel_user$\") OR target=lower(\"$sel_cn$\")\n| eval Action=case(EventCode=4720,\"Created\",EventCode=4722,\"Enabled\",EventCode=4723,\"Password change\",EventCode=4724,\"Password reset\",EventCode=4725,\"Disabled\",EventCode=4726,\"Deleted\",EventCode=4738,\"Changed\",EventCode=4740,\"Locked out\",EventCode=4767,\"Unlocked\",EventCode=4728 OR EventCode=4732 OR EventCode=4756,\"Added to group\",EventCode=4729 OR EventCode=4733 OR EventCode=4757,\"Removed from group\")\n| eval By=coalesce(src_user,mvindex(Account_Name,0)), Group=coalesce(Group_Name,\"-\"), Caller=coalesce(Caller_Computer_Name,\"-\"), DC=upper(mvindex(split(host,\".\"),0)), Time=strftime(_time,\"%Y-%m-%d %H:%M:%S\")\n| table Time Action By Group Caller DC EventCode | sort -Time | head 200"
+      }
+    },
+    "ds_t_comps": {
+      "type": "ds.chain",
+      "name": "t_comps",
+      "options": {
+        "extend": "ds_computers",
+        "query": "| table name dNSHostName Role operatingSystem operatingSystemVersion Status DaysSinceLogon ManagedBy Created OU | sort name"
+      }
+    },
+    "ds_c_os": {
+      "type": "ds.chain",
+      "name": "c_os",
+      "options": {
+        "extend": "ds_computers",
+        "query": "| stats count by operatingSystem | sort -count"
+      }
+    },
+    "ds_t_logged": {
+      "type": "ds.search",
+      "name": "t_logged",
+      "options": {
+        "query": "index=\"$idx$\" source=\"WinEventLog:Security\" EventCode IN (4624,4625) (dest=\"$sel_comp$\" OR dest=\"$sel_comp$.*\")\n| where NOT like(user,\"%$$\") AND user!=\"-\" AND lower(user)!=\"anonymous logon\"\n| eval user=lower(user), src=coalesce(src,Source_Network_Address,Workstation_Name,\"-\")\n| eval LogonType=case(Logon_Type=2,\"2 Interactive\",Logon_Type=3,\"3 Network\",Logon_Type=4,\"4 Batch\",Logon_Type=5,\"5 Service\",Logon_Type=7,\"7 Unlock\",Logon_Type=8,\"8 NetworkCleartext\",Logon_Type=9,\"9 NewCredentials\",Logon_Type=10,\"10 RemoteInteractive\",Logon_Type=11,\"11 CachedInteractive\",isnotnull(Logon_Type),tostring(Logon_Type),true(),\"-\")\n| stats count(eval(EventCode=4624)) AS Success count(eval(EventCode=4625)) AS Failure values(LogonType) AS LogonTypes dc(src) AS Sources max(_time) AS Last by user\n| eval Last=strftime(Last,\"%Y-%m-%d %H:%M\") | sort -Success"
+      }
+    },
+    "ds_t_compchg": {
+      "type": "ds.search",
+      "name": "t_compchg",
+      "options": {
+        "query": "index=\"$idx$\" source=\"WinEventLog:Security\" EventCode IN (4741,4742,4743) user=\"$sel_comp$*\"\n| where upper(replace(user,\"[^A-Za-z0-9._-]\",\"\"))=upper(\"$sel_comp$\")\n| eval Action=case(EventCode=4741,\"Created\",EventCode=4742,\"Changed\",EventCode=4743,\"Deleted\"), By=coalesce(src_user,mvindex(Account_Name,0)), DC=upper(mvindex(split(host,\".\"),0)), Time=strftime(_time,\"%Y-%m-%d %H:%M:%S\")\n| table Time Action By DC EventCode | sort -Time | head 200"
+      }
+    },
+    "ds_t_stale_u": {
+      "type": "ds.chain",
+      "name": "t_stale_u",
+      "options": {
+        "extend": "ds_users",
+        "query": "| where Status=\"Enabled\" AND (DaysSinceLogon=\"never\" OR tonumber(DaysSinceLogon)>$stale$) | table sAMAccountName displayName department DaysSinceLogon PwdAgeDays PwdNeverExpires OU | sort -DaysSinceLogon"
+      }
+    },
+    "ds_t_stale_c": {
+      "type": "ds.chain",
+      "name": "t_stale_c",
+      "options": {
+        "extend": "ds_computers",
+        "query": "| where Status=\"Enabled\" AND (DaysSinceLogon=\"never\" OR tonumber(DaysSinceLogon)>$stale$) | table name Role operatingSystem DaysSinceLogon OU | sort -DaysSinceLogon"
+      }
+    },
+    "ds_t_topfail": {
+      "type": "ds.chain",
+      "name": "t_topfail",
+      "options": {
+        "extend": "ds_auth",
+        "query": "| where Result=\"Failure\" | stats sum(count) AS Failures dc(dest_short) AS Targets dc(src) AS Sources values(Reason) AS Reasons by user | sort -Failures | head 20"
+      }
+    },
+    "ds_t_spray": {
+      "type": "ds.chain",
+      "name": "t_spray",
+      "options": {
+        "extend": "ds_auth",
+        "query": "| where Result=\"Failure\" | stats sum(count) AS Failures dc(user) AS Accounts values(Reason) AS Reasons by src | where Accounts>=$spray$ | sort -Accounts | head 20"
+      }
+    },
+    "ds_t_lockcaller": {
+      "type": "ds.search",
+      "name": "t_lockcaller",
+      "options": {
+        "query": "index=\"$idx$\" source=\"WinEventLog:Security\" EventCode=4740 user=\"$acct$\"\n| eval Caller=upper(coalesce(Caller_Computer_Name,\"-\")), k=user.\"|\".floor(_time/60)\n| stats dc(k) AS Lockouts dc(user) AS Accounts values(user) AS Users max(_time) AS Last by Caller\n| eval Users=mvjoin(mvindex(Users,0,4),\", \"), Last=strftime(Last,\"%Y-%m-%d %H:%M\") | sort -Lockouts | head 20"
+      }
+    },
+    "ds_t_risky": {
+      "type": "ds.chain",
+      "name": "t_risky",
+      "options": {
+        "extend": "ds_users",
+        "query": "| where Status!=\"Disabled\" AND (PwdNotRequired=\"Yes\" OR PwdNeverExpires=\"Yes\") | table sAMAccountName displayName department Status PwdNotRequired PwdNeverExpires PwdAgeDays DaysSinceLogon OU | sort -PwdNotRequired sAMAccountName"
+      }
+    }
+  },
+  "visualizations": {
+    "md_head": {
+      "type": "splunk.markdown",
+      "options": {
+        "markdown": "Validated SPL · LDAP (SA-ldapsearch) + WinEventLog:Security · **click a row** to drill down",
+        "fontColor": "#C5CCD3"
+      }
+    },
+    "viz_k_users": {
+      "type": "splunk.singlevalue",
+      "title": "Accounts",
+      "dataSources": {
+        "primary": "ds_k_users"
+      },
+      "options": {}
+    },
+    "viz_k_dislock": {
+      "type": "splunk.singlevalue",
+      "title": "Disabled / Locked",
+      "dataSources": {
+        "primary": "ds_k_dislock"
+      },
+      "options": {
+        "backgroundColor": "> majorValue | rangeValue(bgCfg)",
+        "majorColor": "#FFFFFF"
+      },
+      "context": {
+        "bgCfg": [
+          {
+            "to": 1,
+            "value": "#53A051"
+          },
+          {
+            "from": 1,
+            "to": 50,
+            "value": "#F8BE34"
+          },
+          {
+            "from": 50,
+            "value": "#DC4E41"
+          }
+        ]
+      }
+    },
+    "viz_k_notreqd": {
+      "type": "splunk.singlevalue",
+      "title": "PASSWD_NOTREQD (enabled)",
+      "dataSources": {
+        "primary": "ds_k_notreqd"
+      },
+      "options": {
+        "backgroundColor": "> majorValue | rangeValue(bgCfg)",
+        "majorColor": "#FFFFFF"
+      },
+      "context": {
+        "bgCfg": [
+          {
+            "to": 1,
+            "value": "#53A051"
+          },
+          {
+            "from": 1,
+            "value": "#DC4E41"
+          }
+        ]
+      }
+    },
+    "viz_k_comps": {
+      "type": "splunk.singlevalue",
+      "title": "Computers",
+      "dataSources": {
+        "primary": "ds_k_comps"
+      },
+      "options": {}
+    },
+    "viz_k_fail": {
+      "type": "splunk.singlevalue",
+      "title": "Failed logons",
+      "dataSources": {
+        "primary": "ds_k_fail"
+      },
+      "options": {
+        "backgroundColor": "> majorValue | rangeValue(bgCfg)",
+        "majorColor": "#FFFFFF"
+      },
+      "context": {
+        "bgCfg": [
+          {
+            "to": 100,
+            "value": "#53A051"
+          },
+          {
+            "from": 100,
+            "to": 1000,
+            "value": "#F8BE34"
+          },
+          {
+            "from": 1000,
+            "value": "#DC4E41"
+          }
+        ]
+      }
+    },
+    "viz_k_lock": {
+      "type": "splunk.singlevalue",
+      "title": "Lockouts (4740)",
+      "dataSources": {
+        "primary": "ds_k_lock"
+      },
+      "options": {
+        "backgroundColor": "> majorValue | rangeValue(bgCfg)",
+        "majorColor": "#FFFFFF"
+      },
+      "context": {
+        "bgCfg": [
+          {
+            "to": 1,
+            "value": "#53A051"
+          },
+          {
+            "from": 1,
+            "to": 20,
+            "value": "#F8BE34"
+          },
+          {
+            "from": 20,
+            "value": "#DC4E41"
+          }
+        ]
+      }
+    },
+    "viz_k_dcmiss": {
+      "type": "splunk.singlevalue",
+      "title": "DCs NOT logging",
+      "dataSources": {
+        "primary": "ds_k_dcmiss"
+      },
+      "options": {
+        "backgroundColor": "> majorValue | rangeValue(bgCfg)",
+        "majorColor": "#FFFFFF"
+      },
+      "context": {
+        "bgCfg": [
+          {
+            "to": 1,
+            "value": "#53A051"
+          },
+          {
+            "from": 1,
+            "value": "#DC4E41"
+          }
+        ]
+      }
+    },
+    "md_acc": {
+      "type": "splunk.markdown",
+      "options": {
+        "markdown": "## Accounts",
+        "fontColor": "#C5CCD3"
+      }
+    },
+    "viz_users": {
+      "type": "splunk.table",
+      "title": "AD accounts — click a row",
+      "dataSources": {
+        "primary": "ds_t_users"
+      },
+      "options": {
+        "columnFormat": {
+          "Status": {
+            "data": "> table | seriesByName(\"Status\")",
+            "rowBackgroundColors": "> table | seriesByName(\"Status\") | matchValue(c_Status_Status)"
+          },
+          "PwdNeverExpires": {
+            "data": "> table | seriesByName(\"PwdNeverExpires\")",
+            "rowBackgroundColors": "> table | seriesByName(\"PwdNeverExpires\") | matchValue(c_PwdNeverExpires_PwdNeverExpires)"
+          },
+          "PwdNotRequired": {
+            "data": "> table | seriesByName(\"PwdNotRequired\")",
+            "rowBackgroundColors": "> table | seriesByName(\"PwdNotRequired\") | matchValue(c_PwdNotRequired_PwdNotRequired)"
+          }
+        }
+      },
+      "context": {
+        "c_Status_Status": [
+          {
+            "match": "Enabled",
+            "value": "#1B5E3B"
+          },
+          {
+            "match": "Disabled",
+            "value": "#4A5058"
+          },
+          {
+            "match": "Locked",
+            "value": "#8A2A24"
+          }
+        ],
+        "c_PwdNeverExpires_PwdNeverExpires": [
+          {
+            "match": "Yes",
+            "value": "#7A5A12"
+          }
+        ],
+        "c_PwdNotRequired_PwdNotRequired": [
+          {
+            "match": "Yes",
+            "value": "#8A2A24"
+          }
+        ]
+      },
+      "eventHandlers": [
+        {
+          "type": "drilldown.setToken",
+          "options": {
+            "tokens": [
+              {
+                "token": "sel_user",
+                "key": "row.sAMAccountName.value"
+              },
+              {
+                "token": "sel_cn",
+                "key": "row.cn.value"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "viz_groups": {
+      "type": "splunk.table",
+      "title": "Group membership: $sel_user$",
+      "dataSources": {
+        "primary": "ds_t_groups"
+      },
+      "options": {
+        "columnFormat": {
+          "Privileged": {
+            "data": "> table | seriesByName(\"Privileged\")",
+            "rowBackgroundColors": "> table | seriesByName(\"Privileged\") | matchValue(c_Privileged_Privileged)"
+          }
+        }
+      },
+      "context": {
+        "c_Privileged_Privileged": [
+          {
+            "match": "YES",
+            "value": "#8A2A24"
+          }
+        ]
+      }
+    },
+    "viz_used": {
+      "type": "splunk.table",
+      "title": "Computers used by $sel_user$ (click → Computer)",
+      "dataSources": {
+        "primary": "ds_t_used"
+      },
+      "options": {},
+      "eventHandlers": [
+        {
+          "type": "drilldown.setToken",
+          "options": {
+            "tokens": [
+              {
+                "token": "comp",
+                "key": "row.Computer.value"
+              },
+              {
+                "token": "sel_comp",
+                "key": "row.Computer.value"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "viz_timeline": {
+      "type": "splunk.column",
+      "title": "Logon timeline: $sel_user$",
+      "dataSources": {
+        "primary": "ds_c_timeline"
+      },
+      "options": {
+        "stackMode": "stacked",
+        "legendDisplay": "top",
+        "seriesColorsByField": {
+          "Success": "#4EA1F3",
+          "Failure": "#F28B3C",
+          "Lockout": "#F5D76E"
+        }
+      }
+    },
+    "viz_changes": {
+      "type": "splunk.table",
+      "title": "AD changes to $sel_user$",
+      "dataSources": {
+        "primary": "ds_t_changes"
+      },
+      "options": {
+        "columnFormat": {
+          "Action": {
+            "data": "> table | seriesByName(\"Action\")",
+            "rowBackgroundColors": "> table | seriesByName(\"Action\") | matchValue(c_Action_Action)"
+          }
+        }
+      },
+      "context": {
+        "c_Action_Action": [
+          {
+            "match": "Added to group",
+            "value": "#7A5A12"
+          },
+          {
+            "match": "Locked out",
+            "value": "#8A2A24"
+          },
+          {
+            "match": "Deleted",
+            "value": "#8A2A24"
+          },
+          {
+            "match": "Disabled",
+            "value": "#4A5058"
+          },
+          {
+            "match": "Password reset",
+            "value": "#1D4E79"
+          },
+          {
+            "match": "Created",
+            "value": "#1B5E3B"
+          }
+        ]
+      }
+    },
+    "md_comp": {
+      "type": "splunk.markdown",
+      "options": {
+        "markdown": "## Computers",
+        "fontColor": "#C5CCD3"
+      }
+    },
+    "viz_comps": {
+      "type": "splunk.table",
+      "title": "AD computers — click a row",
+      "dataSources": {
+        "primary": "ds_t_comps"
+      },
+      "options": {
+        "columnFormat": {
+          "Status": {
+            "data": "> table | seriesByName(\"Status\")",
+            "rowBackgroundColors": "> table | seriesByName(\"Status\") | matchValue(c_Status_Status)"
+          },
+          "Role": {
+            "data": "> table | seriesByName(\"Role\")",
+            "rowBackgroundColors": "> table | seriesByName(\"Role\") | matchValue(c_Role_Role)"
+          }
+        }
+      },
+      "context": {
+        "c_Status_Status": [
+          {
+            "match": "Enabled",
+            "value": "#1B5E3B"
+          },
+          {
+            "match": "Disabled",
+            "value": "#4A5058"
+          },
+          {
+            "match": "Locked",
+            "value": "#8A2A24"
+          }
+        ],
+        "c_Role_Role": [
+          {
+            "match": "Domain Controller",
+            "value": "#4B3A8C"
+          },
+          {
+            "match": "RODC",
+            "value": "#4B3A8C"
+          },
+          {
+            "match": "Server",
+            "value": "#1D4E79"
+          },
+          {
+            "match": "Workstation",
+            "value": "#3C444D"
+          },
+          {
+            "match": "Unknown",
+            "value": "#4A5058"
+          }
+        ]
+      },
+      "eventHandlers": [
+        {
+          "type": "drilldown.setToken",
+          "options": {
+            "tokens": [
+              {
+                "token": "sel_comp",
+                "key": "row.name.value"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "viz_os": {
+      "type": "splunk.pie",
+      "title": "Computers by operating system",
+      "dataSources": {
+        "primary": "ds_c_os"
+      },
+      "options": {}
+    },
+    "viz_logged": {
+      "type": "splunk.table",
+      "title": "Accounts logged on to $sel_comp$ (click → Account)",
+      "dataSources": {
+        "primary": "ds_t_logged"
+      },
+      "options": {},
+      "eventHandlers": [
+        {
+          "type": "drilldown.setToken",
+          "options": {
+            "tokens": [
+              {
+                "token": "acct",
+                "key": "row.user.value"
+              },
+              {
+                "token": "sel_user",
+                "key": "row.user.value"
+              },
+              {
+                "token": "sel_cn",
+                "key": "row.user.value"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "viz_compchg": {
+      "type": "splunk.table",
+      "title": "Computer account changes: $sel_comp$ (4741–4743)",
+      "dataSources": {
+        "primary": "ds_t_compchg"
+      },
+      "options": {
+        "columnFormat": {
+          "Action": {
+            "data": "> table | seriesByName(\"Action\")",
+            "rowBackgroundColors": "> table | seriesByName(\"Action\") | matchValue(c_Action_Action)"
+          }
+        }
+      },
+      "context": {
+        "c_Action_Action": [
+          {
+            "match": "Added to group",
+            "value": "#7A5A12"
+          },
+          {
+            "match": "Locked out",
+            "value": "#8A2A24"
+          },
+          {
+            "match": "Deleted",
+            "value": "#8A2A24"
+          },
+          {
+            "match": "Disabled",
+            "value": "#4A5058"
+          },
+          {
+            "match": "Password reset",
+            "value": "#1D4E79"
+          },
+          {
+            "match": "Created",
+            "value": "#1B5E3B"
+          }
+        ]
+      }
+    },
+    "md_hyg": {
+      "type": "splunk.markdown",
+      "options": {
+        "markdown": "## Hygiene & threat indicators",
+        "fontColor": "#C5CCD3"
+      }
+    },
+    "viz_stale_u": {
+      "type": "splunk.table",
+      "title": "Stale enabled accounts (> $stale$ days)",
+      "dataSources": {
+        "primary": "ds_t_stale_u"
+      },
+      "options": {}
+    },
+    "viz_stale_c": {
+      "type": "splunk.table",
+      "title": "Stale enabled computers (> $stale$ days)",
+      "dataSources": {
+        "primary": "ds_t_stale_c"
+      },
+      "options": {
+        "columnFormat": {
+          "Role": {
+            "data": "> table | seriesByName(\"Role\")",
+            "rowBackgroundColors": "> table | seriesByName(\"Role\") | matchValue(c_Role_Role)"
+          }
+        }
+      },
+      "context": {
+        "c_Role_Role": [
+          {
+            "match": "Domain Controller",
+            "value": "#4B3A8C"
+          },
+          {
+            "match": "RODC",
+            "value": "#4B3A8C"
+          },
+          {
+            "match": "Server",
+            "value": "#1D4E79"
+          },
+          {
+            "match": "Workstation",
+            "value": "#3C444D"
+          },
+          {
+            "match": "Unknown",
+            "value": "#4A5058"
+          }
+        ]
+      }
+    },
+    "viz_topfail": {
+      "type": "splunk.table",
+      "title": "Top failed-logon accounts (brute force, T1110.001)",
+      "dataSources": {
+        "primary": "ds_t_topfail"
+      },
+      "options": {},
+      "eventHandlers": [
+        {
+          "type": "drilldown.setToken",
+          "options": {
+            "tokens": [
+              {
+                "token": "acct",
+                "key": "row.user.value"
+              },
+              {
+                "token": "sel_user",
+                "key": "row.user.value"
+              },
+              {
+                "token": "sel_cn",
+                "key": "row.user.value"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "viz_spray": {
+      "type": "splunk.table",
+      "title": "Password-spray sources: failures across ≥ $spray$ accounts (T1110.003)",
+      "dataSources": {
+        "primary": "ds_t_spray"
+      },
+      "options": {}
+    },
+    "viz_lockcaller": {
+      "type": "splunk.table",
+      "title": "Lockout sources (4740 Caller_Computer_Name)",
+      "dataSources": {
+        "primary": "ds_t_lockcaller"
+      },
+      "options": {}
+    },
+    "viz_dccov": {
+      "type": "splunk.table",
+      "title": "Domain controller log coverage (last 24h)",
+      "dataSources": {
+        "primary": "ds_dc_cov"
+      },
+      "options": {
+        "columnFormat": {
+          "Status": {
+            "data": "> table | seriesByName(\"Status\")",
+            "rowBackgroundColors": "> table | seriesByName(\"Status\") | matchValue(c_Status_StatusDC)"
+          }
+        }
+      },
+      "context": {
+        "c_Status_StatusDC": [
+          {
+            "match": "Logging",
+            "value": "#1B5E3B"
+          },
+          {
+            "match": "NOT LOGGING",
+            "value": "#8A2A24"
+          }
+        ]
+      }
+    },
+    "viz_risky": {
+      "type": "splunk.table",
+      "title": "Risky enabled accounts: PASSWD_NOTREQD / password never expires",
+      "dataSources": {
+        "primary": "ds_t_risky"
+      },
+      "options": {
+        "columnFormat": {
+          "Status": {
+            "data": "> table | seriesByName(\"Status\")",
+            "rowBackgroundColors": "> table | seriesByName(\"Status\") | matchValue(c_Status_Status)"
+          },
+          "PwdNotRequired": {
+            "data": "> table | seriesByName(\"PwdNotRequired\")",
+            "rowBackgroundColors": "> table | seriesByName(\"PwdNotRequired\") | matchValue(c_PwdNotRequired_PwdNotRequired)"
+          },
+          "PwdNeverExpires": {
+            "data": "> table | seriesByName(\"PwdNeverExpires\")",
+            "rowBackgroundColors": "> table | seriesByName(\"PwdNeverExpires\") | matchValue(c_PwdNeverExpires_PwdNeverExpires)"
+          }
+        }
+      },
+      "context": {
+        "c_Status_Status": [
+          {
+            "match": "Enabled",
+            "value": "#1B5E3B"
+          },
+          {
+            "match": "Disabled",
+            "value": "#4A5058"
+          },
+          {
+            "match": "Locked",
+            "value": "#8A2A24"
+          }
+        ],
+        "c_PwdNotRequired_PwdNotRequired": [
+          {
+            "match": "Yes",
+            "value": "#8A2A24"
+          }
+        ],
+        "c_PwdNeverExpires_PwdNeverExpires": [
+          {
+            "match": "Yes",
+            "value": "#7A5A12"
+          }
+        ]
+      }
+    }
+  },
+  "defaults": {
+    "dataSources": {
+      "ds.search": {
+        "options": {
+          "queryParameters": {
+            "earliest": "$tr.earliest$",
+            "latest": "$tr.latest$"
+          }
+        }
+      }
+    }
+  },
+  "layout": {
+    "type": "absolute",
+    "options": {
+      "width": 1440,
+      "height": 3260,
+      "display": "auto-scale",
+      "backgroundColor": "#111418"
+    },
+    "structure": [
+      {
+        "item": "md_head",
+        "type": "block",
+        "position": {
+          "x": 20,
+          "y": 10,
+          "w": 1400,
+          "h": 50
+        }
+      },
+      {
+        "item": "viz_k_users",
+        "type": "block",
+        "position": {
+          "x": 20,
+          "y": 70,
+          "w": 191,
+          "h": 110
+        }
+      },
+      {
+        "item": "viz_k_dislock",
+        "type": "block",
+        "position": {
+          "x": 221,
+          "y": 70,
+          "w": 191,
+          "h": 110
+        }
+      },
+      {
+        "item": "viz_k_notreqd",
+        "type": "block",
+        "position": {
+          "x": 422,
+          "y": 70,
+          "w": 191,
+          "h": 110
+        }
+      },
+      {
+        "item": "viz_k_comps",
+        "type": "block",
+        "position": {
+          "x": 623,
+          "y": 70,
+          "w": 191,
+          "h": 110
+        }
+      },
+      {
+        "item": "viz_k_fail",
+        "type": "block",
+        "position": {
+          "x": 824,
+          "y": 70,
+          "w": 191,
+          "h": 110
+        }
+      },
+      {
+        "item": "viz_k_lock",
+        "type": "block",
+        "position": {
+          "x": 1025,
+          "y": 70,
+          "w": 191,
+          "h": 110
+        }
+      },
+      {
+        "item": "viz_k_dcmiss",
+        "type": "block",
+        "position": {
+          "x": 1226,
+          "y": 70,
+          "w": 191,
+          "h": 110
+        }
+      },
+      {
+        "item": "md_acc",
+        "type": "block",
+        "position": {
+          "x": 20,
+          "y": 195,
+          "w": 1400,
+          "h": 40
+        }
+      },
+      {
+        "item": "viz_users",
+        "type": "block",
+        "position": {
+          "x": 20,
+          "y": 240,
+          "w": 1400,
+          "h": 340
+        }
+      },
+      {
+        "item": "viz_groups",
+        "type": "block",
+        "position": {
+          "x": 20,
+          "y": 590,
+          "w": 695,
+          "h": 300
+        }
+      },
+      {
+        "item": "viz_used",
+        "type": "block",
+        "position": {
+          "x": 725,
+          "y": 590,
+          "w": 695,
+          "h": 300
+        }
+      },
+      {
+        "item": "viz_timeline",
+        "type": "block",
+        "position": {
+          "x": 20,
+          "y": 900,
+          "w": 695,
+          "h": 300
+        }
+      },
+      {
+        "item": "viz_changes",
+        "type": "block",
+        "position": {
+          "x": 725,
+          "y": 900,
+          "w": 695,
+          "h": 300
+        }
+      },
+      {
+        "item": "md_comp",
+        "type": "block",
+        "position": {
+          "x": 20,
+          "y": 1215,
+          "w": 1400,
+          "h": 40
+        }
+      },
+      {
+        "item": "viz_comps",
+        "type": "block",
+        "position": {
+          "x": 20,
+          "y": 1260,
+          "w": 1000,
+          "h": 340
+        }
+      },
+      {
+        "item": "viz_os",
+        "type": "block",
+        "position": {
+          "x": 1030,
+          "y": 1260,
+          "w": 390,
+          "h": 340
+        }
+      },
+      {
+        "item": "viz_logged",
+        "type": "block",
+        "position": {
+          "x": 20,
+          "y": 1610,
+          "w": 695,
+          "h": 300
+        }
+      },
+      {
+        "item": "viz_compchg",
+        "type": "block",
+        "position": {
+          "x": 725,
+          "y": 1610,
+          "w": 695,
+          "h": 300
+        }
+      },
+      {
+        "item": "md_hyg",
+        "type": "block",
+        "position": {
+          "x": 20,
+          "y": 1925,
+          "w": 1400,
+          "h": 40
+        }
+      },
+      {
+        "item": "viz_stale_u",
+        "type": "block",
+        "position": {
+          "x": 20,
+          "y": 1970,
+          "w": 695,
+          "h": 300
+        }
+      },
+      {
+        "item": "viz_stale_c",
+        "type": "block",
+        "position": {
+          "x": 725,
+          "y": 1970,
+          "w": 695,
+          "h": 300
+        }
+      },
+      {
+        "item": "viz_topfail",
+        "type": "block",
+        "position": {
+          "x": 20,
+          "y": 2280,
+          "w": 695,
+          "h": 320
+        }
+      },
+      {
+        "item": "viz_spray",
+        "type": "block",
+        "position": {
+          "x": 725,
+          "y": 2280,
+          "w": 695,
+          "h": 320
+        }
+      },
+      {
+        "item": "viz_lockcaller",
+        "type": "block",
+        "position": {
+          "x": 20,
+          "y": 2610,
+          "w": 695,
+          "h": 300
+        }
+      },
+      {
+        "item": "viz_dccov",
+        "type": "block",
+        "position": {
+          "x": 725,
+          "y": 2610,
+          "w": 695,
+          "h": 300
+        }
+      },
+      {
+        "item": "viz_risky",
+        "type": "block",
+        "position": {
+          "x": 20,
+          "y": 2920,
+          "w": 1400,
+          "h": 320
+        }
+      }
+    ],
+    "globalInputs": [
+      "input_acct",
+      "input_comp",
+      "input_domain",
+      "input_idx",
+      "input_stale",
+      "input_spray",
+      "input_tr"
+    ]
+  }
+}
+]]></definition>
+  <meta type="hiddenElements"><![CDATA[{"hideEdit":false,"hideOpenInSearch":false,"hideExport":false}]]></meta>
+</dashboard>

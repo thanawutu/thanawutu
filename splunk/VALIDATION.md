@@ -146,3 +146,29 @@ Also measure **ingest latency**: `... \| eval lag=_indextime-_time \| stats avg(
 
 Once every row passes (or deviations are explained), fix the queries if needed and then build the
 Dashboard Studio JSON from the **verified** SPL.
+
+---
+
+## Validated findings (target environment, privacy-safe checks S1–S9)
+
+| Area | Finding | Applied in SPL |
+|---|---|---|
+| Add-ons | SA-ldapsearch 3.0.6, Splunk_TA_windows 8.7.0 enabled; LDAP test OK | – |
+| Data | `sourcetype=WinEventLog`, `source=WinEventLog:Security` (classic, non-XML); ~48 M events/24 h | exact `source=`; auth base search is **aggregated** (`stats`) to avoid the 500k post-process cap |
+| Event codes | 19/22 present in 24 h; 4720/4743/4757 absent (rare activity, same audit subcategories are logging) | – |
+| `Target_User_Name`, `User` | 0 % populated | removed; use `user` (= last `Account_Name`, 100 %) |
+| Machine accounts | 43 % of 4624 are `HOST$` | `NOT like(user,"%$$")` (`$$` = literal `$` in dashboards) |
+| `dest` | = `ComputerName`, FQDN 99 % | `dest="<name>" OR dest="<name>.*"`, `dest_short` |
+| `src` | 81 % (Source_Network_Address 100 %) | `coalesce(src,Source_Network_Address,Workstation_Name)` |
+| Logon types | 2,3,4,5,7,8,9 observed | named; **8 = NetworkCleartext** highlighted |
+| LDAP dates | `lastLogonTimestamp`/`pwdLastSet`/`lockoutTime` = `%Y-%m-%dT%H:%M:%S.%6NZ` (500/500 parsed); `(never)` literal | `pwdLastSet="(never)"` → "must change" |
+| `whenCreated` | different format `%Y-%m-%d %H:%M:%S%:z` | separate `strptime` |
+| `userAccountControl` | text flags: ACCOUNTDISABLE, DONT_EXPIRE_PASSWD, INTERDOMAIN_TRUST_ACCOUNT, NORMAL_ACCOUNT, PASSWD_NOTREQD | `mvfind`; trust accounts excluded via LDAP filter (bit 2048) |
+| 47xx events | `user` = target, `src_user` = actor (100 %); 4724 `user` 85 % → fallback `mvindex(Account_Name,-1)` | – |
+| 4728/4729 | `user` = member **CN** (not sAMAccountName); `Group_Name` 100 %; `Member_Name` 0 % | match on `$sel_cn$` as well as `$sel_user$` |
+| 4740 | `Caller_Computer_Name` 97 % | new "Lockout sources" panel |
+| DC coverage | **2 of 9 DCs send no Security logs**; 3 DC names lack "DC" | DC list from LDAP (bit 8192), new coverage panel + KPI |
+
+Security observations to report: (1) DC logging gap, (2) enabled accounts with `PASSWD_NOTREQD`,
+(3) Logon Type 8 (cleartext) present – review which services use it.
+Pending (not supplied): S6 (30-day check of 4720/4743/4757), S7 (data-model acceleration), S8 (AD count match).

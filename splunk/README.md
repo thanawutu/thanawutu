@@ -1,6 +1,10 @@
 # Splunk – AD Account & Computer Search dashboard
 
-File: `dashboards/ad_account_computer_search.xml` (Simple XML, version 1.1, dark theme)
+Files (generated from one SPL source by `tools/build_dashboards.py` – edit the script, then re-run it):
+- `dashboards/ad_account_computer_search.xml` – Classic / Simple XML (version 1.1, dark)
+- `dashboards/ad_account_computer_search_studio.json` – Dashboard Studio definition (paste into *Source*)
+- `dashboards/ad_account_computer_search_studio.xml` – Studio dashboard wrapped for *New from XML* / app deployment
+- `VALIDATION.md` – manual verification runbook + validated findings
 
 ## Requirements
 | Component | Purpose |

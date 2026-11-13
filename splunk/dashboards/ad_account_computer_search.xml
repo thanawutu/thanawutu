@@ -1,371 +1,334 @@
 <form version="1.1" theme="dark">
   <label>AD Account &amp; Computer Search</label>
-  <description>Look up Active Directory user accounts and computer objects (LDAP via SA-ldapsearch) and correlate them with Windows Security events. Click a row to drill down.</description>
-
-  <!-- ============================================================ -->
-  <!-- INPUTS                                                        -->
-  <!-- ============================================================ -->
+  <description>Search AD user accounts and computers (LDAP via SA-ldapsearch) and correlate with Windows Security events (Splunk_TA_windows). Click a row to drill down.</description>
   <fieldset submitButton="true" autoRun="true">
-    <input type="text" token="acct" searchWhenChanged="false">
-      <label>Account (sAMAccountName / name / mail)</label>
-      <default>*</default>
-      <initialValue>*</initialValue>
-    </input>
-    <input type="text" token="comp" searchWhenChanged="false">
-      <label>Computer (name)</label>
-      <default>*</default>
-      <initialValue>*</initialValue>
-    </input>
-    <input type="text" token="domain">
-      <label>LDAP domain stanza</label>
-      <default>default</default>
-    </input>
-    <input type="text" token="idx">
-      <label>Windows event index</label>
-      <default>wineventlog</default>
-    </input>
-    <input type="dropdown" token="stale">
-      <label>Stale threshold (days)</label>
-      <choice value="30">30</choice>
-      <choice value="60">60</choice>
-      <choice value="90">90</choice>
-      <choice value="180">180</choice>
-      <default>90</default>
-    </input>
-    <input type="time" token="tr">
-      <label>Event time range</label>
-      <default>
-        <earliest>-7d@h</earliest>
-        <latest>now</latest>
-      </default>
-    </input>
+    <input type="text" token="acct"><label>Account (sAMAccountName / CN / mail)</label><default>*</default></input>
+    <input type="text" token="comp"><label>Computer (name)</label><default>*</default></input>
+    <input type="text" token="domain"><label>LDAP domain stanza</label><default>default</default></input>
+    <input type="text" token="idx"><label>Windows index</label><default>wineventlog</default></input>
+    <input type="dropdown" token="stale"><label>Stale (days)</label><choice value="30">30</choice><choice value="60">60</choice><choice value="90">90</choice><choice value="180">180</choice><default>90</default></input>
+    <input type="dropdown" token="spray"><label>Spray threshold (accounts)</label><choice value="5">5</choice><choice value="10">10</choice><choice value="20">20</choice><choice value="50">50</choice><default>10</default></input>
+    <input type="time" token="tr"><label>Event time range</label><default><earliest>-24h@h</earliest><latest>now</latest></default></input>
   </fieldset>
 
-  <!-- ============================================================ -->
-  <!-- BASE SEARCHES                                                 -->
-  <!-- ============================================================ -->
-
-  <!-- AD user objects -->
   <search id="base_users">
-    <query><![CDATA[
-| ldapsearch domain="$domain$"
-    search="(&(objectCategory=person)(objectClass=user)(|(sAMAccountName=$acct$)(cn=$acct$)(displayName=$acct$)(mail=$acct$)(userPrincipalName=$acct$)))"
-    attrs="sAMAccountName,displayName,userPrincipalName,mail,title,department,manager,description,userAccountControl,lockoutTime,lastLogonTimestamp,pwdLastSet,whenCreated,whenChanged,memberOf,distinguishedName"
-| eval Status=case(isnotnull(mvfind(userAccountControl,"ACCOUNTDISABLE")),"Disabled",
-                   isnotnull(lockoutTime) AND lockoutTime!="0" AND lockoutTime!="1601-01-01T00:00:00Z","Locked",
-                   true(),"Enabled")
+    <query><![CDATA[| ldapsearch domain="$domain$"
+    search="(&(objectCategory=person)(objectClass=user)(!(userAccountControl:1.2.840.113556.1.4.803:=2048))(|(sAMAccountName=$acct$)(cn=$acct$)(displayName=$acct$)(mail=$acct$)(userPrincipalName=$acct$)))"
+    attrs="sAMAccountName,cn,displayName,userPrincipalName,mail,title,department,manager,userAccountControl,lockoutTime,lastLogonTimestamp,pwdLastSet,whenCreated,memberOf,distinguishedName"
+| eval lastLogon_e=strptime(lastLogonTimestamp,"%Y-%m-%dT%H:%M:%S.%6NZ"), pwd_e=strptime(pwdLastSet,"%Y-%m-%dT%H:%M:%S.%6NZ"), lock_e=strptime(lockoutTime,"%Y-%m-%dT%H:%M:%S.%6NZ"), created_e=strptime(whenCreated,"%Y-%m-%d %H:%M:%S%:z")
+| eval Status=case(isnotnull(mvfind(userAccountControl,"ACCOUNTDISABLE")),"Disabled", lock_e>0,"Locked", true(),"Enabled")
 | eval PwdNeverExpires=if(isnotnull(mvfind(userAccountControl,"DONT_EXPIRE_PASSWD")),"Yes","No")
-| eval lastLogon_e=coalesce(strptime(lastLogonTimestamp,"%Y-%m-%dT%H:%M:%S.%6NZ"),strptime(lastLogonTimestamp,"%Y-%m-%dT%H:%M:%SZ"))
-| eval pwdLastSet_e=coalesce(strptime(pwdLastSet,"%Y-%m-%dT%H:%M:%S.%6NZ"),strptime(pwdLastSet,"%Y-%m-%dT%H:%M:%SZ"))
-| eval DaysSinceLogon=if(isnull(lastLogon_e) OR lastLogon_e<0,"never",round((now()-lastLogon_e)/86400,0))
-| eval PwdAgeDays=if(isnull(pwdLastSet_e) OR pwdLastSet_e<0,"never",round((now()-pwdLastSet_e)/86400,0))
-| eval Manager=replace(mvindex(split(manager,","),0),"^CN=","")
-| eval Groups=mvcount(memberOf)
-| eval OU=replace(distinguishedName,"^CN=[^,]+,","")
-    ]]></query>
-    <earliest>0</earliest>
-    <latest>now</latest>
+| eval PwdNotRequired=if(isnotnull(mvfind(userAccountControl,"PASSWD_NOTREQD")),"Yes","No")
+| eval DaysSinceLogon=if(lastLogon_e>0,round((now()-lastLogon_e)/86400,0),"never")
+| eval PwdAgeDays=case(pwd_e>0,round((now()-pwd_e)/86400,0), pwdLastSet="(never)","must change", true(),"-")
+| eval Created=strftime(created_e,"%Y-%m-%d"), Manager=replace(mvindex(split(manager,","),0),"^CN=",""), Groups=coalesce(mvcount(memberOf),0), OU=replace(distinguishedName,"^.*?,(?=(OU|CN|DC)=)","")]]></query>
+    <earliest>0</earliest><latest>now</latest>
   </search>
-
-  <!-- AD computer objects -->
   <search id="base_computers">
-    <query><![CDATA[
-| ldapsearch domain="$domain$"
+    <query><![CDATA[| ldapsearch domain="$domain$"
     search="(&(objectClass=computer)(|(name=$comp$)(dNSHostName=$comp$)))"
-    attrs="name,dNSHostName,operatingSystem,operatingSystemVersion,description,managedBy,userAccountControl,lastLogonTimestamp,pwdLastSet,whenCreated,whenChanged,distinguishedName"
+    attrs="name,dNSHostName,operatingSystem,operatingSystemVersion,description,managedBy,userAccountControl,lastLogonTimestamp,whenCreated,distinguishedName"
+| eval lastLogon_e=strptime(lastLogonTimestamp,"%Y-%m-%dT%H:%M:%S.%6NZ"), created_e=strptime(whenCreated,"%Y-%m-%d %H:%M:%S%:z")
 | eval Status=if(isnotnull(mvfind(userAccountControl,"ACCOUNTDISABLE")),"Disabled","Enabled")
-| eval Role=case(isnotnull(mvfind(userAccountControl,"SERVER_TRUST_ACCOUNT")),"Domain Controller",
-                 match(operatingSystem,"(?i)server"),"Server",
-                 true(),"Workstation")
-| eval lastLogon_e=coalesce(strptime(lastLogonTimestamp,"%Y-%m-%dT%H:%M:%S.%6NZ"),strptime(lastLogonTimestamp,"%Y-%m-%dT%H:%M:%SZ"))
-| eval DaysSinceLogon=if(isnull(lastLogon_e) OR lastLogon_e<0,"never",round((now()-lastLogon_e)/86400,0))
-| eval ManagedBy=replace(mvindex(split(managedBy,","),0),"^CN=","")
-| eval OU=replace(distinguishedName,"^CN=[^,]+,","")
-    ]]></query>
-    <earliest>0</earliest>
-    <latest>now</latest>
+| eval Role=case(isnotnull(mvfind(userAccountControl,"SERVER_TRUST_ACCOUNT")),"Domain Controller", isnotnull(mvfind(userAccountControl,"PARTIAL_SECRETS_ACCOUNT")),"RODC", match(operatingSystem,"(?i)server"),"Server", isnull(operatingSystem),"Unknown", true(),"Workstation")
+| eval DaysSinceLogon=if(lastLogon_e>0,round((now()-lastLogon_e)/86400,0),"never")
+| eval Created=strftime(created_e,"%Y-%m-%d"), ManagedBy=replace(mvindex(split(managedBy,","),0),"^CN=",""), OU=replace(distinguishedName,"^.*?,(?=(OU|CN|DC)=)","")
+| fillnull value="-" operatingSystem operatingSystemVersion ManagedBy]]></query>
+    <earliest>0</earliest><latest>now</latest>
   </search>
-
-  <!-- Windows Security authentication events (CIM-style fields from Splunk Add-on for Microsoft Windows) -->
   <search id="base_auth">
-    <query><![CDATA[
-index="$idx$" source="*WinEventLog:Security" EventCode IN (4624,4625,4740,4771,4776)
-  (user="$acct$" OR Account_Name="$acct$" OR Target_User_Name="$acct$")
-  (dest="$comp$*" OR ComputerName="$comp$*" OR src="$comp$*" OR Workstation_Name="$comp$*")
-| eval user=lower(coalesce(user,Target_User_Name,mvindex(Account_Name,-1)))
-| search user!="*$" user!="-" user!="anonymous logon"
-| eval dest=lower(coalesce(dest,ComputerName)), src=coalesce(src,Source_Network_Address,Workstation_Name,"-")
+    <query><![CDATA[index="$idx$" source="WinEventLog:Security" EventCode IN (4624,4625,4740,4771,4776) user="$acct$" (dest="$comp$" OR dest="$comp$.*" OR Workstation_Name="$comp$")
+| where NOT like(user,"%$$") AND user!="-" AND lower(user)!="anonymous logon"
+| eval user=lower(user), dest_short=upper(mvindex(split(dest,"."),0)), src=coalesce(src,Source_Network_Address,Workstation_Name,"-")
 | eval Result=case(EventCode=4624,"Success",EventCode=4740,"Lockout",true(),"Failure")
-| fields _time user dest src EventCode Result Logon_Type Failure_Reason Status Sub_Status
-    ]]></query>
-    <earliest>$tr.earliest$</earliest>
-    <latest>$tr.latest$</latest>
+| eval LogonType=case(Logon_Type=2,"2 Interactive",Logon_Type=3,"3 Network",Logon_Type=4,"4 Batch",Logon_Type=5,"5 Service",Logon_Type=7,"7 Unlock",Logon_Type=8,"8 NetworkCleartext",Logon_Type=9,"9 NewCredentials",Logon_Type=10,"10 RemoteInteractive",Logon_Type=11,"11 CachedInteractive",isnotnull(Logon_Type),tostring(Logon_Type),true(),"-")
+| eval code=lower(coalesce(Sub_Status,Error_Code,Failure_Code,"-")), Reason=case(EventCode=4624 OR EventCode=4740,"-",code="0xc000006a" OR code="0x18","Bad password",code="0xc0000064" OR code="0x6","Unknown user",code="0xc0000234","Locked out",code="0xc0000072" OR code="0x12","Disabled/locked",code="0xc0000071" OR code="0x17","Password expired",code="0xc0000193","Account expired",code="0xc0000224","Must change password",code="0xc000006f","Outside logon hours",code="0xc0000070","Workstation restricted",true(),code)
+| fillnull value="-" dest_short
+| bin _time span=1h
+| stats count by _time user dest_short src Result LogonType Reason EventCode]]></query>
+    <earliest>$tr.earliest$</earliest><latest>$tr.latest$</latest>
   </search>
-
-  <!-- ============================================================ -->
-  <!-- ROW 1: KPIs                                                   -->
-  <!-- ============================================================ -->
+  <search id="base_dc_cov">
+    <query><![CDATA[| ldapsearch domain="$domain$" search="(&(objectClass=computer)(userAccountControl:1.2.840.113556.1.4.803:=8192))" attrs="name,operatingSystem"
+| eval host=upper(name)
+| join type=left host
+    [| tstats count latest(_time) AS last where index="$idx$" source="WinEventLog:Security" earliest=-24h by host
+     | eval host=upper(mvindex(split(host,"."),0)) | stats sum(count) AS count max(last) AS last by host]
+| eval Status=if(coalesce(count,0)>0,"Logging","NOT LOGGING"), Events24h=coalesce(count,0), LastEvent=if(isnull(last),"-",strftime(last,"%Y-%m-%d %H:%M"))
+| table name operatingSystem Status Events24h LastEvent
+| sort -Status name]]></query>
+    <earliest>0</earliest><latest>now</latest>
+  </search>
   <row>
     <panel>
-      <single>
-        <title>Matching accounts</title>
-        <search base="base_users"><query>| stats count</query></search>
+      <html><h2 style="margin:4px 0;color:#C5CCD3">Validated SPL · LDAP (SA-ldapsearch) + WinEventLog:Security · click a row to drill down</h2></html>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <single><title>Accounts</title>
+        <search base="base_users"><query><![CDATA[| stats count]]></query></search>
         <option name="drilldown">none</option>
       </single>
     </panel>
     <panel>
-      <single>
-        <title>Disabled / Locked accounts</title>
-        <search base="base_users"><query>| where Status!="Enabled" | stats count</query></search>
+      <single><title>Disabled / Locked</title>
+        <search base="base_users"><query><![CDATA[| where Status!="Enabled" | stats count]]></query></search>
+        <option name="drilldown">none</option>
         <option name="colorMode">block</option>
-        <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
-        <option name="rangeValues">[0,10]</option>
         <option name="useColors">1</option>
-        <option name="drilldown">none</option>
+        <option name="rangeValues">[0, 49]</option>
+        <option name="rangeColors">["0x53A051", "0xF8BE34", "0xDC4E41"]</option>
       </single>
     </panel>
     <panel>
-      <single>
-        <title>Matching computers</title>
-        <search base="base_computers"><query>| stats count</query></search>
+      <single><title>PASSWD_NOTREQD (enabled)</title>
+        <search base="base_users"><query><![CDATA[| where PwdNotRequired="Yes" AND Status!="Disabled" | stats count]]></query></search>
         <option name="drilldown">none</option>
-      </single>
-    </panel>
-    <panel>
-      <single>
-        <title>Failed logons (time range)</title>
-        <search base="base_auth"><query>| where Result="Failure" | stats count</query></search>
         <option name="colorMode">block</option>
-        <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
-        <option name="rangeValues">[10,100]</option>
         <option name="useColors">1</option>
-        <option name="drilldown">none</option>
-      </single>
-    </panel>
-    <panel>
-      <single>
-        <title>Account lockouts (4740)</title>
-        <search base="base_auth"><query>| where Result="Lockout" | stats count</query></search>
-        <option name="colorMode">block</option>
-        <option name="rangeColors">["0x53a051","0xdc4e41"]</option>
         <option name="rangeValues">[0]</option>
-        <option name="useColors">1</option>
+        <option name="rangeColors">["0x53A051", "0xDC4E41"]</option>
+      </single>
+    </panel>
+    <panel>
+      <single><title>Computers</title>
+        <search base="base_computers"><query><![CDATA[| stats count]]></query></search>
         <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <single><title>Failed logons</title>
+        <search base="base_auth"><query><![CDATA[| where Result="Failure" | stats sum(count) AS count | fillnull value=0 count]]></query></search>
+        <option name="drilldown">none</option>
+        <option name="colorMode">block</option>
+        <option name="useColors">1</option>
+        <option name="rangeValues">[99, 999]</option>
+        <option name="rangeColors">["0x53A051", "0xF8BE34", "0xDC4E41"]</option>
+      </single>
+    </panel>
+    <panel>
+      <single><title>Lockouts (4740)</title>
+        <search base="base_auth"><query><![CDATA[| where Result="Lockout" | stats sum(count) AS count | fillnull value=0 count]]></query></search>
+        <option name="drilldown">none</option>
+        <option name="colorMode">block</option>
+        <option name="useColors">1</option>
+        <option name="rangeValues">[0, 19]</option>
+        <option name="rangeColors">["0x53A051", "0xF8BE34", "0xDC4E41"]</option>
+      </single>
+    </panel>
+    <panel>
+      <single><title>DCs NOT logging</title>
+        <search base="base_dc_cov"><query><![CDATA[| where Status="NOT LOGGING" | stats count]]></query></search>
+        <option name="drilldown">none</option>
+        <option name="colorMode">block</option>
+        <option name="useColors">1</option>
+        <option name="rangeValues">[0]</option>
+        <option name="rangeColors">["0x53A051", "0xDC4E41"]</option>
       </single>
     </panel>
   </row>
-
-  <!-- ============================================================ -->
-  <!-- ROW 2: ACCOUNT SEARCH                                         -->
-  <!-- ============================================================ -->
   <row>
     <panel>
-      <title>AD accounts — click a row for details</title>
-      <table>
-        <search base="base_users">
-          <query>| table sAMAccountName displayName mail title department Manager Status PwdNeverExpires DaysSinceLogon PwdAgeDays Groups whenCreated OU
-| sort sAMAccountName</query>
-        </search>
+      <html><h2 style="margin:4px 0;color:#C5CCD3">Accounts</h2></html>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table><title>AD accounts — click a row</title>
+        <search base="base_users"><query><![CDATA[| table sAMAccountName cn displayName mail title department Manager Status PwdNotRequired PwdNeverExpires DaysSinceLogon PwdAgeDays Groups Created OU | sort sAMAccountName]]></query></search>
         <option name="count">10</option>
         <option name="drilldown">row</option>
-        <format type="color" field="Status">
-          <colorPalette type="map">{"Enabled":#53A051,"Disabled":#708794,"Locked":#DC4E41}</colorPalette>
-        </format>
-        <format type="color" field="PwdNeverExpires">
-          <colorPalette type="map">{"Yes":#F8BE34}</colorPalette>
-        </format>
+        <format type="color" field="Status"><colorPalette type="map">{"Enabled":#1B5E3B,"Disabled":#4A5058,"Locked":#8A2A24}</colorPalette></format>
+        <format type="color" field="PwdNeverExpires"><colorPalette type="map">{"Yes":#7A5A12}</colorPalette></format>
+        <format type="color" field="PwdNotRequired"><colorPalette type="map">{"Yes":#8A2A24}</colorPalette></format>
         <drilldown>
           <set token="sel_user">$row.sAMAccountName$</set>
+          <set token="sel_cn">$row.cn$</set>
         </drilldown>
       </table>
     </panel>
   </row>
-
   <row depends="$sel_user$">
     <panel>
-      <title>Group membership: $sel_user$</title>
-      <table>
-        <search base="base_users">
-          <query>| search sAMAccountName="$sel_user$"
-| fields memberOf | mvexpand memberOf
-| eval Group=replace(mvindex(split(memberOf,","),0),"^CN=",""),
-       Privileged=if(match(Group,"(?i)^(Domain Admins|Enterprise Admins|Schema Admins|Administrators|Account Operators|Backup Operators|Server Operators|Print Operators|DnsAdmins|Group Policy Creator Owners)$"),"YES","")
-| table Group Privileged memberOf | sort -Privileged Group</query>
-        </search>
+      <table><title>Group membership: $sel_user$</title>
+        <search base="base_users"><query><![CDATA[| search sAMAccountName="$sel_user$" | fields memberOf | mvexpand memberOf
+| eval Group=replace(mvindex(split(memberOf,","),0),"^CN=",""), Privileged=if(match(Group,"(?i)^(Domain Admins|Enterprise Admins|Schema Admins|Administrators|Account Operators|Backup Operators|Server Operators|Print Operators|DnsAdmins|Group Policy Creator Owners|Enterprise Key Admins|Key Admins)$"),"YES","-")
+| table Group Privileged | sort -Privileged Group]]></query></search>
         <option name="count">10</option>
-        <format type="color" field="Privileged">
-          <colorPalette type="map">{"YES":#DC4E41}</colorPalette>
-        </format>
+        <option name="drilldown">none</option>
+        <format type="color" field="Privileged"><colorPalette type="map">{"YES":#8A2A24}</colorPalette></format>
       </table>
     </panel>
     <panel>
-      <title>Computers used by $sel_user$</title>
-      <table>
-        <search>
-          <query>index="$idx$" source="*WinEventLog:Security" EventCode=4624 (user="$sel_user$" OR Target_User_Name="$sel_user$")
-| eval dest=lower(coalesce(dest,ComputerName)), src=coalesce(src,Source_Network_Address,Workstation_Name,"-")
-| stats count AS Logons values(Logon_Type) AS LogonTypes values(src) AS Sources min(_time) AS First max(_time) AS Last BY dest
-| convert ctime(First) ctime(Last) | sort -Logons</query>
-          <earliest>$tr.earliest$</earliest>
-          <latest>$tr.latest$</latest>
-        </search>
+      <table><title>Computers used by $sel_user$ (click → Computer)</title>
+        <search><query><![CDATA[index="$idx$" source="WinEventLog:Security" EventCode=4624 user="$sel_user$"
+| eval dest_short=upper(mvindex(split(dest,"."),0)), src=coalesce(src,Source_Network_Address,Workstation_Name,"-")
+| eval LogonType=case(Logon_Type=2,"2 Interactive",Logon_Type=3,"3 Network",Logon_Type=4,"4 Batch",Logon_Type=5,"5 Service",Logon_Type=7,"7 Unlock",Logon_Type=8,"8 NetworkCleartext",Logon_Type=9,"9 NewCredentials",Logon_Type=10,"10 RemoteInteractive",Logon_Type=11,"11 CachedInteractive",isnotnull(Logon_Type),tostring(Logon_Type),true(),"-")
+| stats count AS Logons values(LogonType) AS LogonTypes dc(src) AS Sources max(_time) AS Last by dest_short
+| eval Last=strftime(Last,"%Y-%m-%d %H:%M") | rename dest_short AS Computer | sort -Logons]]></query><earliest>$tr.earliest$</earliest><latest>$tr.latest$</latest></search>
         <option name="count">10</option>
         <option name="drilldown">row</option>
         <drilldown>
-          <set token="form.comp">$row.dest$</set>
+          <set token="form.comp">$row.Computer$</set>
+          <set token="comp">$row.Computer$</set>
+          <set token="sel_comp">$row.Computer$</set>
         </drilldown>
       </table>
     </panel>
   </row>
-
   <row depends="$sel_user$">
     <panel>
-      <title>Logon activity timeline: $sel_user$</title>
-      <chart>
-        <search base="base_auth">
-          <query>| search user="$sel_user$" | timechart count BY Result</query>
-        </search>
+      <chart><title>Logon timeline: $sel_user$</title>
+        <search base="base_auth"><query><![CDATA[| search user="$sel_user$" | timechart span=1h sum(count) AS count by Result]]></query></search>
         <option name="charting.chart">column</option>
         <option name="charting.chart.stackMode">stacked</option>
-        <option name="charting.fieldColors">{"Success":0x53A051,"Failure":0xDC4E41,"Lockout":0xF8BE34}</option>
+        <option name="charting.fieldColors">{"Success":0x4EA1F3,"Failure":0xF28B3C,"Lockout":0xF5D76E}</option>
       </chart>
     </panel>
     <panel>
-      <title>AD changes to $sel_user$ (account management)</title>
-      <table>
-        <search>
-          <query>index="$idx$" source="*WinEventLog:Security" EventCode IN (4720,4722,4723,4724,4725,4726,4738,4740,4767,4728,4729,4732,4733,4756,4757)
-  (Target_User_Name="$sel_user$" OR Member_Name="*$sel_user$*" OR user="$sel_user$")
-| eval Action=case(EventCode=4720,"Created",EventCode=4722,"Enabled",EventCode=4723,"Pwd change attempt",EventCode=4724,"Pwd reset",
-                   EventCode=4725,"Disabled",EventCode=4726,"Deleted",EventCode=4738,"Changed",EventCode=4740,"Locked out",
-                   EventCode=4767,"Unlocked",in(EventCode,4728,4732,4756),"Added to group",in(EventCode,4729,4733,4757),"Removed from group")
-| eval By=mvindex(Account_Name,0), Group=coalesce(Group_Name,"")
-| table _time Action By Group ComputerName EventCode | sort -_time</query>
-          <earliest>$tr.earliest$</earliest>
-          <latest>$tr.latest$</latest>
-        </search>
+      <table><title>AD changes to $sel_user$</title>
+        <search><query><![CDATA[index="$idx$" source="WinEventLog:Security" EventCode IN (4720,4722,4723,4724,4725,4726,4738,4740,4767,4728,4729,4732,4733,4756,4757)
+| eval target=lower(coalesce(user,mvindex(Account_Name,-1)))
+| where target=lower("$sel_user$") OR target=lower("$sel_cn$")
+| eval Action=case(EventCode=4720,"Created",EventCode=4722,"Enabled",EventCode=4723,"Password change",EventCode=4724,"Password reset",EventCode=4725,"Disabled",EventCode=4726,"Deleted",EventCode=4738,"Changed",EventCode=4740,"Locked out",EventCode=4767,"Unlocked",EventCode=4728 OR EventCode=4732 OR EventCode=4756,"Added to group",EventCode=4729 OR EventCode=4733 OR EventCode=4757,"Removed from group")
+| eval By=coalesce(src_user,mvindex(Account_Name,0)), Group=coalesce(Group_Name,"-"), Caller=coalesce(Caller_Computer_Name,"-"), DC=upper(mvindex(split(host,"."),0)), Time=strftime(_time,"%Y-%m-%d %H:%M:%S")
+| table Time Action By Group Caller DC EventCode | sort -Time | head 200]]></query><earliest>$tr.earliest$</earliest><latest>$tr.latest$</latest></search>
         <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <format type="color" field="Action"><colorPalette type="map">{"Added to group":#7A5A12,"Locked out":#8A2A24,"Deleted":#8A2A24,"Disabled":#4A5058,"Password reset":#1D4E79,"Created":#1B5E3B}</colorPalette></format>
       </table>
     </panel>
   </row>
-
-  <!-- ============================================================ -->
-  <!-- ROW 3: COMPUTER SEARCH                                        -->
-  <!-- ============================================================ -->
   <row>
     <panel>
-      <title>AD computers — click a row for details</title>
-      <table>
-        <search base="base_computers">
-          <query>| table name dNSHostName Role operatingSystem operatingSystemVersion Status DaysSinceLogon ManagedBy description whenCreated OU
-| sort name</query>
-        </search>
+      <html><h2 style="margin:4px 0;color:#C5CCD3">Computers</h2></html>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table><title>AD computers — click a row</title>
+        <search base="base_computers"><query><![CDATA[| table name dNSHostName Role operatingSystem operatingSystemVersion Status DaysSinceLogon ManagedBy Created OU | sort name]]></query></search>
         <option name="count">10</option>
         <option name="drilldown">row</option>
-        <format type="color" field="Status">
-          <colorPalette type="map">{"Enabled":#53A051,"Disabled":#708794}</colorPalette>
-        </format>
-        <format type="color" field="Role">
-          <colorPalette type="map">{"Domain Controller":#7B56DB,"Server":#006D9C,"Workstation":#3C444D}</colorPalette>
-        </format>
+        <format type="color" field="Status"><colorPalette type="map">{"Enabled":#1B5E3B,"Disabled":#4A5058,"Locked":#8A2A24}</colorPalette></format>
+        <format type="color" field="Role"><colorPalette type="map">{"Domain Controller":#4B3A8C,"RODC":#4B3A8C,"Server":#1D4E79,"Workstation":#3C444D,"Unknown":#4A5058}</colorPalette></format>
         <drilldown>
           <set token="sel_comp">$row.name$</set>
         </drilldown>
       </table>
     </panel>
     <panel>
-      <title>Computers by operating system</title>
-      <chart>
-        <search base="base_computers">
-          <query>| stats count BY operatingSystem | sort -count</query>
-        </search>
+      <chart><title>Computers by operating system</title>
+        <search base="base_computers"><query><![CDATA[| stats count by operatingSystem | sort -count]]></query></search>
         <option name="charting.chart">pie</option>
       </chart>
     </panel>
   </row>
-
   <row depends="$sel_comp$">
     <panel>
-      <title>Accounts that logged on to $sel_comp$</title>
-      <table>
-        <search>
-          <query>index="$idx$" source="*WinEventLog:Security" EventCode IN (4624,4625) (dest="$sel_comp$*" OR ComputerName="$sel_comp$*")
-| eval user=lower(coalesce(user,Target_User_Name,mvindex(Account_Name,-1)))
-| search user!="*$" user!="-" user!="anonymous logon"
-| eval Result=if(EventCode=4624,"Success","Failure"), src=coalesce(src,Source_Network_Address,Workstation_Name,"-")
-| stats count(eval(Result="Success")) AS Success count(eval(Result="Failure")) AS Failure values(Logon_Type) AS LogonTypes values(src) AS Sources max(_time) AS Last BY user
-| convert ctime(Last) | sort -Success</query>
-          <earliest>$tr.earliest$</earliest>
-          <latest>$tr.latest$</latest>
-        </search>
+      <table><title>Accounts logged on to $sel_comp$ (click → Account)</title>
+        <search><query><![CDATA[index="$idx$" source="WinEventLog:Security" EventCode IN (4624,4625) (dest="$sel_comp$" OR dest="$sel_comp$.*")
+| where NOT like(user,"%$$") AND user!="-" AND lower(user)!="anonymous logon"
+| eval user=lower(user), src=coalesce(src,Source_Network_Address,Workstation_Name,"-")
+| eval LogonType=case(Logon_Type=2,"2 Interactive",Logon_Type=3,"3 Network",Logon_Type=4,"4 Batch",Logon_Type=5,"5 Service",Logon_Type=7,"7 Unlock",Logon_Type=8,"8 NetworkCleartext",Logon_Type=9,"9 NewCredentials",Logon_Type=10,"10 RemoteInteractive",Logon_Type=11,"11 CachedInteractive",isnotnull(Logon_Type),tostring(Logon_Type),true(),"-")
+| stats count(eval(EventCode=4624)) AS Success count(eval(EventCode=4625)) AS Failure values(LogonType) AS LogonTypes dc(src) AS Sources max(_time) AS Last by user
+| eval Last=strftime(Last,"%Y-%m-%d %H:%M") | sort -Success]]></query><earliest>$tr.earliest$</earliest><latest>$tr.latest$</latest></search>
         <option name="count">10</option>
         <option name="drilldown">row</option>
         <drilldown>
           <set token="form.acct">$row.user$</set>
+          <set token="acct">$row.user$</set>
           <set token="sel_user">$row.user$</set>
+          <set token="sel_cn">$row.user$</set>
         </drilldown>
       </table>
     </panel>
     <panel>
-      <title>Computer account changes: $sel_comp$ (4741/4742/4743)</title>
-      <table>
-        <search>
-          <query>index="$idx$" source="*WinEventLog:Security" EventCode IN (4741,4742,4743) Target_User_Name="$sel_comp$*"
-| eval Action=case(EventCode=4741,"Created",EventCode=4742,"Changed",EventCode=4743,"Deleted"), By=mvindex(Account_Name,0)
-| table _time Action By ComputerName EventCode | sort -_time</query>
-          <earliest>$tr.earliest$</earliest>
-          <latest>$tr.latest$</latest>
-        </search>
+      <table><title>Computer account changes: $sel_comp$ (4741–4743)</title>
+        <search><query><![CDATA[index="$idx$" source="WinEventLog:Security" EventCode IN (4741,4742,4743) user="$sel_comp$*"
+| where upper(replace(user,"[^A-Za-z0-9._-]",""))=upper("$sel_comp$")
+| eval Action=case(EventCode=4741,"Created",EventCode=4742,"Changed",EventCode=4743,"Deleted"), By=coalesce(src_user,mvindex(Account_Name,0)), DC=upper(mvindex(split(host,"."),0)), Time=strftime(_time,"%Y-%m-%d %H:%M:%S")
+| table Time Action By DC EventCode | sort -Time | head 200]]></query><earliest>$tr.earliest$</earliest><latest>$tr.latest$</latest></search>
         <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <format type="color" field="Action"><colorPalette type="map">{"Added to group":#7A5A12,"Locked out":#8A2A24,"Deleted":#8A2A24,"Disabled":#4A5058,"Password reset":#1D4E79,"Created":#1B5E3B}</colorPalette></format>
       </table>
     </panel>
   </row>
-
-  <!-- ============================================================ -->
-  <!-- ROW 4: HYGIENE / STALE OBJECTS                                -->
-  <!-- ============================================================ -->
   <row>
     <panel>
-      <title>Stale enabled accounts (no logon &gt; $stale$ days)</title>
-      <table>
-        <search base="base_users">
-          <query>| where Status="Enabled" AND (DaysSinceLogon="never" OR tonumber(DaysSinceLogon)&gt;$stale$)
-| table sAMAccountName displayName department DaysSinceLogon PwdAgeDays PwdNeverExpires OU | sort -DaysSinceLogon</query>
-        </search>
+      <html><h2 style="margin:4px 0;color:#C5CCD3">Hygiene &amp; threat indicators</h2></html>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table><title>Stale enabled accounts (&gt; $stale$ days)</title>
+        <search base="base_users"><query><![CDATA[| where Status="Enabled" AND (DaysSinceLogon="never" OR tonumber(DaysSinceLogon)>$stale$) | table sAMAccountName displayName department DaysSinceLogon PwdAgeDays PwdNeverExpires OU | sort -DaysSinceLogon]]></query></search>
         <option name="count">10</option>
+        <option name="drilldown">none</option>
       </table>
     </panel>
     <panel>
-      <title>Stale enabled computers (no logon &gt; $stale$ days)</title>
-      <table>
-        <search base="base_computers">
-          <query>| where Status="Enabled" AND (DaysSinceLogon="never" OR tonumber(DaysSinceLogon)&gt;$stale$)
-| table name operatingSystem Role DaysSinceLogon OU | sort -DaysSinceLogon</query>
-        </search>
+      <table><title>Stale enabled computers (&gt; $stale$ days)</title>
+        <search base="base_computers"><query><![CDATA[| where Status="Enabled" AND (DaysSinceLogon="never" OR tonumber(DaysSinceLogon)>$stale$) | table name Role operatingSystem DaysSinceLogon OU | sort -DaysSinceLogon]]></query></search>
         <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <format type="color" field="Role"><colorPalette type="map">{"Domain Controller":#4B3A8C,"RODC":#4B3A8C,"Server":#1D4E79,"Workstation":#3C444D,"Unknown":#4A5058}</colorPalette></format>
       </table>
     </panel>
   </row>
-
   <row>
     <panel>
-      <title>Top failed-logon accounts (password spray / brute force indicator)</title>
-      <table>
-        <search base="base_auth">
-          <query>| where Result="Failure"
-| stats count AS Failures dc(dest) AS Targets dc(src) AS Sources values(Sub_Status) AS SubStatus BY user
-| sort -Failures | head 20</query>
-        </search>
+      <table><title>Top failed-logon accounts (brute force, T1110.001)</title>
+        <search base="base_auth"><query><![CDATA[| where Result="Failure" | stats sum(count) AS Failures dc(dest_short) AS Targets dc(src) AS Sources values(Reason) AS Reasons by user | sort -Failures | head 20]]></query></search>
         <option name="count">10</option>
-        <format type="color" field="Failures">
-          <colorPalette type="minMidMax" maxColor="#DC4E41" minColor="#3C444D"></colorPalette>
-          <scale type="minMidMax"></scale>
-        </format>
         <option name="drilldown">row</option>
         <drilldown>
           <set token="form.acct">$row.user$</set>
+          <set token="acct">$row.user$</set>
           <set token="sel_user">$row.user$</set>
+          <set token="sel_cn">$row.user$</set>
         </drilldown>
+      </table>
+    </panel>
+    <panel>
+      <table><title>Password-spray sources: failures across ≥ $spray$ accounts (T1110.003)</title>
+        <search base="base_auth"><query><![CDATA[| where Result="Failure" | stats sum(count) AS Failures dc(user) AS Accounts values(Reason) AS Reasons by src | where Accounts>=$spray$ | sort -Accounts | head 20]]></query></search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table><title>Lockout sources (4740 Caller_Computer_Name)</title>
+        <search><query><![CDATA[index="$idx$" source="WinEventLog:Security" EventCode=4740 user="$acct$"
+| eval Caller=upper(coalesce(Caller_Computer_Name,"-")), k=user."|".floor(_time/60)
+| stats dc(k) AS Lockouts dc(user) AS Accounts values(user) AS Users max(_time) AS Last by Caller
+| eval Users=mvjoin(mvindex(Users,0,4),", "), Last=strftime(Last,"%Y-%m-%d %H:%M") | sort -Lockouts | head 20]]></query><earliest>$tr.earliest$</earliest><latest>$tr.latest$</latest></search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+    <panel>
+      <table><title>Domain controller log coverage (last 24h)</title>
+        <search base="base_dc_cov"><query>| table *</query></search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <format type="color" field="Status"><colorPalette type="map">{"Logging":#1B5E3B,"NOT LOGGING":#8A2A24}</colorPalette></format>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table><title>Risky enabled accounts: PASSWD_NOTREQD / password never expires</title>
+        <search base="base_users"><query><![CDATA[| where Status!="Disabled" AND (PwdNotRequired="Yes" OR PwdNeverExpires="Yes") | table sAMAccountName displayName department Status PwdNotRequired PwdNeverExpires PwdAgeDays DaysSinceLogon OU | sort -PwdNotRequired sAMAccountName]]></query></search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <format type="color" field="Status"><colorPalette type="map">{"Enabled":#1B5E3B,"Disabled":#4A5058,"Locked":#8A2A24}</colorPalette></format>
+        <format type="color" field="PwdNotRequired"><colorPalette type="map">{"Yes":#8A2A24}</colorPalette></format>
+        <format type="color" field="PwdNeverExpires"><colorPalette type="map">{"Yes":#7A5A12}</colorPalette></format>
       </table>
     </panel>
   </row>
