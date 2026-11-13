@@ -406,6 +406,14 @@
         "query": "| eval name_u=upper(name) | lookup s1_agent_inventory.csv agent AS name_u OUTPUT LastSeen EDR_Version EDR_MachineType EDR_Network EDR_Infected EDR_Active EDR_Decommissioned EDR_ActiveThreats EDR_LastUser | eval EDR=case(isnull(LastSeen),\"Missing\", lower(EDR_Decommissioned)=\"true\",\"Decommissioned\", now()-LastSeen>7*86400,\"Stale (>7d)\", true(),\"Installed\"), EDR_SeenDays=if(isnull(LastSeen),\"-\",round((now()-LastSeen)/86400,0)) | where lower(EDR_Infected)=\"true\" OR tonumber(EDR_ActiveThreats)>0 | stats count"
       }
     },
+    "ds_t_edrrole": {
+      "type": "ds.chain",
+      "name": "t_edrrole",
+      "options": {
+        "extend": "ds_computers",
+        "query": "| where Status=\"Enabled\" AND tonumber(DaysSinceLogon)<=$stale$ | eval name_u=upper(name) | lookup s1_agent_inventory.csv agent AS name_u OUTPUT LastSeen EDR_Version EDR_MachineType EDR_Network EDR_Infected EDR_Active EDR_Decommissioned EDR_ActiveThreats EDR_LastUser | eval EDR=case(isnull(LastSeen),\"Missing\", lower(EDR_Decommissioned)=\"true\",\"Decommissioned\", now()-LastSeen>7*86400,\"Stale (>7d)\", true(),\"Installed\"), EDR_SeenDays=if(isnull(LastSeen),\"-\",round((now()-LastSeen)/86400,0)) | stats count AS Computers count(eval(EDR=\"Installed\")) AS EDR_OK by Role | eval Coverage=round(EDR_OK/Computers*100,1).\"%\" | sort -Computers"
+      }
+    },
     "ds_t_edrmiss": {
       "type": "ds.chain",
       "name": "t_edrmiss",
@@ -1339,9 +1347,17 @@
         ]
       }
     },
+    "viz_edrrole": {
+      "type": "splunk.table",
+      "title": "EDR coverage by role (active)",
+      "dataSources": {
+        "primary": "ds_t_edrrole"
+      },
+      "options": {}
+    },
     "viz_edrinf": {
       "type": "splunk.table",
-      "title": "SentinelOne agents infected or with active threats",
+      "title": "Agents infected / active threats",
       "dataSources": {
         "primary": "ds_t_edrinf"
       },
@@ -1872,12 +1888,22 @@
         }
       },
       {
-        "item": "viz_edrinf",
+        "item": "viz_edrrole",
         "type": "block",
         "position": {
           "x": 20,
           "y": 1730,
-          "w": 695,
+          "w": 300,
+          "h": 180
+        }
+      },
+      {
+        "item": "viz_edrinf",
+        "type": "block",
+        "position": {
+          "x": 330,
+          "y": 1730,
+          "w": 385,
           "h": 180
         }
       },

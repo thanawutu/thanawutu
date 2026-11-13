@@ -183,5 +183,7 @@ Security observations to report: (1) DC logging gap, (2) enabled accounts with `
 | S1 applications cadence (S16a) | 429–2,552 agents/day, spiky → change feed, not full inventory | status lookup built from **agents** channel instead |
 | S1 agents fields (S17a) | computerName, lastActiveDate, updatedAt, domain, agentVersion, machineType, networkStatus, infected, activeThreats, isActive, isDecommissioned, operationalState, osName, isUpToDate, appsVulnerabilityStatus, lastLoggedInUserName, siteName, groupName – all 99.5 % | backfill SPL uses these names as-is |
 | S1 agents cadence (S17b) | steady **~3,850 agents/day**, ~2 snapshots/agent/day; `lastActiveDate` = `%Y-%m-%dT%H:%M:%S.%6NZ` | first `strptime` pattern matches; daily schedule over 24 h is sufficient |
+| S1 lookup backfill | 3,881 agents; 3,515 active ≤ 7 d, 366 stale (max 84 d); LastSeen parsed (min age 1 d) | – |
+| AD ↔ S1 name match (S16b, enabled computers) | Workstation **97.8 %** (2,630/2,688), **Server 24.7 %** (281/1,139), Other 49.4 % (118/239) | names match (upper short name); server gap → S18; new *EDR coverage by role* panel |
 
 Pending (optional): S6 (30-day check of 4720/4743/4757), S8 (AD count match).

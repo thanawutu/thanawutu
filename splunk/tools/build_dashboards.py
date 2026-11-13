@@ -206,6 +206,8 @@ ds("k_edrcov", f'{ACTIVE} {EDR_EVAL} | stats count(eval(EDR="Installed")) AS ok 
    '| eval count=if(total>0,round(ok/total*100,1)."%","-") | table count', "computers")
 ds("k_edrmiss", f'{ACTIVE} {EDR_EVAL} | where EDR!="Installed" | stats count', "computers")
 ds("k_edrinf", f'{EDR_EVAL} | where lower(EDR_Infected)="true" OR tonumber(EDR_ActiveThreats)>0 | stats count', "computers")
+ds("t_edrrole", f'{ACTIVE} {EDR_EVAL} | stats count AS Computers count(eval(EDR="Installed")) AS EDR_OK by Role '
+   '| eval Coverage=round(EDR_OK/Computers*100,1)."%" | sort -Computers', "computers")
 ds("t_edrmiss", f'{ACTIVE} {EDR_EVAL} | where EDR!="Installed" '
    '| table name Role operatingSystem DaysSinceLogon EDR EDR_SeenDays OU | sort EDR -DaysSinceLogon name', "computers")
 ds("t_edrinf", f'{EDR_EVAL} | where lower(EDR_Infected)="true" OR tonumber(EDR_ActiveThreats)>0 | table name Role EDR_Infected EDR_ActiveThreats EDR_LastUser EDR_Network EDR_SeenDays', "computers")
@@ -319,7 +321,8 @@ for x in V:
 v("viz_k_edrcov", "single", "EDR coverage (active computers)", "k_edrcov", (L, 1610, 225, 110), 7.5)
 v("viz_k_edrmiss", "single", "Active computers without EDR", "k_edrmiss", (255, 1610, 225, 110), 7.5, thr=(1, 20))
 v("viz_k_edrinf", "single", "EDR infected / active threats", "k_edrinf", (490, 1610, 225, 110), 7.5, thr=(1, 1))
-v("viz_edrinf", "table", "SentinelOne agents infected or with active threats", "t_edrinf", (L, 1730, HW, 180), 7.6)
+v("viz_edrrole", "table", "EDR coverage by role (active)", "t_edrrole", (L, 1730, 300, 180), 7.6)
+v("viz_edrinf", "table", "Agents infected / active threats", "t_edrinf", (330, 1730, 385, 180), 7.6)
 v("viz_edrmiss", "table", "Active computers (≤ $stale$ d) without healthy EDR — click a row", "t_edrmiss", (RX, 1610, HW, 300), 7.5,
   drill=[("sel_comp", "name")], colors={"EDR": "EDR", "Role": "Role"})
 v("viz_software", "table", "Installed software on $sel_comp$ (SentinelOne, 30 d)", "t_software", (L, 2230, HW, 300), 8.5,

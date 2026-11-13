@@ -298,7 +298,14 @@
   </row>
   <row>
     <panel>
-      <table><title>SentinelOne agents infected or with active threats</title>
+      <table><title>EDR coverage by role (active)</title>
+        <search base="base_computers"><query><![CDATA[| where Status="Enabled" AND tonumber(DaysSinceLogon)<=$stale$ | eval name_u=upper(name) | lookup s1_agent_inventory.csv agent AS name_u OUTPUT LastSeen EDR_Version EDR_MachineType EDR_Network EDR_Infected EDR_Active EDR_Decommissioned EDR_ActiveThreats EDR_LastUser | eval EDR=case(isnull(LastSeen),"Missing", lower(EDR_Decommissioned)="true","Decommissioned", now()-LastSeen>7*86400,"Stale (>7d)", true(),"Installed"), EDR_SeenDays=if(isnull(LastSeen),"-",round((now()-LastSeen)/86400,0)) | stats count AS Computers count(eval(EDR="Installed")) AS EDR_OK by Role | eval Coverage=round(EDR_OK/Computers*100,1)."%" | sort -Computers]]></query></search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+    <panel>
+      <table><title>Agents infected / active threats</title>
         <search base="base_computers"><query><![CDATA[| eval name_u=upper(name) | lookup s1_agent_inventory.csv agent AS name_u OUTPUT LastSeen EDR_Version EDR_MachineType EDR_Network EDR_Infected EDR_Active EDR_Decommissioned EDR_ActiveThreats EDR_LastUser | eval EDR=case(isnull(LastSeen),"Missing", lower(EDR_Decommissioned)="true","Decommissioned", now()-LastSeen>7*86400,"Stale (>7d)", true(),"Installed"), EDR_SeenDays=if(isnull(LastSeen),"-",round((now()-LastSeen)/86400,0)) | where lower(EDR_Infected)="true" OR tonumber(EDR_ActiveThreats)>0 | table name Role EDR_Infected EDR_ActiveThreats EDR_LastUser EDR_Network EDR_SeenDays]]></query></search>
         <option name="count">10</option>
         <option name="drilldown">none</option>
