@@ -283,7 +283,7 @@
       "name": "t_comps",
       "options": {
         "extend": "ds_computers",
-        "query": "| eval name_u=upper(name) | lookup s1_agent_inventory.csv agent AS name_u OUTPUT LastSeen EDR_Version EDR_MachineType EDR_Network EDR_Infected EDR_Active EDR_Decommissioned | eval EDR=case(isnull(LastSeen),\"Missing\", lower(EDR_Decommissioned)=\"true\",\"Decommissioned\", now()-LastSeen>7*86400,\"Stale (>7d)\", true(),\"Installed\"), EDR_SeenDays=if(isnull(LastSeen),\"-\",round((now()-LastSeen)/86400,0)) | table name Role operatingSystem Status DaysSinceLogon EDR EDR_Version EDR_SeenDays OU | sort name"
+        "query": "| eval name_u=upper(name) | lookup s1_agent_inventory.csv agent AS name_u OUTPUT LastSeen EDR_Version EDR_MachineType EDR_Network EDR_Infected EDR_Active EDR_Decommissioned EDR_ActiveThreats EDR_LastUser | eval EDR=case(isnull(LastSeen),\"Missing\", lower(EDR_Decommissioned)=\"true\",\"Decommissioned\", now()-LastSeen>7*86400,\"Stale (>7d)\", true(),\"Installed\"), EDR_SeenDays=if(isnull(LastSeen),\"-\",round((now()-LastSeen)/86400,0)) | table name Role operatingSystem Status DaysSinceLogon EDR EDR_Version EDR_SeenDays OU | sort name"
       }
     },
     "ds_c_os": {
@@ -383,7 +383,7 @@
       "name": "k_edrcov",
       "options": {
         "extend": "ds_computers",
-        "query": "| where Status=\"Enabled\" AND tonumber(DaysSinceLogon)<=$stale$ | eval name_u=upper(name) | lookup s1_agent_inventory.csv agent AS name_u OUTPUT LastSeen EDR_Version EDR_MachineType EDR_Network EDR_Infected EDR_Active EDR_Decommissioned | eval EDR=case(isnull(LastSeen),\"Missing\", lower(EDR_Decommissioned)=\"true\",\"Decommissioned\", now()-LastSeen>7*86400,\"Stale (>7d)\", true(),\"Installed\"), EDR_SeenDays=if(isnull(LastSeen),\"-\",round((now()-LastSeen)/86400,0)) | stats count(eval(EDR=\"Installed\")) AS ok count AS total | eval count=if(total>0,round(ok/total*100,1).\"%\",\"-\") | table count"
+        "query": "| where Status=\"Enabled\" AND tonumber(DaysSinceLogon)<=$stale$ | eval name_u=upper(name) | lookup s1_agent_inventory.csv agent AS name_u OUTPUT LastSeen EDR_Version EDR_MachineType EDR_Network EDR_Infected EDR_Active EDR_Decommissioned EDR_ActiveThreats EDR_LastUser | eval EDR=case(isnull(LastSeen),\"Missing\", lower(EDR_Decommissioned)=\"true\",\"Decommissioned\", now()-LastSeen>7*86400,\"Stale (>7d)\", true(),\"Installed\"), EDR_SeenDays=if(isnull(LastSeen),\"-\",round((now()-LastSeen)/86400,0)) | stats count(eval(EDR=\"Installed\")) AS ok count AS total | eval count=if(total>0,round(ok/total*100,1).\"%\",\"-\") | table count"
       }
     },
     "ds_k_edrmiss": {
@@ -391,7 +391,7 @@
       "name": "k_edrmiss",
       "options": {
         "extend": "ds_computers",
-        "query": "| where Status=\"Enabled\" AND tonumber(DaysSinceLogon)<=$stale$ | eval name_u=upper(name) | lookup s1_agent_inventory.csv agent AS name_u OUTPUT LastSeen EDR_Version EDR_MachineType EDR_Network EDR_Infected EDR_Active EDR_Decommissioned | eval EDR=case(isnull(LastSeen),\"Missing\", lower(EDR_Decommissioned)=\"true\",\"Decommissioned\", now()-LastSeen>7*86400,\"Stale (>7d)\", true(),\"Installed\"), EDR_SeenDays=if(isnull(LastSeen),\"-\",round((now()-LastSeen)/86400,0)) | where EDR!=\"Installed\" | stats count"
+        "query": "| where Status=\"Enabled\" AND tonumber(DaysSinceLogon)<=$stale$ | eval name_u=upper(name) | lookup s1_agent_inventory.csv agent AS name_u OUTPUT LastSeen EDR_Version EDR_MachineType EDR_Network EDR_Infected EDR_Active EDR_Decommissioned EDR_ActiveThreats EDR_LastUser | eval EDR=case(isnull(LastSeen),\"Missing\", lower(EDR_Decommissioned)=\"true\",\"Decommissioned\", now()-LastSeen>7*86400,\"Stale (>7d)\", true(),\"Installed\"), EDR_SeenDays=if(isnull(LastSeen),\"-\",round((now()-LastSeen)/86400,0)) | where EDR!=\"Installed\" | stats count"
       }
     },
     "ds_k_edrinf": {
@@ -399,7 +399,7 @@
       "name": "k_edrinf",
       "options": {
         "extend": "ds_computers",
-        "query": "| eval name_u=upper(name) | lookup s1_agent_inventory.csv agent AS name_u OUTPUT LastSeen EDR_Version EDR_MachineType EDR_Network EDR_Infected EDR_Active EDR_Decommissioned | eval EDR=case(isnull(LastSeen),\"Missing\", lower(EDR_Decommissioned)=\"true\",\"Decommissioned\", now()-LastSeen>7*86400,\"Stale (>7d)\", true(),\"Installed\"), EDR_SeenDays=if(isnull(LastSeen),\"-\",round((now()-LastSeen)/86400,0)) | where lower(EDR_Infected)=\"true\" | stats count"
+        "query": "| eval name_u=upper(name) | lookup s1_agent_inventory.csv agent AS name_u OUTPUT LastSeen EDR_Version EDR_MachineType EDR_Network EDR_Infected EDR_Active EDR_Decommissioned EDR_ActiveThreats EDR_LastUser | eval EDR=case(isnull(LastSeen),\"Missing\", lower(EDR_Decommissioned)=\"true\",\"Decommissioned\", now()-LastSeen>7*86400,\"Stale (>7d)\", true(),\"Installed\"), EDR_SeenDays=if(isnull(LastSeen),\"-\",round((now()-LastSeen)/86400,0)) | where lower(EDR_Infected)=\"true\" OR tonumber(EDR_ActiveThreats)>0 | stats count"
       }
     },
     "ds_t_edrmiss": {
@@ -407,7 +407,7 @@
       "name": "t_edrmiss",
       "options": {
         "extend": "ds_computers",
-        "query": "| where Status=\"Enabled\" AND tonumber(DaysSinceLogon)<=$stale$ | eval name_u=upper(name) | lookup s1_agent_inventory.csv agent AS name_u OUTPUT LastSeen EDR_Version EDR_MachineType EDR_Network EDR_Infected EDR_Active EDR_Decommissioned | eval EDR=case(isnull(LastSeen),\"Missing\", lower(EDR_Decommissioned)=\"true\",\"Decommissioned\", now()-LastSeen>7*86400,\"Stale (>7d)\", true(),\"Installed\"), EDR_SeenDays=if(isnull(LastSeen),\"-\",round((now()-LastSeen)/86400,0)) | where EDR!=\"Installed\" | table name Role operatingSystem DaysSinceLogon EDR EDR_SeenDays OU | sort EDR -DaysSinceLogon name"
+        "query": "| where Status=\"Enabled\" AND tonumber(DaysSinceLogon)<=$stale$ | eval name_u=upper(name) | lookup s1_agent_inventory.csv agent AS name_u OUTPUT LastSeen EDR_Version EDR_MachineType EDR_Network EDR_Infected EDR_Active EDR_Decommissioned EDR_ActiveThreats EDR_LastUser | eval EDR=case(isnull(LastSeen),\"Missing\", lower(EDR_Decommissioned)=\"true\",\"Decommissioned\", now()-LastSeen>7*86400,\"Stale (>7d)\", true(),\"Installed\"), EDR_SeenDays=if(isnull(LastSeen),\"-\",round((now()-LastSeen)/86400,0)) | where EDR!=\"Installed\" | table name Role operatingSystem DaysSinceLogon EDR EDR_SeenDays OU | sort EDR -DaysSinceLogon name"
       }
     },
     "ds_t_edrinf": {
@@ -415,7 +415,7 @@
       "name": "t_edrinf",
       "options": {
         "extend": "ds_computers",
-        "query": "| eval name_u=upper(name) | lookup s1_agent_inventory.csv agent AS name_u OUTPUT LastSeen EDR_Version EDR_MachineType EDR_Network EDR_Infected EDR_Active EDR_Decommissioned | eval EDR=case(isnull(LastSeen),\"Missing\", lower(EDR_Decommissioned)=\"true\",\"Decommissioned\", now()-LastSeen>7*86400,\"Stale (>7d)\", true(),\"Installed\"), EDR_SeenDays=if(isnull(LastSeen),\"-\",round((now()-LastSeen)/86400,0)) | where lower(EDR_Infected)=\"true\" | table name Role EDR_Version EDR_Network EDR_SeenDays OU"
+        "query": "| eval name_u=upper(name) | lookup s1_agent_inventory.csv agent AS name_u OUTPUT LastSeen EDR_Version EDR_MachineType EDR_Network EDR_Infected EDR_Active EDR_Decommissioned EDR_ActiveThreats EDR_LastUser | eval EDR=case(isnull(LastSeen),\"Missing\", lower(EDR_Decommissioned)=\"true\",\"Decommissioned\", now()-LastSeen>7*86400,\"Stale (>7d)\", true(),\"Installed\"), EDR_SeenDays=if(isnull(LastSeen),\"-\",round((now()-LastSeen)/86400,0)) | where lower(EDR_Infected)=\"true\" OR tonumber(EDR_ActiveThreats)>0 | table name Role EDR_Infected EDR_ActiveThreats EDR_LastUser EDR_Network EDR_SeenDays"
       }
     },
     "ds_t_edragent": {
@@ -1314,7 +1314,7 @@
     },
     "viz_k_edrinf": {
       "type": "splunk.singlevalue",
-      "title": "EDR agents infected",
+      "title": "EDR infected / active threats",
       "dataSources": {
         "primary": "ds_k_edrinf"
       },
@@ -1337,7 +1337,7 @@
     },
     "viz_edrinf": {
       "type": "splunk.table",
-      "title": "SentinelOne agents reporting infected",
+      "title": "SentinelOne agents infected or with active threats",
       "dataSources": {
         "primary": "ds_t_edrinf"
       },

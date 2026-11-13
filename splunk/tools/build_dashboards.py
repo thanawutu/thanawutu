@@ -38,7 +38,7 @@ PRIV = ('(?i)^(Domain Admins|Enterprise Admins|Schema Admins|Administrators|Acco
 EDR_LOOKUP = "s1_agent_inventory.csv"
 S1 = 'index="$edridx$" sourcetype="sentinelone:channel:applications"'
 EDR_EVAL = (f'| eval name_u=upper(name) | lookup {EDR_LOOKUP} agent AS name_u OUTPUT LastSeen EDR_Version EDR_MachineType '
-            'EDR_Network EDR_Infected EDR_Active EDR_Decommissioned '
+            'EDR_Network EDR_Infected EDR_Active EDR_Decommissioned EDR_ActiveThreats EDR_LastUser '
             '| eval EDR=case(isnull(LastSeen),"Missing", lower(EDR_Decommissioned)="true","Decommissioned", '
             'now()-LastSeen>7*86400,"Stale (>7d)", true(),"Installed"), '
             'EDR_SeenDays=if(isnull(LastSeen),"-",round((now()-LastSeen)/86400,0))')
@@ -205,10 +205,10 @@ ds("t_risky", '| where Status!="Disabled" AND (PwdNotRequired="Yes" OR PwdNeverE
 ds("k_edrcov", f'{ACTIVE} {EDR_EVAL} | stats count(eval(EDR="Installed")) AS ok count AS total '
    '| eval count=if(total>0,round(ok/total*100,1)."%","-") | table count', "computers")
 ds("k_edrmiss", f'{ACTIVE} {EDR_EVAL} | where EDR!="Installed" | stats count', "computers")
-ds("k_edrinf", f'{EDR_EVAL} | where lower(EDR_Infected)="true" | stats count', "computers")
+ds("k_edrinf", f'{EDR_EVAL} | where lower(EDR_Infected)="true" OR tonumber(EDR_ActiveThreats)>0 | stats count', "computers")
 ds("t_edrmiss", f'{ACTIVE} {EDR_EVAL} | where EDR!="Installed" '
    '| table name Role operatingSystem DaysSinceLogon EDR EDR_SeenDays OU | sort EDR -DaysSinceLogon name', "computers")
-ds("t_edrinf", f'{EDR_EVAL} | where lower(EDR_Infected)="true" | table name Role EDR_Version EDR_Network EDR_SeenDays OU', "computers")
+ds("t_edrinf", f'{EDR_EVAL} | where lower(EDR_Infected)="true" OR tonumber(EDR_ActiveThreats)>0 | table name Role EDR_Infected EDR_ActiveThreats EDR_LastUser EDR_Network EDR_SeenDays', "computers")
 ds("t_edragent", f'''
 | inputlookup {EDR_LOOKUP} where agent="$sel_comp$"
 | eval LastSeen=strftime(LastSeen,"%Y-%m-%d %H:%M")
@@ -318,8 +318,8 @@ for x in V:
         x["pos"] = (px, py + 620, pw, ph)
 v("viz_k_edrcov", "single", "EDR coverage (active computers)", "k_edrcov", (L, 1610, 225, 110), 7.5)
 v("viz_k_edrmiss", "single", "Active computers without EDR", "k_edrmiss", (255, 1610, 225, 110), 7.5, thr=(1, 20))
-v("viz_k_edrinf", "single", "EDR agents infected", "k_edrinf", (490, 1610, 225, 110), 7.5, thr=(1, 1))
-v("viz_edrinf", "table", "SentinelOne agents reporting infected", "t_edrinf", (L, 1730, HW, 180), 7.6)
+v("viz_k_edrinf", "single", "EDR infected / active threats", "k_edrinf", (490, 1610, 225, 110), 7.5, thr=(1, 1))
+v("viz_edrinf", "table", "SentinelOne agents infected or with active threats", "t_edrinf", (L, 1730, HW, 180), 7.6)
 v("viz_edrmiss", "table", "Active computers (≤ $stale$ d) without healthy EDR — click a row", "t_edrmiss", (RX, 1610, HW, 300), 7.5,
   drill=[("sel_comp", "name")], colors={"EDR": "EDR", "Role": "Role"})
 v("viz_software", "table", "Installed software on $sel_comp$ (SentinelOne, 30 d)", "t_software", (L, 2230, HW, 300), 8.5,
