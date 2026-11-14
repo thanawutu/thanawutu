@@ -10,6 +10,7 @@ APP = os.path.join(HERE, "..", "TA-imperva-ioc-block-v2")
 # sha256 of appserver/static/imperva_form.js for each build number; when the script changes, raise
 # [install] build in default/app.conf and add the new pair here (otherwise browsers keep the old card)
 KNOWN = {
+    3: "7fe1f40dad3cdb84884da9450da3273a37ae12f5e7182a2978f410f8bb213519",
     2: "e9a5aaf1aea0ddc1bf92c5d28d90407fb318d59e61aaa12c987b8f51b2b2b1fe",
 }
 

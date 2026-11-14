@@ -267,7 +267,18 @@ const txt = (page, sel) => page.$eval(sel, e => e.textContent);
   await page.fill("#imp_d_q", "203.0.113.10");
   await page.waitForTimeout(900);
   check((await page.$$eval(".imp-tag", t => t.map(x => x.textContent))).join() === "✍ 203.0.113.10" && (await txt(page, ".imp-run:not(.imp-nb)")) === "⛔ Block 1 IP", "fallback: typed IP counted");
-  check((await txt(page, ".imp-find")).indexOf("check unavailable") > 0, "Found says the check is unavailable");
+  check((await txt(page, ".imp-find")).indexOf("check unavailable (Error in 'impervafind' command: boom) – checked again when blocking") > 0, "Found shows the error of the search: " + (await txt(page, ".imp-find")));
+  check(errs.length === 0, "no JS errors " + errs.join(" | "));
+  await page.close();
+
+  console.log("Slow Found search: a cancelled older job is not a failure");
+  ({page, errs} = await open(browser, "d", false, {findDelay: 1500}));
+  await page.fill("#imp_d_q", "199.19.95.68");
+  await page.waitForTimeout(900);
+  check((await txt(page, ".imp-find")).indexOf("⏳ checking every page and every WAF policy") > 0 && (await txt(page, ".imp-find")).indexOf("unavailable") < 0, "while the search runs: ⏳ checking, not unavailable");
+  check((await page.$$eval(".imp-tag", t => t.map(x => x.textContent))).join() === "⏳ 199.19.95.68" && (await txt(page, ".imp-run:not(.imp-nb)")) === "⛔ Block 0 IPs", "not counted before the check");
+  await page.waitForTimeout(1500);
+  check(/199\.19\.95\.68✔ not on the WAF/.test(await txt(page, ".imp-find")) && (await txt(page, ".imp-run:not(.imp-nb)")) === "⛔ Block 1 IP", "result arrives: can be blocked, counted");
   check(errs.length === 0, "no JS errors " + errs.join(" | "));
   await page.close();
 

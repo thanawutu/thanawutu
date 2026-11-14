@@ -88,7 +88,9 @@
     clearTimeout(ft);
     ft = setTimeout(function () {
       fmgr.runs++;
-      if (cfg.findFail) { fmgr.trigger("search:failed"); return; }
+      if (cfg.findFail) { fmgr.trigger("search:failed", {content: {messages: [{type: "ERROR", text: "Error in 'impervafind' command: boom"}]}}); return; }
+      // the running job of the previous keystroke is cancelled when a new one starts (not a failure)
+      fmgr.trigger("search:cancelled"); fmgr.trigger("search:start");
       var q = String(sub.get(p + "_q") || "*").replace(/\*/g, "").trim().toLowerCase().replace(/^ithm[\s:#-]*/, "");
       var isip = function (x) { return /^\d{1,3}(\.\d{1,3}){3}(\/\d{1,2})?$/.test(x) || (/:/.test(x) && /^[0-9a-f:.]+(\/\d{1,3})?$/.test(x)); };
       var ips = q.split(/[\s,;]+/).filter(Boolean).filter(isip), rows = [];
@@ -103,6 +105,7 @@
       fmgr.res.d = {fields: ["ip", "found", "find_blockable", "find_cloud"], rows: rows};
       fmgr.res.trigger("data");
     }, cfg.findDelay || 60);
+    if (cfg.findDelay) setTimeout(function () { fmgr.trigger("search:progress"); }, 5);
   }
   if (p !== "b") sub.on("change:" + p + "_q", dispatchFind);
 

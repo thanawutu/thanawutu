@@ -229,6 +229,7 @@ require([
         this.found = {};         // typed IP -> {lines, blockable, cloud} from the search <p>_find
         this.findText = null;    // Found lines of a text search (no IP typed)
         this.findErr = false;
+        this.findMsg = "";       // why the Found search failed (shown in the box)
 
         var card = el("div", "imp-card" + (cfg.verb === "unblock" ? " imp-u" : ""));
         card.setAttribute("role", "group");
@@ -482,7 +483,7 @@ require([
                 row.appendChild(el("b", null, ip));
                 if (!f) {
                     row.appendChild(el("span", "imp-f-note", self.findErr
-                        ? "check unavailable – checked again when blocking"
+                        ? "check unavailable" + (self.findMsg ? " (" + self.findMsg + ")" : "") + " – checked again when blocking"
                         : "⏳ checking every page and every WAF policy …"));
                 } else {
                     lineEls(row, f.lines);
@@ -510,8 +511,27 @@ require([
         if (!mgr) {
             return;
         }
-        mgr.on("search:failed search:error search:cancelled", function () {
+        // a newer search (the next keystroke) cancels the running one: that is NOT a failure
+        mgr.on("search:start search:progress", function () {
+            if (self.findErr) {
+                self.findErr = false;
+                self.findMsg = "";
+                self.render();
+            }
+        });
+        var why = function (a) {
+            if (typeof a === "string") {
+                return a;
+            }
+            var m = a && a.content && a.content.messages;
+            if (m && m.length) {
+                return m.map(function (x) { return x.text || x.message || ""; }).join(" ").trim();
+            }
+            return (a && (a.message || a.text)) || "";
+        };
+        mgr.on("search:failed search:error", function (a, b) {
             self.findErr = true;
+            self.findMsg = String(why(a) || why(b) || "search failed").slice(0, 160);
             self.render();
         });
         var results = mgr.data("results", {count: 0, output_mode: "json_rows"});
