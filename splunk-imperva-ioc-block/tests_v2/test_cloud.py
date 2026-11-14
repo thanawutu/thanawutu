@@ -124,12 +124,11 @@ class TestBlockCommand(unittest.TestCase):
         c.get_logger = lambda *a: Log()
         self.backend = FakeBackend()
         c.get_backend = lambda *a, **k: self.backend
-        self.saved = (c.ip_owner.owners, c.auto_unblock.load_settings)
+        self.saved = c.ip_owner.owners
         c.ip_owner.owners = lambda sk, iconf, vconf, ips, log, max_lookups=4: dict((ip, self.owner.get(ip)) for ip in ips)
-        c.auto_unblock.load_settings = lambda sk, conf=None: {"cloud_days": 7}
 
     def tearDown(self):
-        self.c.ip_owner.owners, self.c.auto_unblock.load_settings = self.saved
+        self.c.ip_owner.owners = self.saved
 
     def test_cloud_ip_is_blocked_with_a_note(self):
         sys.argv = ["impervablock.py", "action=block", 'ip="54.245.198.114,', '211.24.84.19"', "incident_no=1000101"]

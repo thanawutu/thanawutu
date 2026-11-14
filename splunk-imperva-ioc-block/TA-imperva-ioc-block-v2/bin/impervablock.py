@@ -97,14 +97,13 @@ def main():
                 candidates, protected,
                 max_prefix_v4=int(conf.get("max_cidr_prefix_v4", 24)),
                 max_prefix_v6=int(conf.get("max_cidr_prefix_v6", 48)))
-            # V2: cloud provider IPs may be blocked; Auto unblock removes them after [auto_unblock]
-            # cloud_days without an attack. The owner is looked up now so Auto unblock knows it later.
+            # V2: cloud provider / shared IPs may be blocked; Auto unblock removes them after 7 days
+            # without an attack. The owner is looked up now so Auto unblock knows it later.
             notes = {}
             if conf.get("cloud_providers") and accepted:
                 try:
                     vconf = load_conf_stanza(session_key, "imperva", "virustotal")
-                    days = auto_unblock.load_settings(session_key, conf)["cloud_days"]
-                    notes = ip_owner.cloud_notes(session_key, conf, vconf, accepted, log, days)
+                    notes = ip_owner.cloud_notes(session_key, conf, vconf, accepted, log, auto_unblock.CLOUD_DAYS)
                 except Exception as e:  # noqa: BLE001 - only a note, never stops the block
                     log.error("cloud provider check failed: %s", e)
         else:  # unblocking is always allowed for anything that parses

@@ -1,6 +1,6 @@
 <form version="1.1" theme="dark" hideFilters="true">
   <label>Imperva IOC Block V2 – Auto unblock</label>
-  <description>IP rules of every WAF policy are unblocked when the IP sent no request for a while: cloud provider IPs (AWS, Google Cloud, Azure ...) and shared IPs (mobile carriers) after the short period (7 days), other IPs after the default period (60 days) (see Settings). The countdown starts at the latest of the last attack (Imperva "Blocked IP" log), the block date and the day V2 first saw the rule. Runs every day at 02:17 ("Imperva V2 - Auto unblock (daily)"). Every action is written to the audit log.</description>
+  <description>IP rules of every enabled WAF policy are unblocked automatically when the IP sent no request: cloud provider IPs (AWS, Google Cloud, Azure ...) and shared IPs (mobile carriers) after 7 days, other IPs after 60 days. The countdown starts at the latest of the last attack (Imperva "Blocked IP" log), the block date and the day V2 first saw the rule. Runs every day at 02:17 ("Imperva V2 - Auto unblock (daily)"). Every action is written to the audit log.</description>
   <init>
     <set token="a_refresh">init</set>
   </init>
@@ -91,115 +91,16 @@
 
   <row>
     <panel>
-      <title>Settings – saved in the KV store, written to the audit log</title>
-      <input type="dropdown" token="a_en" searchWhenChanged="true">
-        <label>Auto unblock</label>
-        <fieldForLabel>label</fieldForLabel>
-        <fieldForValue>v</fieldForValue>
-        <selectFirstChoice>true</selectFirstChoice>
-        <search>
-          <query>| makeresults | impervaautounblock action=settings | eval _r=$a_refresh|s$
-| eval v=split("on,off", ",") | mvexpand v | eval label=if(v="on", "On - unblock every day", "Off - nothing is unblocked").if(v=enabled, " (saved)", ""), o=if(v=enabled, 0, 1) | sort o
-| table label v</query>
-          <earliest>-1m</earliest>
-          <latest>now</latest>
-        </search>
-      </input>
-      <input type="dropdown" token="a_def" searchWhenChanged="true">
-        <label>Unblock IPs after no attack for</label>
-        <fieldForLabel>label</fieldForLabel>
-        <fieldForValue>v</fieldForValue>
-        <selectFirstChoice>true</selectFirstChoice>
-        <search>
-          <query>| makeresults | impervaautounblock action=settings | eval _r=$a_refresh|s$
-| eval v=split("30,60,90,180,365", ",") | mvexpand v | eval label=v." days".if(v=default_days, " (saved)", ""), o=if(v=default_days, 0, 1) | sort o num(v)
-| table label v</query>
-          <earliest>-1m</earliest>
-          <latest>now</latest>
-        </search>
-      </input>
-      <input type="dropdown" token="a_cloud" searchWhenChanged="true">
-        <label>Unblock cloud provider / shared IPs after no attack for</label>
-        <fieldForLabel>label</fieldForLabel>
-        <fieldForValue>v</fieldForValue>
-        <selectFirstChoice>true</selectFirstChoice>
-        <search>
-          <query>| makeresults | impervaautounblock action=settings | eval _r=$a_refresh|s$
-| eval v=split("1,3,7,14,30", ",") | mvexpand v | eval label=v." days".if(v=cloud_days, " (saved)", ""), o=if(v=cloud_days, 0, 1) | sort o num(v)
-| table label v</query>
-          <earliest>-1m</earliest>
-          <latest>now</latest>
-        </search>
-      </input>
-      <input type="dropdown" token="a_scope" searchWhenChanged="true">
-        <label>Unblock from</label>
-        <fieldForLabel>label</fieldForLabel>
-        <fieldForValue>v</fieldForValue>
-        <selectFirstChoice>true</selectFirstChoice>
-        <search>
-          <query>| makeresults | impervaautounblock action=settings | eval _r=$a_refresh|s$
-| eval v=split("all,own", ",") | mvexpand v | eval label=if(v="all", "All enabled policies", "Own policy only (policy_ids)").if(v=scope, " (saved)", ""), o=if(v=scope, 0, 1) | sort o
-| table label v</query>
-          <earliest>-1m</earliest>
-          <latest>now</latest>
-        </search>
-      </input>
-      <input type="dropdown" token="a_max" searchWhenChanged="true">
-        <label>IP rules per run</label>
-        <fieldForLabel>label</fieldForLabel>
-        <fieldForValue>v</fieldForValue>
-        <selectFirstChoice>true</selectFirstChoice>
-        <search>
-          <query>| makeresults | impervaautounblock action=settings | eval _r=$a_refresh|s$
-| eval v=split("10,25,50,100", ",") | mvexpand v | eval label=v." rules".if(v=max_per_run, " (saved)", ""), o=if(v=max_per_run, 0, 1) | sort o num(v)
-| table label v</query>
-          <earliest>-1m</earliest>
-          <latest>now</latest>
-        </search>
-      </input>
-      <table>
-        <search>
-          <query>| makeresults
-| eval Save="💾 SAVE SETTINGS", settings="auto unblock ".$a_en|s$." · IPs ".$a_def|s$." days · cloud ".$a_cloud|s$." days · ".if($a_scope|s$="all", "all enabled policies", "own policy only")." · ".$a_max|s$." per run"
-| table Save settings</query>
-          <earliest>-1m</earliest>
-          <latest>now</latest>
-        </search>
-        <option name="count">1</option>
-        <option name="drilldown">cell</option>
-        <format type="color" field="Save">
-          <colorPalette type="expression">"#1F6F8B"</colorPalette>
-        </format>
-        <drilldown>
-          <condition field="Save">
-            <set token="a_save">$row.settings$</set>
-          </condition>
-          <condition></condition>
-        </drilldown>
-      </table>
-    </panel>
-  </row>
-  <row>
-    <panel depends="$a_save$">
-      <title>Settings saved (click to close)</title>
-      <table>
-        <search>
-          <query>| makeresults | impervaautounblock action=settings enabled=$a_en|s$ default_days=$a_def|s$ cloud_days=$a_cloud|s$ scope=$a_scope|s$ max_per_run=$a_max|s$
-| eval _s=$a_save|s$
-| `imperva_audit_write`
-| table time user action status detail</query>
-          <earliest>-1m</earliest>
-          <latest>now</latest>
-          <done>
-            <set token="a_refresh">$job.sid$</set>
-          </done>
-        </search>
-        <option name="count">1</option>
-        <option name="drilldown">cell</option>
-        <drilldown>
-          <unset token="a_save"></unset>
-        </drilldown>
-      </table>
+      <html>
+        <div style="display:flex;flex-wrap:wrap;gap:8px 22px;align-items:center;padding:4px 2px;font-size:13px;line-height:1.5">
+          <span style="background:#53A051;color:#fff;border-radius:3px;padding:2px 8px;font-weight:600">⏱ AUTO UNBLOCK ON</span>
+          <span>☁ Cloud provider / shared IP: <b>7 days</b> without an attack</span>
+          <span>Other IPs: <b>60 days</b> without an attack</span>
+          <span>All enabled WAF policies</span>
+          <span>Max <b>50</b> IP rules per run (the rest the next day)</span>
+          <span style="opacity:.75">Every day at 02:17 · fixed values, no settings</span>
+        </div>
+      </html>
     </panel>
   </row>
 
@@ -208,8 +109,8 @@
       <title>Run now – unblock what is due (same as the daily run)</title>
       <table>
         <search base="plan">
-          <query>| stats count(eval(status_code="due")) AS due count(eval(status_code="due_not_managed")) AS not_managed
-| eval Run=if(due>0, "▶ RUN NOW (".due." due)", "Nothing due now"), note=if(not_managed>0, not_managed." due in policies outside the scope (not changed)", "-")
+          <query>| stats count(eval(status_code="due")) AS due
+| eval Run=if(due>0, "▶ RUN NOW (".due." due)", "Nothing due now"), note=if(due>50, "50 per run - the rest at the next run", "-")
 | table Run due note</query>
         </search>
         <option name="count">1</option>
@@ -283,7 +184,7 @@
       <table>
         <search base="plan">
           <query>| eval _f=$a_f|s$, _q=lower(trim(replace($a_q|s$, "[*]", "")))
-| where _f="all" OR status_code=_f OR (_f="due" AND status_code="due_not_managed") OR (_f="cloud" AND short_block!="-") OR (_f="own" AND own_policy="yes") OR (_f="other" AND own_policy="no")
+| where _f="all" OR status_code=_f OR (_f="cloud" AND short_block!="-") OR (_f="own" AND own_policy="yes") OR (_f="other" AND own_policy="no")
 | where _q="" OR like(lower(ip." ".policy_id." ".policy_name." ".ticket." ".description." ".owner), "%"._q."%")
 | eval Keep=if(status_code="kept", "-", "📌 Keep"), Default=if(rule_reason!="-" OR status_code="kept", "↺ Default", "-"), Unblock="🔓 Unblock now"
 | table Keep Default Unblock ip status last_attack attacks_24h unblock_after unblock_on days_left short_block owner policy_id policy_name blocked_at listed_since ticket description rule_reason
@@ -384,12 +285,12 @@
 
   <row>
     <panel>
-      <title>Policies with BLOCK IP rules – for "All enabled policies" their IDs must be in IMPERVA_POLICY_IDS on SOAR</title>
+      <title>Policies with BLOCK IP rules – their IDs must be in IMPERVA_POLICY_IDS on SOAR</title>
       <table>
         <search>
           <query>| makeresults | impervaautounblock action=policies
 | eval _r=$a_refresh|s$
-| table policy_id policy_name own_policy managed block_ip_rules cloud shared due attacks_24h</query>
+| table policy_id policy_name own_policy block_ip_rules cloud shared due attacks_24h</query>
           <earliest>-1m</earliest>
           <latest>now</latest>
         </search>

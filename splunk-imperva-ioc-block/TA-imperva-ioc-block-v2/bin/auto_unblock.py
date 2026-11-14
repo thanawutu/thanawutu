@@ -2,10 +2,11 @@
 Auto unblock (V2): which IP rules of the WAF policies to unblock, and when.
 
 An IP rule (IP or CIDR with action BLOCK in an IP setting of a WAF policy) is unblocked when the
-IP has sent no request for N days:
-    cloud provider IP (imperva.conf cloud_providers)       cloud_days    (default 7)
-    shared IP, e.g. mobile carrier NAT (shared_ip_providers) cloud_days   (default 7)
-    any other IP                                           default_days  (default 60)
+IP has sent no request for N days (fixed values, no settings):
+    cloud provider IP (imperva.conf cloud_providers)          7 days
+    shared IP, e.g. mobile carrier NAT (shared_ip_providers)  7 days
+    any other IP                                              60 days
+Always on (unblocks, no report-only mode), every enabled policy, at most 50 rules per run.
 "Request" = an Imperva event "Blocked IP" / act REQ_BLOCKED_ACL from the IP, collected every hour
 by the saved search "Imperva V2 - Last attack of blocked IPs (hourly)" into KV imperva_blocked_seen.
 
@@ -13,59 +14,26 @@ The countdown starts at the latest of:
     the last request seen from the IP (or from any IP of the CIDR)
     the block date (KV imperva_block_registry, IPs blocked from Splunk)
     the first time Auto unblock saw the rule (= the day V2 was installed for rules already there)
-    [auto_unblock] start_time (optional)
 
 Per rule (KV imperva_auto_unblock): rule = default | keep (never) | <days>.
-Scope: own policies (imperva.conf policy_ids) are always handled; scope = all adds every other
-ENABLED policy (their IDs must be in IMPERVA_POLICY_IDS on SOAR). Range rules ("a-b") and
-non-BLOCK rules (ALLOW, exceptions) are never touched.
+Policies: every ENABLED policy, plus the own policy (imperva.conf policy_ids) even when disabled.
+Their IDs must be in IMPERVA_POLICY_IDS on SOAR. Range rules ("a-b") and non-BLOCK rules
+(ALLOW, exceptions) are never touched.
 
 Pure functions (no Splunk imports) so the decisions can be unit-tested.
 """
 
 import ipaddress
 
-STATE = "imperva_auto_unblock"       # per rule: first_listed, rule; document "settings"
+STATE = "imperva_auto_unblock"       # per rule: first_listed, rule
 SEEN = "imperva_blocked_seen"        # per source IP: last_seen, hits_24h
-SETTINGS_KEY = "settings"
+OLD_SETTINGS_KEY = "settings"        # settings document of an earlier V2 build: ignored
 DAY = 86400
 ATTACKING_SECONDS = DAY              # a request in the last 24 h = "attacking now"
 
-DEFAULTS = {"enabled": "on", "default_days": 60, "cloud_days": 7, "scope": "all",
-            "max_per_run": 50, "start_time": 0}
-
-
-def _int(v, default, lo, hi):
-    try:
-        return max(lo, min(hi, int(float(v))))
-    except (TypeError, ValueError):
-        return default
-
-
-def normalize_settings(raw):
-    """Typed settings from imperva.conf [auto_unblock] values and / or the KV document."""
-    raw = raw or {}
-    out = dict(DEFAULTS)
-    en = str(raw.get("enabled", out["enabled"])).strip().lower()
-    out["enabled"] = "off" if en in ("off", "0", "false", "no", "disabled") else "on"
-    out["default_days"] = _int(raw.get("default_days"), DEFAULTS["default_days"], 1, 3650)
-    out["cloud_days"] = _int(raw.get("cloud_days"), DEFAULTS["cloud_days"], 1, 3650)
-    out["scope"] = "own" if str(raw.get("scope", "all")).strip().lower() in ("own", "splunk", "policy_ids") else "all"
-    out["max_per_run"] = _int(raw.get("max_per_run"), DEFAULTS["max_per_run"], 1, 500)
-    out["start_time"] = _int(raw.get("start_time"), 0, 0, 10 ** 11) if str(raw.get("start_time", "")).strip() else 0
-    for k in ("updated_by", "updated_at"):
-        if raw.get(k):
-            out[k] = raw[k]
-    return out
-
-
-def merge_settings(conf_stanza, kv_doc):
-    """imperva.conf [auto_unblock] defaults, overridden by the KV document saved from the page."""
-    raw = dict(conf_stanza or {})
-    for k, v in (kv_doc or {}).items():
-        if not k.startswith("_") and v not in (None, ""):
-            raw[k] = v
-    return normalize_settings(raw)
+DEFAULT_DAYS = 60                    # other IPs
+CLOUD_DAYS = 7                       # cloud provider / shared IPs
+MAX_PER_RUN = 50                     # IP rules unblocked per run
 
 
 def entry_key(policy_id, cidr):
@@ -159,7 +127,7 @@ def hits_for(cidr, hits):
     return total
 
 
-def plan(now, entries, own_ids, settings, states, seen, registry, owners, short_of, hits=None):
+def plan(now, entries, own_ids, states, seen, registry, owners, short_of, hits=None):
     """
     -> (items, new_states)
       entries   policy IP entries (imperva_lib.policy_ip_entries)
@@ -167,19 +135,17 @@ def plan(now, entries, own_ids, settings, states, seen, registry, owners, short_
       seen      {src_ip: last_seen epoch}
       registry  {(site_id, ip): registry doc with status blocked}
       owners    {first address: AS owner or None}
-      short_of  function(owner) -> ("cloud" | "shared", owner) or None (= cloud_days applies)
+      short_of  function(owner) -> ("cloud" | "shared", owner) or None (= CLOUD_DAYS applies)
       hits      {src_ip: requests blocked in the last 24 h} (optional)
-    item status: kept | due | attacking | soon | quiet | due_not_managed
+    item status: kept | due | attacking | soon | quiet
     """
-    s = settings
     items, new_states = [], []
     for e in candidate_entries(entries, own_ids):
         pid, cidr = e["policy_id"], e["cidr"]
         key = entry_key(pid, cidr)
         st = states.get(key)
         if st is None:
-            st = {"_key": key, "policy_id": pid, "cidr": cidr,
-                  "first_listed": int(max(now, s.get("start_time") or 0)), "rule": "default"}
+            st = {"_key": key, "policy_id": pid, "cidr": cidr, "first_listed": int(now), "rule": "default"}
             new_states.append(st)
         first = float(st.get("first_listed") or now)
         try:
@@ -193,9 +159,8 @@ def plan(now, entries, own_ids, settings, states, seen, registry, owners, short_
         short = short_of(owner) if owner else None
         cloud = short[1] if short and short[0] == "cloud" else None
         shared = short[1] if short and short[0] == "shared" else None
-        managed = e["own"] or s["scope"] == "all"
         item = {"policy_id": pid, "policy_name": e.get("policy_name") or "-", "cidr": cidr,
-                "own": e["own"], "managed": managed, "owner": owner or "", "cloud": cloud or "",
+                "own": e["own"], "owner": owner or "", "cloud": cloud or "",
                 "shared": shared or "", "short": short[0] if short else "",
                 "blocked_at": blocked_at, "ticket": reg.get("incident_no") or "-",
                 "description": reg.get("comment") or "-", "blocked_by": reg.get("blocked_by") or "-",
@@ -206,12 +171,12 @@ def plan(now, entries, own_ids, settings, states, seen, registry, owners, short_
             item.update(days=None, base=None, unblock_on=None, left_days=None, status="kept")
             items.append(item)
             continue
-        days = rule if isinstance(rule, int) else (s["cloud_days"] if short else s["default_days"])
-        base = max(last, blocked_at, first, float(s.get("start_time") or 0))
+        days = rule if isinstance(rule, int) else (CLOUD_DAYS if short else DEFAULT_DAYS)
+        base = max(last, blocked_at, first)
         unblock_on = base + days * DAY
         left = (unblock_on - now) / DAY
         if left <= 0:
-            status = "due" if managed else "due_not_managed"
+            status = "due"
         elif last and now - last < ATTACKING_SECONDS:
             status = "attacking"
         elif left <= min(7, days * 0.3):
@@ -224,14 +189,14 @@ def plan(now, entries, own_ids, settings, states, seen, registry, owners, short_
     return items, new_states
 
 
-def due_items(items, max_per_run):
-    """Rules to unblock now: managed and due, oldest first, at most max_per_run."""
+def due_items(items, max_per_run=MAX_PER_RUN):
+    """Rules to unblock now: due, oldest first, at most max_per_run."""
     return [i for i in items if i["status"] == "due"][:max(0, int(max_per_run))]
 
 
 def reason_text(item, now=None):
     """Human-readable reason written to the audit log, e.g.
-    'auto unblock: no attack for 90 days (last seen 2026-08-01)'."""
+    'auto unblock: no attack for 60 days (last attack 2026-08-01)'."""
     import time as _t
     if item.get("last_seen"):
         seen = "last attack " + _t.strftime("%Y-%m-%d", _t.localtime(item["last_seen"]))
@@ -243,16 +208,3 @@ def reason_text(item, now=None):
            "shared IP (%s), " % item["shared"] if item.get("shared") else "")
     return "auto unblock: %sno attack for %s days (%s)" % (who, item.get("days"), seen)
 
-
-def load_settings(session_key, conf=None):
-    """Settings in force: imperva.conf [auto_unblock] + the KV document saved from the page."""
-    from splunk_helpers import kv_get, load_conf_stanza
-    try:
-        stanza = load_conf_stanza(session_key, "imperva", "auto_unblock")
-    except Exception:  # noqa: BLE001 - defaults
-        stanza = {}
-    try:
-        doc = kv_get(session_key, SETTINGS_KEY, STATE)
-    except Exception:  # noqa: BLE001
-        doc = None
-    return merge_settings(stanza, doc)

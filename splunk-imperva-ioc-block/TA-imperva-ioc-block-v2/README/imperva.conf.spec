@@ -40,10 +40,3 @@ review_malicious = <integer>
 review_suspicious = <integer>
 high_volume_count = <integer>
 
-[auto_unblock]
-enabled = on|off
-default_days = <integer>
-cloud_days = <integer>
-scope = all|own
-max_per_run = <integer>
-start_time = <epoch seconds, empty = when Auto unblock first sees a rule>

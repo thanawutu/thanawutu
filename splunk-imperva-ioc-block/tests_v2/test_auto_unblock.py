@@ -30,11 +30,10 @@ ENTRIES = [
     E("192.0.2.1-192.0.2.9", pid="1000001"),          # range -> not handled
 ]
 CLOUD = lambda o: ("cloud", o) if o and "Amazon" in o else (("shared", o) if o and "Wireless" in o else None)  # noqa: E731
-S = au.normalize_settings({})
 
 
-def plan(states=None, seen=None, registry=None, owners=None, settings=S, now=T, entries=ENTRIES):
-    items, new = au.plan(now, entries, OWN, settings, states or {}, seen or {}, registry or {},
+def plan(states=None, seen=None, registry=None, owners=None, now=T, entries=ENTRIES):
+    items, new = au.plan(now, entries, OWN, states or {}, seen or {}, registry or {},
                          owners or {"54.245.198.114": "Amazon.com, Inc."}, CLOUD)
     return dict((i["cidr"], i) for i in items), new
 
@@ -99,16 +98,13 @@ class TestPlan(unittest.TestCase):
         self.assertEqual(items["192.0.2.77"]["status"], "kept")
         self.assertEqual((items["54.245.198.114"]["days"], items["54.245.198.114"]["status"]), (30, "quiet"))
 
-    def test_scope_own(self):
-        states = st("192.0.2.77", "1000001", first=T - 100 * DAY)
-        items, _ = plan(states, settings=au.normalize_settings({"scope": "own"}))
-        self.assertEqual((items["192.0.2.77"]["status"], items["192.0.2.77"]["managed"]), ("due_not_managed", False))
-        self.assertEqual(au.due_items(list(items.values()), 50), [])
-
-    def test_start_time_floor(self):
-        states = st("192.0.2.77", "1000001", first=T - 100 * DAY)
-        items, _ = plan(states, settings=au.normalize_settings({"start_time": str(int(T - 10 * DAY))}))
-        self.assertEqual(items["192.0.2.77"]["status"], "quiet")
+    def test_every_enabled_policy_is_handled(self):
+        states = st("192.0.2.77", "1000001", first=T - 100 * DAY)        # other policy
+        states.update(st("203.0.113.10", first=T - 100 * DAY))           # own policy, disabled
+        items, _ = plan(states)
+        self.assertEqual((items["192.0.2.77"]["status"], items["203.0.113.10"]["status"]), ("due", "due"))
+        self.assertEqual(sorted(i["cidr"] for i in au.due_items(list(items.values()))), ["192.0.2.77", "203.0.113.10"])
+        self.assertNotIn("managed", items["192.0.2.77"])
 
     def test_due_items_order_and_limit(self):
         states = {}
@@ -120,11 +116,11 @@ class TestPlan(unittest.TestCase):
         self.assertEqual([i["cidr"] for i in due], ["54.245.198.114", "203.0.113.10"])
 
     def test_attacks_in_the_last_24h(self):
-        items, _ = au.plan(T, ENTRIES, OWN, S, {}, {}, {}, {}, CLOUD,
+        items, _ = au.plan(T, ENTRIES, OWN, {}, {}, {}, {}, CLOUD,
                            {"192.0.2.77": 412, "198.51.100.7": 30, "198.51.100.9": 12, "8.8.8.8": 5})
         by = dict((i["cidr"], i["attacks_24h"]) for i in items)
         self.assertEqual((by["192.0.2.77"], by["198.51.100.0/24"], by["203.0.113.10"]), (412, 42, 0))
-        items, _ = au.plan(T, ENTRIES, OWN, S, {}, {}, {}, {}, CLOUD)       # no hits data yet
+        items, _ = au.plan(T, ENTRIES, OWN, {}, {}, {}, {}, CLOUD)          # no hits data yet
         self.assertEqual(set(i["attacks_24h"] for i in items), {0})
 
     def test_shared_ip_gets_the_short_period(self):
@@ -152,21 +148,23 @@ class TestPlan(unittest.TestCase):
         self.assertIn("cloud provider IP (Amazon.com, Inc.), no attack for 7 days",
                       au.reason_text({"days": 7, "last_seen": 0, "blocked_at": 0, "cloud": "Amazon.com, Inc."}))
 
-    def test_settings(self):
-        s = au.merge_settings({"enabled": "on", "default_days": "90", "cloud_days": "7", "scope": "all"},
-                              {"_key": "settings", "default_days": 60, "scope": "own", "enabled": ""})
-        self.assertEqual((s["enabled"], s["default_days"], s["cloud_days"], s["scope"]), ("on", 60, 7, "own"))
-        self.assertEqual(au.normalize_settings({"default_days": "0", "cloud_days": "x", "enabled": "off"})["default_days"], 1)
-        self.assertEqual(au.normalize_settings({"cloud_days": "x"})["cloud_days"], 7)
+    def test_fixed_values(self):
+        self.assertEqual((au.CLOUD_DAYS, au.DEFAULT_DAYS, au.MAX_PER_RUN), (7, 60, 50))
+        self.assertFalse(any(hasattr(au, n) for n in ("normalize_settings", "merge_settings", "load_settings")))
         self.assertEqual(au.rule_of("Keep"), "keep")
         self.assertEqual(au.rule_of("30"), 30)
         self.assertRaises(ValueError, au.rule_of, "0")
 
-    def test_conf_defaults_match(self):
-        conf = open(os.path.join(HERE, "..", "TA-imperva-ioc-block-v2", "default", "imperva.conf")).read()
-        part = conf.split("\n[auto_unblock]\n")[1]
-        for k, v in (("enabled", "on"), ("default_days", "60"), ("cloud_days", "7"), ("scope", "all"), ("max_per_run", "50")):
-            self.assertIn("\n%s = %s\n" % (k, v), part)
+    def test_no_settings_left_in_conf_or_page(self):
+        root = os.path.join(HERE, "..", "TA-imperva-ioc-block-v2")
+        conf = open(os.path.join(root, "default", "imperva.conf"), encoding="utf-8").read()
+        spec = open(os.path.join(root, "README", "imperva.conf.spec"), encoding="utf-8").read()
+        page = open(os.path.join(root, "default", "data", "ui", "views", "imperva_ioc_auto_unblock.xml"), encoding="utf-8").read()
+        self.assertNotIn("[auto_unblock]", conf + spec)
+        for gone in ("action=settings", "SAVE SETTINGS", "due_not_managed", 'token="a_en"', "scope"):
+            self.assertNotIn(gone, page)
+        for shown in ("AUTO UNBLOCK ON", "<b>7 days</b>", "<b>60 days</b>", "All enabled WAF policies", "Max <b>50</b>"):
+            self.assertIn(shown, page)
 
 
 class FakeBackend(object):
@@ -193,9 +191,7 @@ class TestCommand(unittest.TestCase):
         del CALLS[:]
         self.kv = {au.STATE: {}, au.SEEN: {}, "imperva_block_registry": {}}
         self.out, self.refreshed, self.fail_on = {}, [], {}
-        self.settings = dict(S)
         c.load_conf_stanza = lambda sk, conf, stanza: {"policy_ids": "2169031", "cloud_providers": "amazon|aws"}
-        c.au.load_settings = lambda sk, conf=None: dict(self.settings)
         c.load_entries = lambda sk, conf, log: (ENTRIES, OWN)
         c.refresh_entries = lambda sk, conf, log: self.refreshed.append(1)
         c.kv_list = lambda sk, col: list(self.kv[col].values())
@@ -220,7 +216,7 @@ class TestCommand(unittest.TestCase):
 
     def age_all(self, days):
         for d in self.kv[au.STATE].values():
-            if d.get("_key") != au.SETTINGS_KEY:
+            if d.get("_key") != au.OLD_SETTINGS_KEY:
                 d["first_listed"] = d["first_listed"] - days * DAY
 
     def test_list_records_first_seen_and_lists_rules(self):
@@ -248,12 +244,14 @@ class TestCommand(unittest.TestCase):
         self.assertEqual([k for k in self.kv[au.STATE]], [])          # countdown restarts if added again
         self.assertEqual(self.refreshed, [1])
 
-    def test_run_off_does_nothing(self):
-        self.run_("action=list")
+    def test_old_settings_document_is_ignored(self):
+        old = {"_key": "settings", "enabled": "off", "default_days": 365, "scope": "own", "max_per_run": 1}
+        self.kv[au.STATE]["settings"] = dict(old)
+        self.assertEqual(len(self.run_("action=list")), 4)            # not taken for an IP rule
         self.age_all(100)
-        self.settings["enabled"] = "off"
-        self.assertEqual(self.run_("action=run"), [])
-        self.assertEqual(CALLS, [])
+        rows = self.run_("action=run")                                # always on, all policies, no limit of 1
+        self.assertEqual(sorted(r["ip"] for r in rows), ["192.0.2.77", "198.51.100.0/24", "203.0.113.10", "54.245.198.114"])
+        self.assertEqual(self.kv[au.STATE]["settings"], old)
 
     def test_run_policy_not_allowed_on_soar(self):
         self.run_("action=list")
@@ -269,8 +267,11 @@ class TestCommand(unittest.TestCase):
     def test_run_respects_max_per_run(self):
         self.run_("action=list")
         self.age_all(100)
-        self.settings["max_per_run"] = 1
-        self.assertEqual(len(self.run_("action=run")), 1)
+        saved, self.c.au.MAX_PER_RUN = self.c.au.MAX_PER_RUN, 1
+        try:
+            self.assertEqual(len(self.run_("action=run")), 1)
+        finally:
+            self.c.au.MAX_PER_RUN = saved
 
     def test_set_keep_and_default(self):
         self.run_("action=list")
@@ -283,13 +284,11 @@ class TestCommand(unittest.TestCase):
         self.assertEqual(self.kv[au.STATE][au.entry_key("1000001", "192.0.2.77")]["rule"], "default")
         self.assertEqual(self.run_("action=set", "ip=8.8.8.8", "rule=keep")[0]["status"], "not_found")
 
-    def test_settings_show_and_save(self):
-        self.assertEqual(self.run_("action=settings")[0]["default_days"], 60)
-        rows = self.run_("action=settings", "default_days=60", "cloud_days=3", "scope=own", "enabled=on", "max_per_run=25")
-        self.assertEqual((rows[0]["action"], rows[0]["status"]), ("auto_unblock_settings", "saved"))
-        doc = self.kv[au.STATE][au.SETTINGS_KEY]
-        self.assertEqual((doc["default_days"], doc["cloud_days"], doc["scope"], doc["max_per_run"], doc["updated_by"]),
-                         (60, 3, "own", 25, "alice"))
+    def test_settings_action_is_gone(self):
+        with self.assertRaises(AssertionError) as ctx:
+            self.run_("action=settings", "default_days=90")
+        self.assertIn("action must be list, run, set, policies or annotate", str(ctx.exception))
+        self.assertEqual(self.kv[au.STATE], {})
 
     def test_list_and_annotate_show_attacks_24h(self):
         self.kv[au.SEEN]["192.0.2.77"] = {"_key": "192.0.2.77", "src": "192.0.2.77", "last_seen": 1, "hits_24h": 412}

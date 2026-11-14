@@ -186,7 +186,7 @@ td.aid:hover{background:var(--info-bg)!important}
   <div class="in">
     <div><span class="label">Apps › Imperva IOC Block</span><h1 id="pageTitle">Imperva WAF – IOC Block</h1></div>
     <div class="chips">
-      <span class="chip sim">Mockup v3.13 · simulated data</span>
+      <span class="chip sim">Mockup v3.14 · simulated data</span>
       <span class="chip">Policy 2169031 · via SOAR</span>
     </div>
   </div>
@@ -202,7 +202,7 @@ td.aid:hover{background:var(--info-bg)!important}
 
 <!-- ============ Page 1: dashboard (7 days, search + Block) ============ -->
 <main class="wrap" id="v-dash">
-  <div class="review"><b>Mockup v3.13:</b> Auto unblock: IP <b>cloud และ shared IP</b> (เครือข่ายมือถือ) ไม่โจมตีครบ <b>7 วัน</b> → unblock · IP อื่นไม่โจมตีครบ <b>60 วัน</b> → unblock · หน้า Blocked IPs และ Auto unblock มีคอลัมน์ <b>Attacks 24h</b> (request ที่ WAF ยัง block จาก IP นั้นใน 24 ชม.) และยอดรวม · <b>v3.12:</b> ช่อง <b>Search</b> ใช้ทั้งค้นหาและ<b>เพิ่ม IP</b> (ตัดช่อง Add IPs manually ออก) · ค้นหาจาก<b>ทุกหน้าและทุก WAF policy</b>: กล่อง <b>Found</b> บอกว่า IP อยู่ที่ไหน – หน้านี้ / หน้าอื่น / <b>block แล้วใน policy ไหน วันไหน</b> / allow / Not block / <b>ไม่เจอ → นับเข้าปุ่ม Block ทันที</b> · ลองพิมพ์ <span class="mono">193.42.33.7, 185.220.101.47, 20.20.20.20, 45.95.147.236, 203.0.113.10</span> · <b>Auto unblock (V2):</b> หน้า <b>⏱ Auto unblock</b> แสดง IP ที่ถูก block จาก<b>ทุก rule / policy</b> ของ WAF · นับจาก<b>การโจมตีครั้งสุดท้าย</b> (log “Blocked IP” ของ Imperva = IP ยังส่ง request เข้ามา): IP ของ <b>cloud provider</b> ไม่โจมตีครบ <b>7 วัน</b> → unblock · IP อื่นไม่โจมตีครบ <b>60 วัน</b> → unblock · ถ้ายังโจมตีอยู่ นับใหม่อัตโนมัติ · IP ที่ไม่เคยเห็นโจมตีหลัง block นับจากวันที่ block (หรือวันที่ Splunk เห็นใน policy) · IP cloud block ได้ · Keep = ไม่ unblock · ส่วนอื่นเหมือน v3.8b</div>
+  <div class="review"><b>Mockup v3.14:</b> หน้า Auto unblock <b>ไม่มีหน้าตั้งค่าแล้ว</b> ใช้ค่าคงที่: unblock จริงทุกวัน (<b>ไม่มี Report only</b>) · cloud / shared IP <b>7 วัน</b> · IP อื่น <b>60 วัน</b> · <b>All enabled policies</b> · <b>max 50 IP ต่อรอบ</b> · <b>v3.13:</b> Auto unblock: IP <b>cloud และ shared IP</b> (เครือข่ายมือถือ) ไม่โจมตีครบ <b>7 วัน</b> → unblock · IP อื่นไม่โจมตีครบ <b>60 วัน</b> → unblock · หน้า Blocked IPs และ Auto unblock มีคอลัมน์ <b>Attacks 24h</b> (request ที่ WAF ยัง block จาก IP นั้นใน 24 ชม.) และยอดรวม · <b>v3.12:</b> ช่อง <b>Search</b> ใช้ทั้งค้นหาและ<b>เพิ่ม IP</b> (ตัดช่อง Add IPs manually ออก) · ค้นหาจาก<b>ทุกหน้าและทุก WAF policy</b>: กล่อง <b>Found</b> บอกว่า IP อยู่ที่ไหน – หน้านี้ / หน้าอื่น / <b>block แล้วใน policy ไหน วันไหน</b> / allow / Not block / <b>ไม่เจอ → นับเข้าปุ่ม Block ทันที</b> · ลองพิมพ์ <span class="mono">193.42.33.7, 185.220.101.47, 20.20.20.20, 45.95.147.236, 203.0.113.10</span> · <b>Auto unblock (V2):</b> หน้า <b>⏱ Auto unblock</b> แสดง IP ที่ถูก block จาก<b>ทุก rule / policy</b> ของ WAF · นับจาก<b>การโจมตีครั้งสุดท้าย</b> (log “Blocked IP” ของ Imperva = IP ยังส่ง request เข้ามา): IP ของ <b>cloud provider</b> ไม่โจมตีครบ <b>7 วัน</b> → unblock · IP อื่นไม่โจมตีครบ <b>60 วัน</b> → unblock · ถ้ายังโจมตีอยู่ นับใหม่อัตโนมัติ · IP ที่ไม่เคยเห็นโจมตีหลัง block นับจากวันที่ block (หรือวันที่ Splunk เห็นใน policy) · IP cloud block ได้ · Keep = ไม่ unblock · ส่วนอื่นเหมือน v3.8b</div>
   <section class="kpis" aria-label="Summary">
     <div class="kpi k-warn"><span class="label">Detected WAF IPs</span><span class="v" id="kDet">0</span><span class="s" id="kDetSub">last 7 days</span></div>
     <div class="kpi k-info"><span class="label">Blocked on WAF now</span><span class="v" id="kWaf">0</span><span class="s">policy 2169031 (live)</span></div>
@@ -318,23 +318,17 @@ td.aid:hover{background:var(--info-bg)!important}
   </section>
   <section class="cols">
     <section class="panel" aria-labelledby="au_hSet">
-      <div class="panel-head"><h2 id="au_hSet">Settings</h2><p>เก็บใน KV store · แก้ได้โดยไม่ต้องแก้ code · ทุกการแก้บันทึกลง audit log</p></div>
+      <div class="panel-head"><h2 id="au_hSet">Auto unblock rules</h2><p>ค่าคงที่ – ไม่มีหน้าตั้งค่า ไม่มี Report only</p></div>
       <div class="form">
-        <div class="field wide"><span class="flabel">Mode</span>
-          <div class="seg" role="group" aria-label="Mode"><button type="button" id="au_mReport" aria-pressed="true">Report only</button><button type="button" id="au_mAuto" aria-pressed="false">Auto unblock</button></div>
-          <span class="note" id="au_modeNote"></span></div>
-        <div class="field"><label for="au_def">Unblock IPs after no attack for</label><select id="au_def"><option value="30">30 days</option><option value="60" selected>60 days</option><option value="90">90 days</option><option value="180">180 days</option><option value="365">365 days</option></select></div>
-        <div class="field"><label for="au_cloud">Unblock cloud provider / shared IPs after no attack for</label><select id="au_cloud"><option value="1">1 day</option><option value="3">3 days</option><option value="7" selected>7 days</option><option value="14">14 days</option><option value="30">30 days</option></select></div>
-        <div class="field wide"><span class="flabel">Unblock from</span>
-          <div class="seg" role="group" aria-label="Unblock from"><button type="button" id="au_sSplunk" aria-pressed="true">Policy 2169031 only</button><button type="button" id="au_sAll" aria-pressed="false">All enabled policies</button></div>
-          <span class="note" id="au_scopeNote"></span></div>
-        <div class="field"><label for="au_remind">Show “expiring soon”</label><div class="inline"><input type="number" id="au_remind" min="1" max="60" value="7"> <span>days before expiry</span></div></div>
-        <div class="field"><label for="au_max">Max IPs per run</label><div class="inline"><input type="number" id="au_max" min="1" max="50" value="50"> <span>· daily 02:15</span></div></div>
-        <div class="field wide"><div class="inline"><button type="button" class="btn-primary" id="au_save">Save settings</button><span class="note">ทุก IP คำนวณใหม่ตามค่าที่ตั้ง (ยกเว้น IP ที่ตั้งเฉพาะไว้)</span></div></div>
+        <div class="field wide"><span class="flabel">Mode</span><span><span class="pill p-safe">⏱ Auto unblock – ON</span> <span class="note">unblock จริงบน WAF ทุกวัน 02:17</span></span></div>
+        <div class="field"><span class="flabel">Cloud provider / shared IP</span><span>ไม่โจมตีครบ <b>7 วัน</b> → unblock</span></div>
+        <div class="field"><span class="flabel">IP อื่น ๆ</span><span>ไม่โจมตีครบ <b>60 วัน</b> → unblock</span></div>
+        <div class="field"><span class="flabel">Unblock from</span><span><b>All enabled policies</b></span></div>
+        <div class="field"><span class="flabel">Max IPs per run</span><span><b>50</b> <span class="note">ที่เหลือ unblock รอบถัดไป</span></span></div>
       </div>
     </section>
     <section class="panel" aria-labelledby="au_hFlow">
-      <div class="panel-head"><h2 id="au_hFlow">How it works</h2><p>saved search “Imperva - Auto unblock expired IPs”</p></div>
+      <div class="panel-head"><h2 id="au_hFlow">How it works</h2><p>saved search “Imperva V2 - Auto unblock (daily)” · 02:17</p></div>
       <ol class="flow">
         <li><b>Read</b>IP rule ของทุก policy (cache ทุก 5 นาที) + IP ที่ block จาก Splunk</li>
         <li><b>Last attack</b>log “Blocked IP” ของ Imperva ทุกชั่วโมง = IP ยังส่ง request เข้ามา</li>
@@ -466,7 +460,7 @@ const otherBlocked=[
 ];
 // Auto unblock settings (real app: KV store, changed on the Auto unblock page, written to the audit log)
 // def / cloud = days WITHOUT an attack before the IP is unblocked; scope = which policies are changed
-const AU={mode:"report", def:60, cloud:7, remind:7, max:50, scope:"splunk"};
+const AU=Object.freeze({mode:"auto", def:60, cloud:7, remind:7, max:50, scope:"all"});   // fixed values (v3.14): no settings, no report-only
 const auLog=[
  {t:now0-1*DAY-3*HOUR, ip:"80.94.95.115", act:"auto_unblock", st:"unblocked · verified", tk:"1000012", det:"no attack for 90 days (last seen 2026-08-12)"},
  {t:now0-1*DAY-3*HOUR, ip:"35.198.44.21", act:"auto_unblock", st:"unblocked · verified", tk:"1000118", det:"cloud provider IP (Google Cloud) – no attack for 7 days"},
@@ -885,13 +879,9 @@ function renderAuto(){
   $("nAuto").textContent=dueM;
   $("au_kAll").textContent=items.length; $("au_kAllSub").textContent=`policy 2169031: ${cnt.splunk} · other policies: ${cnt.other} · cloud ${cnt.cloud}`;
   $("au_kSoon").textContent=cnt.attacking; $("au_kAtk").textContent=allBlocked().reduce((a,b)=>a+attacks24(b),0).toLocaleString();
-  $("au_kDue").textContent=dueM; $("au_kDueSub").textContent=`${AU.mode==="auto"?"unblocked":"reported"} at the next run${dueO?` · ${dueO} in other policies (shown only)`:""}`;
+  $("au_kDue").textContent=dueM; $("au_kDueSub").textContent="unblocked at the next run (02:17)";
   $("au_kKeep").textContent=cnt.keep; $("au_kDone").textContent=auLog.filter(l=>l.act==="auto_unblock"&&now0-l.t<=30*DAY).length;
-  $("au_unmanaged").textContent=AU.scope==="all"?"unblock ได้ทุก policy ที่เปิดใช้งาน":"policy อื่นแสดงอย่างเดียว ไม่ถูกแก้ (Unblock from = Policy 2169031 only)";
-  $("au_mReport").setAttribute("aria-pressed",AU.mode==="report"); $("au_mAuto").setAttribute("aria-pressed",AU.mode==="auto");
-  $("au_modeNote").textContent=AU.mode==="auto"?"ครบเวลาแล้ว unblock จริงบน WAF ทุกรอบ":"แสดงรายการที่จะ unblock ใน log แต่ยังไม่ unblock จริง (แนะนำช่วงแรก)";
-  $("au_sSplunk").setAttribute("aria-pressed",AU.scope==="splunk"); $("au_sAll").setAttribute("aria-pressed",AU.scope==="all");
-  $("au_scopeNote").textContent=AU.scope==="all"?"แก้ policy ของทีมอื่นด้วย – ต้องปรับ SOAR playbook ให้ unblock policy อื่นได้":"IP ใน policy อื่นแสดงในตารางและบอกว่าครบเวลาแล้ว แต่ไม่ unblock";
+  $("au_unmanaged").textContent="unblock ได้ทุก policy ที่เปิดใช้งาน";
   $("au_filters").innerHTML=AUF.map(([k,l])=>`<button type="button" data-f="${k}" aria-pressed="${auFilter===k}">${l}<span class="n">${cnt[k]}</span></button>`).join("");
   $("au_tbl").innerHTML=auRows().map(({b,i})=>{ const o=OWN[b.ip];
     return `<tr data-ip="${b.ip}" class="${auSel.has(b.ip)?"selected":""}"><td>${i.managed?'<span class="box"></span>':""}</td><td class="ip">${b.ip}</td>
@@ -901,7 +891,7 @@ function renderAuto(){
     <td>${seenCell(b)}</td><td class="num">${attacks24(b)?`<b class="bk">${attacks24(b).toLocaleString()}</b>`:'<span class="note">0</span>'}</td>
     <td>${durBadge(b,i)}</td><td class="mono nw">${i.unb?fmt(i.unb).slice(0,10):"-"}</td><td>${leftCell(i)}</td><td><span class="pill ${EST[i.st][0]}">${stLabel(i)}</span></td></tr>`;}).join("")
     ||'<tr><td colspan="13" class="note">ไม่มี IP ในตัวกรองนี้</td></tr>';
-  $("au_plan").innerHTML=`Next run: <b>${Math.min(dueM,AU.max)}</b> to ${AU.mode==="auto"?"unblock":"report (would unblock)"} · <b>${cnt.attacking}</b> still attacking · <b>${cnt.keep}</b> kept${dueO?` · <b>${dueO}</b> due in other policies (not changed)`:""}`;
+  $("au_plan").innerHTML=`Next run (02:17): <b>${Math.min(dueM,AU.max)}</b> to unblock${dueM>AU.max?` (max ${AU.max} per run, ${dueM-AU.max} at the following run)`:""} · <b>${cnt.attacking}</b> still attacking · <b>${cnt.keep}</b> kept`;
   const A={auto_unblock:["a-unblock","auto unblock"],report_only:["a-report","report only"],set_period:["a-set","set unblock rule"],unblock:["a-unblock","unblock (manual)"],settings:["a-set","settings"]};
   $("au_log").innerHTML=auLog.slice().sort((a,c)=>c.t-a.t).map(l=>`<tr><td class="mono nw">${fmt(l.t)}</td><td class="ip">${esc(l.ip)}</td><td><span class="${A[l.act][0]}">${A[l.act][1]}</span></td><td class="nw">${esc(l.st)}</td><td class="mono nw">${esc(l.tk)}</td><td class="small">${esc(l.det)}</td></tr>`).join("");
   $("au_actbar").hidden=!auSel.size; $("au_selInfo").textContent=`${auSel.size} IP selected`;
@@ -910,17 +900,8 @@ function renderAuto(){
 $("au_tbl").addEventListener("click",e=>{const tr=e.target.closest("tr[data-ip]"); if(!tr) return; const ip=tr.dataset.ip;
   const b=allBlocked().find(x=>x.ip===ip); if(b&&!expInfo(b).managed){toast(`${ip} อยู่ใน policy ${b.pol} (${POLICY[b.pol]}) – แสดงอย่างเดียว (Unblock from = Policy 2169031 only)`);return;}
   auSel.has(ip)?auSel.delete(ip):auSel.add(ip); renderAuto();});
-$("au_sSplunk").addEventListener("click",()=>{AU.scope="splunk"; auSel.clear(); renderAll();});
-$("au_sAll").addEventListener("click",()=>{AU.scope="all"; renderAll();});
 $("au_filters").addEventListener("click",e=>{const b=e.target.closest("[data-f]"); if(!b) return; auFilter=b.dataset.f; renderAuto();});
 $("au_q").addEventListener("input",renderAuto);
-$("au_mReport").addEventListener("click",()=>{AU.mode="report"; renderAll();});
-$("au_mAuto").addEventListener("click",()=>{AU.mode="auto"; renderAll();});
-const auNum=(id,min,max,def)=>{const v=parseInt($(id).value,10); return isNaN(v)?def:Math.max(min,Math.min(max,v));};
-function auRead(){ AU.def=+$("au_def").value; AU.cloud=+$("au_cloud").value; AU.remind=auNum("au_remind",1,60,7); AU.max=auNum("au_max",1,50,50); renderAll(); }
-["au_def","au_cloud","au_remind","au_max"].forEach(id=>$(id).addEventListener("change",auRead));
-$("au_save").addEventListener("click",()=>{ auRead(); auLog.push({t:Date.now(),ip:"-",act:"settings",st:"saved",tk:"-",det:`mode=${AU.mode} unblock_after=${AU.def}d cloud=${AU.cloud}d scope=${AU.scope==="all"?"all policies":"policy 2169031"} max=${AU.max}`});
-  audit.push({t:Date.now(),user:USER,action:"auto_unblock_settings",ip:"-",tk:"-",desc:`unblock after ${AU.def}d / cloud ${AU.cloud}d quiet, mode ${AU.mode}`,status:"saved",ver:"-",cont:"-"}); renderAll(); toast("Settings saved · written to the audit log"); });
 $("au_clear").addEventListener("click",()=>{auSel.clear(); renderAuto();});
 $("au_apply").addEventListener("click",()=>{ const v=$("au_setDur").value, why=$("au_setWhy").value.trim()||"-";
   auSel.forEach(ip=>{ const b=allBlocked().find(x=>x.ip===ip); if(!b) return; b.dur=v==="default"?undefined:v==="keep"?"keep":+v;
@@ -934,12 +915,10 @@ $("au_run").addEventListener("click",async()=>{ const btn=$("au_run"), res=$("au
   res.textContent="กำลังตรวจ IP ที่ครบเวลา → SOAR → Imperva policy 2169031 → verify…"; await sleep(1300);
   const t=Date.now(), items=allBlocked().map(b=>({b,i:expInfo(b)})), due=items.filter(x=>x.i.st==="due").slice(0,AU.max);
   const why=({b,i})=>`${i.cl?`cloud provider IP (${cloudOf(b.ip)}) – `:""}no attack for ${i.days} days (${b.seen?"last seen "+fmt(b.seen).slice(0,10):"not seen since the block"})${i.pol!==2169031?` · policy ${i.pol}`:""}`;
-  if(AU.mode==="auto"){ due.forEach(x=>{ const list=x.b.pol?otherBlocked:blocked; list.splice(list.indexOf(x.b),1);
-      auLog.push({t,ip:x.b.ip,act:"auto_unblock",st:"unblocked · verified",tk:x.b.tk||"-",det:why(x)});
-      audit.push({t,user:"auto-unblock",action:"unblock",ip:x.b.ip,tk:x.b.tk||"-",desc:"auto unblock: "+why(x),status:"unblocked",ver:"removed",cont:soarSeq++}); });
-    res.className="result ok"; res.textContent=`✔ Unblocked ${due.length} IP · verified on the WAF · written to the audit log`;
-  } else { due.forEach(x=>auLog.push({t,ip:x.b.ip,act:"report_only",st:"would unblock",tk:x.b.tk||"-",det:why(x)+" – Report only, not unblocked"}));
-    res.className="result info"; res.textContent=`Report only: ${due.length} IP would be unblocked (not sent to the WAF) · switch Mode to Auto unblock to unblock them`; }
+  due.forEach(x=>{ const list=x.b.pol?otherBlocked:blocked; list.splice(list.indexOf(x.b),1);
+    auLog.push({t,ip:x.b.ip,act:"auto_unblock",st:"unblocked · verified",tk:x.b.tk||"-",det:why(x)});
+    audit.push({t,user:"auto-unblock",action:"unblock",ip:x.b.ip,tk:x.b.tk||"-",desc:"auto unblock: "+why(x),status:"unblocked",ver:"removed",cont:soarSeq++}); });
+  res.className="result ok"; res.textContent=`✔ Unblocked ${due.length} IP · verified on the WAF · written to the audit log`;
   btn.disabled=false; auSel.clear(); renderAll(); });
 
 const TITLES={dash:"Imperva WAF – IOC Block",history:"Imperva IOC Block – Older detections",blocked:"Imperva IOC Block – Blocked IPs / Unblock",auto:"Imperva IOC Block – Auto unblock",rules:"Imperva IOC Block – Detection rules",audit:"Imperva IOC Block – Audit log"};
