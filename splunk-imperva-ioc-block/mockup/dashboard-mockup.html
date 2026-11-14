@@ -118,6 +118,11 @@ input[type=number]{font:inherit;font-size:13px;padding:6px 8px;border:1px solid 
 .runbox{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;border:1px dashed var(--line);border-radius:5px;padding:10px 12px;background:var(--panel-2);margin-bottom:10px}
 .plan{font-size:12.5px} .plan b{font-family:var(--font-data)}
 .result.info{background:var(--info-bg);color:var(--info)}
+.find{background:var(--panel-2);border:1px solid var(--line);color:var(--fg);display:flex;flex-direction:column;gap:3px}
+.find .fl{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.find .fl b.mono{min-width:120px}
+.find .ok{color:var(--ok);font-weight:600} .find .no{color:var(--crit);font-weight:600} .find .pg{color:var(--info);font-weight:600} .find .al{color:var(--ok);font-weight:600}
+.find .hd{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
 .a-unblock{color:var(--ok);font-weight:600} .a-extend{color:var(--info);font-weight:600} .a-report{color:var(--warn);font-weight:600} .a-set{color:var(--accent);font-weight:600}
 .chip.mode-report{background:var(--info-bg);color:var(--info);border-color:transparent;font-weight:600}
 .chip.mode-auto{background:var(--ok-bg);color:var(--ok);border-color:transparent;font-weight:600}
@@ -181,7 +186,7 @@ td.aid:hover{background:var(--info-bg)!important}
   <div class="in">
     <div><span class="label">Apps › Imperva IOC Block</span><h1 id="pageTitle">Imperva WAF – IOC Block</h1></div>
     <div class="chips">
-      <span class="chip sim">Mockup v3.10 · simulated data</span>
+      <span class="chip sim">Mockup v3.12 · simulated data</span>
       <span class="chip">Policy 2169031 · via SOAR</span>
     </div>
   </div>
@@ -197,7 +202,7 @@ td.aid:hover{background:var(--info-bg)!important}
 
 <!-- ============ Page 1: dashboard (7 days, search + Block) ============ -->
 <main class="wrap" id="v-dash">
-  <div class="review"><b>Mockup v3.10 – Auto unblock (ใน app เดิม):</b> หน้า <b>⏱ Auto unblock</b> แสดง IP ที่ถูก block จาก<b>ทุก rule / policy</b> ของ WAF · นับจาก<b>การโจมตีครั้งสุดท้าย</b> (log “Blocked IP” ของ Imperva = IP ยังส่ง request เข้ามา): IP ของ <b>cloud provider</b> ไม่โจมตีครบ <b>7 วัน</b> → unblock · IP อื่นไม่โจมตีครบ <b>90 วัน</b> → unblock · ถ้ายังโจมตีอยู่ นับใหม่อัตโนมัติ · IP ที่ไม่เคยเห็นโจมตีหลัง block นับจากวันที่ block (หรือวันที่ Splunk เห็นใน policy) · IP cloud block ได้ · Keep = ไม่ unblock · ส่วนอื่นเหมือน v3.8b</div>
+  <div class="review"><b>Mockup v3.12:</b> ช่อง <b>Search</b> ใช้ทั้งค้นหาและ<b>เพิ่ม IP</b> (ตัดช่อง Add IPs manually ออก) · ค้นหาจาก<b>ทุกหน้าและทุก WAF policy</b>: กล่อง <b>Found</b> บอกว่า IP อยู่ที่ไหน – หน้านี้ / หน้าอื่น / <b>block แล้วใน policy ไหน วันไหน</b> / allow / Not block / <b>ไม่เจอ → นับเข้าปุ่ม Block ทันที</b> · ลองพิมพ์ <span class="mono">193.42.33.7, 185.220.101.47, 20.20.20.20, 45.95.147.236, 203.0.113.10</span> · <b>Auto unblock (V2):</b> หน้า <b>⏱ Auto unblock</b> แสดง IP ที่ถูก block จาก<b>ทุก rule / policy</b> ของ WAF · นับจาก<b>การโจมตีครั้งสุดท้าย</b> (log “Blocked IP” ของ Imperva = IP ยังส่ง request เข้ามา): IP ของ <b>cloud provider</b> ไม่โจมตีครบ <b>7 วัน</b> → unblock · IP อื่นไม่โจมตีครบ <b>90 วัน</b> → unblock · ถ้ายังโจมตีอยู่ นับใหม่อัตโนมัติ · IP ที่ไม่เคยเห็นโจมตีหลัง block นับจากวันที่ block (หรือวันที่ Splunk เห็นใน policy) · IP cloud block ได้ · Keep = ไม่ unblock · ส่วนอื่นเหมือน v3.8b</div>
   <section class="kpis" aria-label="Summary">
     <div class="kpi k-warn"><span class="label">Detected WAF IPs</span><span class="v" id="kDet">0</span><span class="s" id="kDetSub">last 7 days</span></div>
     <div class="kpi k-info"><span class="label">Blocked on WAF now</span><span class="v" id="kWaf">0</span><span class="s">policy 2169031 (live)</span></div>
@@ -211,9 +216,9 @@ td.aid:hover{background:var(--info-bg)!important}
   </section>
   <section class="control" aria-label="Search and block">
     <div class="crow">
-      <div class="field" style="flex:1 1 300px"><label for="d_q">🔎 Search IP / Ticket / Incident no. / Rule</label><input type="text" id="d_q" placeholder="เช่น 54.245 หรือ 1000101"></div>
-      <div class="field" style="flex:1 1 300px"><label for="d_add">➕ Add IPs manually – other sources, comma separated</label><input type="text" id="d_add" placeholder="เช่น 203.0.113.10, 198.51.100.7"></div>
+      <div class="field" style="flex:1 1 600px"><label for="d_q">🔎 Search or add IPs – IP / Ticket / Incident no. / Rule · searches every page and every WAF policy</label><input type="text" id="d_q" placeholder="เช่น 54.245 · 1000101 · หรือวาง IP หลายตัว 203.0.113.10, 198.51.100.7"></div>
     </div>
+    <div class="result find" id="d_find" hidden></div>
     <div class="crow">
       <div class="field" style="flex:1 1 340px"><div class="flabel sel-head"><span>Selected IPs — คลิกแถวในตารางด้านล่าง</span><span><button class="lnk" id="d_all" type="button" hidden>☑ Select all 0 shown</button><button class="lnk" id="d_clr" type="button" hidden>✖ Clear</button></span></div><div class="selbox" id="d_sel"></div></div>
       <div class="field" style="flex:0 1 190px"><label for="d_tk">Ticket / Incident no.</label><input type="text" id="d_tk" placeholder="1234567"></div>
@@ -244,8 +249,7 @@ td.aid:hover{background:var(--info-bg)!important}
   </section>
   <section class="control" aria-label="Search and block older detections">
     <div class="crow">
-      <div class="field" style="flex:1 1 300px"><label for="h_q">🔎 Search IP / Ticket / Incident no. / Rule</label><input type="text" id="h_q" placeholder="เช่น 45.95 หรือ 1000060"></div>
-      <div class="field" style="flex:1 1 300px"><label for="h_add">➕ Add IPs manually – other sources, comma separated</label><input type="text" id="h_add" placeholder="เช่น 203.0.113.10, 198.51.100.7"></div>
+      <div class="field" style="flex:1 1 500px"><label for="h_q">🔎 Search or add IPs – IP / Ticket / Incident no. / Rule · searches every page and every WAF policy</label><input type="text" id="h_q" placeholder="เช่น 45.95 · 1000060 · หรือวาง IP หลายตัว 203.0.113.10, 198.51.100.7"></div>
       <div class="field" style="flex:0 0 210px"><label for="h_rng">Detected</label><select id="h_rng"><option value="30">8 – 30 days ago</option><option value="90">31 – 90 days ago</option><option value="all">older than 7 days (all)</option></select></div>
     </div>
     <div class="crow">
@@ -255,6 +259,7 @@ td.aid:hover{background:var(--info-bg)!important}
       <button class="run" id="h_run" type="button" disabled>⛔ Block 0 IPs</button>
       <button class="run nb" id="h_nb" type="button" disabled title="hide the selected IPs until they are detected again">✖ Not block 0 IPs</button>
     </div>
+    <div class="result find" id="h_find" hidden></div>
     <div class="result running" id="h_chk" hidden></div>
     <div class="result" id="h_res" hidden></div>
   </section>
@@ -616,8 +621,30 @@ const P={dash:{p:"d",act:"block",sel:new Set(),busy:false,detail:null},history:{
 let soarSeq=4813;
 
 const normQ=v=>v.trim().toLowerCase().replace(/^ithm[\s:#-]*/,"");   // "ITHM 1000101" = "1000101"
-function detRows(page){const q=normQ($(P[page].p+"_q").value);
-  return pendingDetected().filter(win[page]).filter(d=>has(q,d.ip,d.inc,d.rule)).sort((a,b)=>b.last-a.last);}
+// the search box takes text (ticket, rule ...) or one or more IPs: "203.0.113.10, 198.51.100.7"
+const qTokens=page=>normQ($(P[page].p+"_q").value).split(/[\s,;]+/).filter(Boolean);
+const ipLike=t=>/^[0-9a-f.:\/]+$/i.test(t)&&/[.:]/.test(t);
+function qMatch(page,...xs){ const q=normQ($(P[page].p+"_q").value), toks=qTokens(page);
+  if(toks.length&&toks.every(ipLike)) return toks.some(t=>has(t,...xs));   // IPs: any of them
+  return has(q,...xs); }                                                   // text: as one phrase
+function detRows(page){
+  return pendingDetected().filter(win[page]).filter(d=>qMatch(page,d.ip,d.inc,d.rule)).sort((a,b)=>b.last-a.last);}
+// where is this IP? every page + every WAF policy (real app: registry, policy cache of all policies, detections 90 d, Not block list)
+const PAGE_NAME={dash:"Block – last 7 days",history:"Older detections"};
+function findIP(ip, page){
+  const out=[], d=pendingDetected().find(x=>x.ip===ip), b=blocked.find(x=>x.ip===ip), o=otherBlocked.find(x=>x.ip===ip);
+  const pol=WAF_POLICY[ip]||"", nb=notBlocked.find(x=>x.ip===ip);
+  if(b) out.push({cls:"no",txt:`already BLOCKED in policy 2169031 ${POLICY[2169031]} · blocked ${fmt(b.t)} by ${b.by} · ticket ${b.tk}`,stop:true});
+  if(o) out.push({cls:"no",txt:`already BLOCKED in policy ${o.pol} ${POLICY[o.pol]} · on the policy since ${fmt(o.listed).slice(0,10)} (block date not kept by Imperva)`,stop:true});
+  if(pol.startsWith("ALLOW")) out.push({cls:"al",txt:`ALLOWED by ${pol.replace(/^ALLOW in /,"policy ")} → cannot be blocked`,stop:true});
+  if(d){ const here=win[page](d), pg=here?page:(win.dash(d)?"dash":"history");
+    out.push({cls:"pg",txt:`${here?"on this page":"on the "+PAGE_NAME[pg]+" page"} · last detected ${fmt(d.last)} · ${d.rule}${d.inc!=="-"?" · ticket "+d.inc:""}`}); }
+  if(nb) out.push({cls:"pg",txt:`hidden by Not block (${nb.by}, ${fmt(nb.t).slice(0,10)}) – can still be blocked`});
+  if(!out.length) out.push({cls:"ok",txt:"not found anywhere – can be blocked"});
+  const stop=out.some(x=>x.stop);
+  if(!stop&&cloudOf(ip)) out.push({cls:"pg",txt:`☁ cloud provider (${cloudOf(ip)}) – auto unblock after ${AU.cloud} days without an attack`});
+  return {lines:out, blockable:!stop};
+}
 function renderDet(page){
   const pg=P[page], rows=detRows(page), q=$(pg.p+"_q").value.trim();
   $(pg.p+"_tbl").innerHTML=rows.map(d=>{
@@ -658,9 +685,10 @@ function renderBlocked(){
   $("bWaf").textContent=blocked.length; $("bRead").textContent=fmt(Date.now()).slice(11);
 }
 const isIP=x=>/^(\d{1,3})(\.\d{1,3}){3}(\/\d{1,2})?$/.test(x)&&x.split("/")[0].split(".").every(o=>+o<=255) || /^[0-9a-f:]+:[0-9a-f:]*(\/\d{1,3})?$/i.test(x);
-function manual(page){ if(page==="blocked") return []; const v=$(P[page].p+"_add").value; return [...new Set(v.split(/[\s,;]+/).map(x=>x.trim()).filter(Boolean))]; }
-// IPs the Block button sends: selected + typed (cloud provider IPs too: 7-day block)
-function allIPs(page){ const m=manual(page).filter(isIP); return [...new Set([...P[page].sel, ...m])]; }
+// full IPs typed in the search box (the old "Add IPs manually" field)
+function manual(page){ if(page==="blocked") return []; return [...new Set(qTokens(page).filter(isIP))]; }
+// IPs the Block button sends: selected rows + typed IPs that are not blocked / allowed anywhere
+function allIPs(page){ const m=manual(page).filter(ip=>findIP(ip,page).blockable); return [...new Set([...P[page].sel, ...m])]; }
 const shownIPs=page=>detRows(page).slice(0,50).map(d=>d.ip);   // what "Select all" takes: rows matching the search (top 50)
 const incOf=q=>{const m=/^\s*(?:ithm[\s:#-]*)?(\d{5,})\s*$/i.exec(q); return m?m[1]:null;};   // "ITHM 1000101" / "1000101" -> 1000101
 function renderCtl(page){
@@ -670,11 +698,27 @@ function renderCtl(page){
   $(pg.p+"_run").textContent=`${pg.act==="block"?"⛔ Block":"🔓 Unblock"} ${n} IP${n===1?"":"s"}`;
   $(pg.p+"_run").disabled=!n||pg.busy;
   if(page!=="blocked"){ const k=pg.sel.size; $(pg.p+"_nb").textContent=`✖ Not block ${k} IP${k===1?"":"s"}`; $(pg.p+"_nb").disabled=!k||pg.busy; }
-  if(page!=="blocked"){ const msgs=[...all, ...man.filter(x=>!isIP(x))].map(wafCheck).filter(Boolean), c=$(pg.p+"_chk");
-    c.hidden=!n&&!msgs.length; c.className="result "+(msgs.length?"running":"ok");
-    c.textContent=msgs.length?"⚠ WAF check: "+msgs.join(" | "):"✔ WAF check: none of the selected IPs is blocked / allowed on the WAF"; }
+  if(page!=="blocked"){ const msgs=[...pg.sel].map(wafCheck).filter(Boolean), c=$(pg.p+"_chk");
+    c.hidden=!pg.sel.size; c.className="result "+(msgs.length?"running":"ok");
+    c.textContent=msgs.length?"⚠ WAF check: "+msgs.join(" | "):"✔ WAF check: none of the selected IPs is blocked / allowed on the WAF";
+    renderFind(page); }
   $(pg.p+"_sel").innerHTML=([...pg.sel].map(ip=>cloudOf(ip)?`<span class="tag cloud" title="cloud provider IP – auto unblock after ${AU.cloud} days without an attack">☁ ${ip} · unblock after ${AU.cloud} quiet days<button type="button" data-rm="${ip}" aria-label="remove ${ip}">×</button></span>`:`<span class="tag">${ip}<button type="button" data-rm="${ip}" aria-label="remove ${ip}">×</button></span>`)
-    .concat(man.filter(x=>!pg.sel.has(x)).map(x=>cloudOf(x)?`<span class="tag man cloud" title="added manually – cloud provider IP">✍ ☁ ${esc(x)} · unblock after ${AU.cloud} quiet days</span>`:isIP(x)?`<span class="tag man" title="added manually">✍ ${esc(x)}</span>`:`<span class="tag bad" title="not an IP / CIDR - ignored">✖ ${esc(x)}</span>`))).join("")||'<span class="note">ยังไม่ได้เลือก IP</span>';
+    .concat(man.filter(x=>!pg.sel.has(x)&&findIP(x,page).blockable).map(x=>cloudOf(x)?`<span class="tag man cloud" title="typed in the search box – cloud provider IP">✍ ☁ ${esc(x)} · unblock after ${AU.cloud} quiet days</span>`:`<span class="tag man" title="typed in the search box">✍ ${esc(x)}</span>`))).join("")||'<span class="note">ยังไม่ได้เลือก IP – คลิกแถว หรือพิมพ์ IP ในช่องค้นหา</span>';
+}
+// "Found" box under the search field: IPs -> where they are; text -> matches on every page
+function renderFind(page){
+  const pg=P[page], box=$(pg.p+"_find"), toks=qTokens(page), ips=manual(page);
+  if(!toks.length){ box.hidden=true; return; }
+  let h='<span class="hd">Found – every page and every WAF policy</span>';
+  if(ips.length){
+    h+=ips.map(ip=>{ const f=findIP(ip,page);
+      return `<div class="fl"><b class="mono">${esc(ip)}</b>${f.lines.map(l=>`<span class="${l.cls}">${l.cls==="no"?"⛔ ":l.cls==="al"?"✅ ":l.cls==="ok"?"✔ ":"• "}${esc(l.txt)}</span>`).join("")}<span class="note">${f.blockable?"→ included in Block":"→ not blocked again"}</span></div>`; }).join("");
+  } else {
+    const q=normQ($(pg.p+"_q").value), here=detRows(page).length, other=pendingDetected().filter(d=>!win[page](d)&&has(q,d.ip,d.inc,d.rule)).length;
+    const blk=blocked.filter(b=>has(q,b.ip,b.tk,b.desc,b.rule)).length, oth=otherBlocked.filter(o=>has(q,o.ip,o.desc,POLICY[o.pol])).length;
+    h+=`<div class="fl"><b class="mono">“${esc(q)}”</b><span class="pg">${here} IP on this page</span><span class="pg">${other} on the ${PAGE_NAME[page==="dash"?"history":"dash"]} page</span><span class="no">${blk} blocked from Splunk (Blocked IPs page)</span><span class="no">${oth} in other WAF policies</span></div>`;
+  }
+  box.innerHTML=h; box.hidden=false;
 }
 function chart(el,days){
   const data=daily.slice(-days), n=data.length, W=days>7?1300:1000, H=days>7?230:200, L=34,R=8,T=28,B=34, cw=(W-L-R)/n, bw=days>7?.6:.4;
@@ -729,8 +773,7 @@ Object.keys(P).forEach(page=>{const p=P[page].p;
   if(page!=="blocked") $(p+"_all").addEventListener("click",()=>{   // replaces the selection with every IP that matches the search
     P[page].sel=new Set(shownIPs(page)); const tk=$(p+"_tk"), inc=incOf($(p+"_q").value); if(!tk.value&&inc) tk.value=inc;
     renderDet(page); renderDetail(page); renderCtl(page); });
-  $(p+"_clr").addEventListener("click",()=>{ P[page].sel.clear(); if(page!=="blocked") $(p+"_add").value=""; renderAll(); });
-  if(page!=="blocked") $(p+"_add").addEventListener("input",()=>renderCtl(page));
+  $(p+"_clr").addEventListener("click",()=>{ P[page].sel.clear(); if(page!=="blocked") $(p+"_q").value=""; renderAll(); });
   $(p+"_run").addEventListener("click",()=>run(page));
   if(page!=="blocked") $(p+"_nb").addEventListener("click",()=>notBlock(page));
 });
@@ -776,7 +819,7 @@ async function run(page){
       audit.push({t,user:USER,action:"unblock",ip,tk,desc,status:"unblocked",ver:"removed",cont});});
     r.className="result ok"; r.textContent=`✔ Unblock ${ips.length} IP แล้ว — หายจากตารางและ verify บน WAF แล้ว · บันทึกลง imperva_audit.csv`;
   }
-  pg.sel.clear(); $(pg.p+"_tk").value=""; $(pg.p+"_desc").value=""; if(page!=="blocked") $(pg.p+"_add").value=""; pg.busy=false;
+  pg.sel.clear(); $(pg.p+"_tk").value=""; $(pg.p+"_desc").value=""; if(page!=="blocked") $(pg.p+"_q").value=""; pg.busy=false;
   renderAll();
   document.querySelectorAll(`#v-${page} .kpi`).forEach(el=>{el.classList.remove("flash");void el.offsetWidth;el.classList.add("flash");});
 }
