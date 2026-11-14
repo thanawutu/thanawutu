@@ -7,9 +7,7 @@
   </init>
 
 
-  <!-- own policy: LIVE from the WAF + registry (description); other enabled policies: Auto unblock plan (policy cache)
-       ONE row per IP: an IP blocked in several policies lists them all (Unblock / Apply rule act on every one;
-       status / unblock date = the rule that is unblocked last) -->
+  <!-- own policy: LIVE from the WAF + registry (description); other enabled policies: Auto unblock plan (policy cache) -->
   <search id="waf_list">
     <query><![CDATA[| impervalist
 | eval _refresh=$b_refresh|s$
@@ -33,11 +31,6 @@
   | fields site_id ip policy policy_name own_policy owner in_waf verification since ticket description blocked_by auto_*]
 | eval auto_status=case(like(verification, "✖%"), "✖ NOT on WAF - removed outside Splunk", like(verification, "⚠%"), verification, true(), coalesce(auto_status, "-")), auto_status_code=if(like(verification, "✖%"), "not_on_waf", coalesce(auto_status_code, "-")), auto_attacks_24h=coalesce(auto_attacks_24h, 0)
 | eval _ord=case(auto_status_code="not_on_waf", 0, like(verification, "⚠%"), 1, true(), 2), _un=if(isnull(auto_unblock_on) OR auto_unblock_on="-", "9999", auto_unblock_on)
-| eval policy=policy." ".policy_name, since=if(since="-", null(), since), ticket=if(ticket="-", null(), ticket), description=if(description="-", null(), description), blocked_by=if(blocked_by="-", null(), blocked_by)
-| fillnull value="-" auto_status auto_last_attack auto_unblock_after auto_unblock_on auto_days_left auto_short_block owner verification
-| sort 0 ip, _ord, -str(_un)
-| stats first(auto_status) AS auto_status first(auto_status_code) AS auto_status_code first(auto_last_attack) AS auto_last_attack max(auto_attacks_24h) AS auto_attacks_24h first(auto_unblock_after) AS auto_unblock_after first(auto_unblock_on) AS auto_unblock_on first(auto_days_left) AS auto_days_left first(auto_short_block) AS auto_short_block first(owner) AS owner first(verification) AS verification first(_ord) AS _ord first(_un) AS _un max(in_waf) AS in_waf values(own_policy) AS own_policy values(policy) AS policy min(since) AS since values(ticket) AS ticket values(description) AS description values(blocked_by) AS blocked_by BY ip
-| eval since=coalesce(since, "-"), ticket=coalesce(mvjoin(ticket, ", "), "-"), description=coalesce(mvjoin(description, "; "), "-"), blocked_by=coalesce(mvjoin(blocked_by, ", "), "-")
 | sort 0 _ord _un ip]]></query>
     <earliest>-1m</earliest>
     <latest>now</latest>
@@ -63,7 +56,7 @@
         <option name="colorMode">block</option>
         <option name="rangeColors">["0x5A9BD5","0x5A9BD5"]</option>
         <option name="useColors">1</option>
-        <option name="underLabel">unique IPs · all policies · own policy read live</option>
+        <option name="underLabel">all policies · own policy read live</option>
       </single>
     </panel>
     <panel>
@@ -320,7 +313,7 @@
   </row>
   <row>
     <panel>
-      <title>IPs blocked on the WAF – all policies, one row per IP (an IP in several policies lists them all; Unblock removes it from every one), sorted by unblock date – click a row to select / unselect it</title>
+      <title>IPs blocked on the WAF – all policies, sorted by unblock date (click a row to select / unselect it)</title>
       <input type="dropdown" token="b_f" searchWhenChanged="true">
         <label>Show</label>
         <choice value="all">All</choice>
@@ -337,9 +330,9 @@
       <table id="b_table">
         <search base="waf_list">
           <query><![CDATA[| eval _q=replace(lower(trim(replace($b_q|s$, "[*]", ""))), "^ithm[\s:#-]*", ""), _f=$b_f|s$
-| where _q="" OR like(lower(ip." ".ticket." ".description." ".blocked_by." ".mvjoin(policy, " ")." ".owner), "%"._q."%")
-| where _f="all" OR auto_status_code=_f OR (_f="own" AND isnotnull(mvfind(own_policy, "^yes$"))) OR (_f="other" AND isnotnull(mvfind(own_policy, "^no$"))) OR (_f="cloud" AND isnotnull(auto_short_block) AND auto_short_block!="-")
-| eval Events="🔍 Search"
+| where _q="" OR like(lower(ip." ".ticket." ".description." ".blocked_by." ".policy." ".policy_name." ".owner), "%"._q."%")
+| where _f="all" OR auto_status_code=_f OR (_f="own" AND own_policy="yes") OR (_f="other" AND own_policy="no") OR (_f="cloud" AND isnotnull(auto_short_block) AND auto_short_block!="-")
+| eval Events="🔍 Search", policy=policy." ".policy_name
 | table ip auto_status auto_last_attack auto_attacks_24h auto_unblock_after auto_unblock_on auto_days_left owner auto_short_block policy since ticket description blocked_by Events
 | rename auto_status AS Status, auto_last_attack AS "Last attack", auto_attacks_24h AS "Attacks 24h", auto_unblock_after AS "Unblock after", auto_unblock_on AS "Unblock on", auto_days_left AS "Days left", auto_short_block AS "Cloud / shared", since AS "Blocked / listed since", blocked_by AS "Blocked by"]]></query>
         </search>

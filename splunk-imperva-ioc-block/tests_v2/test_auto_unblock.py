@@ -376,20 +376,6 @@ class TestCommand(unittest.TestCase):
         with self.assertRaises(AssertionError):
             self.run_("action=set", "ip=-", "rule=keep")
 
-    def test_ip_in_two_policies_one_row_and_unblock_or_rule_acts_on_both(self):
-        two = ENTRIES + [E("192.0.2.77", pid="1000003")]                   # same IP blocked in 2 other policies
-        self.c.load_entries = lambda sk, conf, log: (two, OWN)
-        listed = [r for r in self.run_("action=list") if r["ip"] == "192.0.2.77"]
-        self.assertEqual(sorted(r["policy_id"] for r in listed), ["1000001", "1000003"])   # one row per rule: the page merges them
-        rows = self.run_("action=set", "ip=192.0.2.77", "rule=keep")
-        self.assertEqual(sorted(r["site_id"] for r in rows), ["1000001", "1000003"])
-        self.assertEqual([self.kv[au.STATE][au.entry_key(pid, "192.0.2.77")]["rule"] for pid in ("1000001", "1000003")],
-                         ["keep", "keep"])
-        del CALLS[:]
-        rows = self.run_("action=unblock", "ip=192.0.2.77", "incident_no=1000150")
-        self.assertEqual(sorted((c[0], tuple(c[2])) for c in CALLS), [("1000001", ("192.0.2.77",)), ("1000003", ("192.0.2.77",))])
-        self.assertEqual(sorted((r["site_id"], r["status"]) for r in rows), [("1000001", "unblocked"), ("1000003", "unblocked")])
-
     def test_unblock_error_of_one_policy_does_not_stop_the_other(self):
         self.fail_on["1000001"] = "policy ids ['1000001'] are not allowed on SOAR (IMPERVA_POLICY_IDS)"
         rows = dict((r["ip"], r) for r in self.run_("action=unblock", 'ip="192.0.2.77,', '54.245.198.114"'))
@@ -444,22 +430,6 @@ class TestMergedPage(unittest.TestCase):
         for f in ("all", "own", "other", "cloud", "attacking", "soon", "due", "kept", "not_on_waf"):
             self.assertIn('<choice value="%s">' % f, p)
         self.assertIn('<set token="b_sel">$b_sel$,$row.ip$,</set>', p)
-
-    def test_one_row_per_ip(self):
-        p = self.page
-        q = p[p.index('<search id="waf_list">'):p.index("</search>", p.index('<search id="waf_list">'))]
-        self.assertIn("| sort 0 ip, _ord, -str(_un)\n| stats first(auto_status) AS auto_status", q)
-        self.assertIn(" values(policy) AS policy ", q)
-        self.assertIn(" max(auto_attacks_24h) AS auto_attacks_24h ", q)                # per IP, not summed per policy
-        self.assertTrue(("BY ip\n| eval since=coalesce(since, \"-\"), ticket=coalesce(mvjoin(ticket, \", \"), \"-\"), "
-                                            "description=coalesce(mvjoin(description, \"; \"), \"-\"), blocked_by=coalesce(mvjoin(blocked_by, \", \"), \"-\")\n"
-                                            "| sort 0 _ord _un ip]]></query>") in q, q[-600:])
-        self.assertIn("fillnull value=\"-\" auto_status auto_last_attack auto_unblock_after auto_unblock_on", q)   # first() of ONE rule
-        self.assertIn('mvjoin(policy, " ")', p)                                       # search box finds any policy
-        self.assertIn('isnotnull(mvfind(own_policy, "^yes$"))', p)
-        self.assertIn('isnotnull(mvfind(own_policy, "^no$"))', p)
-        self.assertNotIn('policy=policy." ".policy_name\n| table', p)
-        self.assertIn("unique IPs · all policies", p)
 
     def test_actions(self):
         p = self.page
