@@ -12,21 +12,21 @@ history while V1 stays installed and unchanged.
         storage/passwords realms imperva_waf, splunk_soar, virustotal -> V2 (copied server side, the
         secrets are never output). Needed before V1 is removed: until then V2 also reads V1's.
     | impervav1import action=audit | outputlookup append=true imperva_audit
-        rows of V1's imperva_audit.csv that V2's audit CSV does not have yet
+        rows of V1's audit lookup that V2's audit CSV does not have yet. Both are read with
+        "| inputlookup imperva_audit" run in the app's own namespace (search/jobs/export), so it works
+        wherever Splunk keeps the CSV file.
 """
 
-import csv
 import json
 import os
 import sys
-import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import splunk.Intersplunk as si  # noqa: E402
 import splunk.rest as rest       # noqa: E402
 
-from splunk_helpers import APP, V1_APP, get_logger, parse_options, splunk_home  # noqa: E402
+from splunk_helpers import APP, V1_APP, get_logger, parse_options  # noqa: E402
 
 COPY_NEW = ("imperva_block_registry", "imperva_ioc_dismissed", "imperva_cache")
 RULES = "imperva_ioc_rules"
@@ -121,10 +121,10 @@ def import_credentials(session_key):
         else:
             c = src[realm]
             try:
-                body = urllib.parse.urlencode({"name": c.get("username", ""), "password": c.get("clear_password", ""),
-                                               "realm": realm})
                 rest.simpleRequest("/servicesNS/nobody/%s/storage/passwords" % APP, sessionKey=session_key,
-                                   method="POST", rawData=body, raiseAllErrors=True)
+                                   method="POST", raiseAllErrors=True,
+                                   postargs={"name": c.get("username", ""), "password": c.get("clear_password", ""),
+                                             "realm": realm})
                 out.append({"what": "credential " + realm, "items": 1, "status": "copied",
                             "detail": "user %s (secret not shown)" % c.get("username", "")})
             except Exception as e:  # noqa: BLE001
@@ -132,20 +132,39 @@ def import_credentials(session_key):
     return out
 
 
-def read_csv(path):
-    try:
-        with open(path, newline="", encoding="utf-8") as f:
-            return list(csv.DictReader(f))
-    except (IOError, OSError):
-        return None
+def search_rows(session_key, app, spl):
+    """Run SPL in the namespace of <app> (so | inputlookup finds that app's lookup) -> (rows, errors)."""
+    _resp, content = rest.simpleRequest("/servicesNS/nobody/%s/search/jobs/export" % app, sessionKey=session_key,
+                                        method="POST", raiseAllErrors=True, timeout=300,
+                                        postargs={"search": spl, "output_mode": "json"})
+    if isinstance(content, bytes):
+        content = content.decode("utf-8", "replace")
+    rows, errors = [], []
+    for line in content.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            o = json.loads(line)
+        except ValueError:
+            continue
+        if o.get("preview"):
+            continue
+        if isinstance(o.get("result"), dict):
+            rows.append(o["result"])
+        for m in o.get("messages") or []:
+            if str(m.get("type", "")).upper() in ("ERROR", "FATAL"):
+                errors.append(m.get("text", ""))
+    return rows, errors
 
 
-def import_audit():
-    base = os.path.join(splunk_home(), "etc", "apps")
-    v1 = read_csv(os.path.join(base, V1_APP, "lookups", "imperva_audit.csv"))
-    if v1 is None:
-        raise RuntimeError("V1 audit CSV not found on this search head (%s/%s/lookups/imperva_audit.csv)" % (base, V1_APP))
-    v2 = read_csv(os.path.join(base, APP, "lookups", "imperva_audit.csv")) or []
+def import_audit(session_key):
+    """Rows of V1's audit lookup that V2 does not have yet (matched on time, user, action, ip, status).
+    Never returns anything but audit rows: the saved search appends the output to V2's audit CSV."""
+    v1, err = search_rows(session_key, V1_APP, "| inputlookup imperva_audit")
+    if err and not v1:
+        raise RuntimeError("cannot read the V1 audit lookup: %s" % "; ".join(err))
+    v2, _err2 = search_rows(session_key, APP, "| inputlookup imperva_audit")   # no file yet = nothing in V2
     sig = lambda r: tuple(str(r.get(k, "")) for k in ("time", "user", "action", "ip", "status"))  # noqa: E731
     have = set(sig(r) for r in v2)
     return [dict((k, r.get(k, "-")) for k in AUDIT_COLS) for r in v1 if sig(r) not in have]
@@ -166,7 +185,7 @@ def main():
         elif action == "credentials":
             rows = import_credentials(session_key)
         elif action == "audit":
-            rows = import_audit()
+            rows = import_audit(session_key)
         else:
             raise ValueError("action must be kv, credentials or audit")
         log.info('user=%s action=v1import_%s rows=%d', user, action, len(rows))

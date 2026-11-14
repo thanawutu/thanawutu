@@ -1,5 +1,4 @@
 """V2: impervav1import copies V1 data (KV store, credentials, audit CSV) without overwriting V2."""
-import csv
 import json
 import os
 import sys
@@ -23,12 +22,15 @@ class FakeSplunk(object):
     def __init__(self):
         self.kv = {V1: {}, V2: {}}          # app -> collection -> {key: doc}
         self.pw = {V1: [], V2: []}          # app -> [content]
+        self.audit = {V1: None, V2: None}   # app -> audit lookup rows (None = no file)
         self.posts = []
 
     def coll(self, app, c):
         return self.kv[app].setdefault(c, {})
 
-    def __call__(self, path, sessionKey=None, method="GET", jsonargs=None, rawData=None, raiseAllErrors=False, **k):
+    # same keyword arguments as splunk.rest.simpleRequest (no **kwargs: an unknown one fails like on Splunk)
+    def __call__(self, path, sessionKey=None, getargs=None, postargs=None, method="GET", raiseAllErrors=False,
+                 proxyMode=False, rawResult=False, timeout=None, jsonargs=None, token=False):
         p = urllib.parse.urlparse(path)
         parts = p.path.split("/")              # /servicesNS/nobody/<app>/storage/...
         app = parts[3]
@@ -46,10 +48,18 @@ class FakeSplunk(object):
         if parts[4:6] == ["storage", "passwords"]:
             if method == "GET":
                 return Resp(), json.dumps({"entry": [{"acl": {"app": app}, "content": c} for c in self.pw[app]]})
-            body = dict(urllib.parse.parse_qsl(rawData))
+            body = dict(postargs)
             self.posts.append(body)
             self.pw[app].append({"realm": body["realm"], "username": body["name"], "clear_password": body["password"]})
             return Resp(201), ""
+        if parts[4:7] == ["search", "jobs", "export"]:
+            assert method == "POST" and postargs["search"] == "| inputlookup imperva_audit", postargs
+            rows = self.audit[app]
+            if rows is None:
+                return Resp(), json.dumps({"messages": [{"type": "ERROR", "text": "The lookup table 'imperva_audit' does not exist"}]})
+            lines = [json.dumps({"preview": True, "result": {"time": "preview"}})]
+            lines += [json.dumps({"preview": False, "offset": n, "result": r}) for n, r in enumerate(rows)]
+            return Resp(), ("\n".join(lines)).encode()
         raise AssertionError("unexpected REST call %s %s" % (method, path))
 
 
@@ -118,23 +128,24 @@ class TestImport(unittest.TestCase):
 
     def test_audit_rows_not_yet_in_v2(self):
         cols = ["time", "user", "action", "ip", "ticket", "description", "status", "verified", "policy", "backend", "soar_container", "detail"]
-        for app, rows in ((V1, [["1", "a", "block", "1.1.1.1", "ITHM 1", "x", "blocked", "yes", "2169031", "soar", "9", "ok"],
-                                ["2", "a", "unblock", "1.1.1.1", "-", "fp", "unblocked", "removed", "2169031", "soar", "10", "ok"]]),
-                          (V2, [["1", "a", "block", "1.1.1.1", "ITHM 1", "x", "blocked", "yes", "2169031", "soar", "9", "ok"]])):
-            d = os.path.join(self.tmp, "etc", "apps", app, "lookups")
-            os.makedirs(d)
-            with open(os.path.join(d, "imperva_audit.csv"), "w", newline="") as fh:
-                w = csv.writer(fh)
-                w.writerow(cols)
-                w.writerows(rows)
+        row = lambda *v: dict(zip(cols, v))  # noqa: E731
+        self.fake.audit[V1] = [row("1", "a", "block", "1.1.1.1", "ITHM 1", "x", "blocked", "yes", "2169031", "soar", "9", "ok"),
+                               row("2", "a", "unblock", "1.1.1.1", "-", "fp", "unblocked", "removed", "2169031", "soar", "10", "ok")]
+        self.fake.audit[V2] = [row("1", "a", "block", "1.1.1.1", "ITHM 1", "x", "blocked", "yes", "2169031", "soar", "9", "ok")]
         out = self.run_("audit")
         self.assertEqual([(r["time"], r["action"]) for r in out], [("2", "unblock")])
+        self.assertEqual(sorted(out[0]), sorted(cols))
 
-    def test_audit_missing_v1_file(self):
+    def test_audit_v2_has_no_file_yet(self):
+        self.fake.audit[V1] = [{"time": "1", "user": "a", "action": "block", "ip": "1.1.1.1", "status": "blocked"}]
+        out = self.run_("audit")
+        self.assertEqual([(r["ip"], r["ticket"]) for r in out], [("1.1.1.1", "-")])
+
+    def test_audit_missing_v1_lookup(self):
         self.out.clear()
         sys.argv = ["impervav1import.py", "action=audit"]
         self.m.main()
-        self.assertIn("V1 audit CSV not found", self.out["err"])
+        self.assertIn("cannot read the V1 audit lookup: The lookup table 'imperva_audit' does not exist", self.out["err"])
 
 
 if __name__ == "__main__":
