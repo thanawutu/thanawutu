@@ -1,6 +1,9 @@
 <form version="1.1" theme="dark" hideFilters="true">
   <label>Imperva IOC Block V2 – audit log</label>
-  <description>Every Block / Unblock / Detection-rule change from the dashboards, stored in the CSV lookup imperva_audit.csv (| inputlookup imperva_audit). Export: the ⤓ Export button under the table → CSV.</description>
+  <description>Every Block / Unblock / Detection-rule change from the dashboards, stored in the CSV lookup imperva_audit.csv (| inputlookup imperva_audit). Export: the ⤓ Export button under the table → CSV. Below: Auto unblock run now, the WAF policies it works on and the unblock log.</description>
+  <init>
+    <set token="au_refresh">init</set>
+  </init>
 
 
   <row>
@@ -47,6 +50,106 @@
           <refreshType>delay</refreshType>
         </search>
         <option name="count">50</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">none</option>
+        <format type="color" field="status">
+          <colorPalette type="map">{"blocked":#DC4E41,"unblocked":#53A051,"no_change":#708794,"rejected":#AF575A,"error":#B6488E,"dismissed":#5C6773,"restored":#5A9BD5}</colorPalette>
+        </format>
+        <format type="color" field="verified">
+          <colorPalette type="map">{"yes":#53A051,"no":#DC4E41,"unknown":#F8BE34}</colorPalette>
+        </format>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Auto unblock – run now (same as the daily run at 02:17)</title>
+      <table>
+        <search>
+          <query>| makeresults | impervaautounblock action=list
+| eval _r=$au_refresh|s$
+| stats count(eval(status_code="due")) AS due
+| eval Run=if(due>0, "▶ RUN NOW (".due." due)", "Nothing due now"), note=if(due>50, "50 per run - the rest at the next run", "-")
+| table Run due note</query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">1</option>
+        <option name="drilldown">cell</option>
+        <format type="color" field="Run">
+          <colorPalette type="expression">if(like(value, "▶%"), "#53A051", "#3C444D")</colorPalette>
+        </format>
+        <drilldown>
+          <condition field="Run">
+            <set token="au_run_now">$row.Run$</set>
+          </condition>
+          <condition></condition>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel depends="$au_run_now$">
+      <title>Auto unblock result – written to the audit log (click a row to close)</title>
+      <table>
+        <search>
+          <query>| makeresults | impervaautounblock action=run
+| eval _r=$au_run_now|s$
+| `imperva_audit_write`
+| table time ip action status verified policy ticket description detail</query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+          <done>
+            <set token="au_refresh">$job.sid$</set>
+          </done>
+        </search>
+        <option name="count">50</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">cell</option>
+        <format type="color" field="status">
+          <colorPalette type="map">{"blocked":#DC4E41,"unblocked":#53A051,"no_change":#708794,"rejected":#AF575A,"error":#B6488E,"dismissed":#5C6773,"restored":#5A9BD5}</colorPalette>
+        </format>
+        <format type="color" field="verified">
+          <colorPalette type="map">{"yes":#53A051,"no":#DC4E41,"unknown":#F8BE34}</colorPalette>
+        </format>
+        <drilldown>
+          <unset token="au_run_now"></unset>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Policies with BLOCK IP rules – their IDs must be in IMPERVA_POLICY_IDS of the V2 SOAR playbook</title>
+      <table>
+        <search>
+          <query>| makeresults | impervaautounblock action=policies
+| eval _r=$au_refresh|s$
+| table policy_id policy_name own_policy block_ip_rules cloud shared due attacks_24h</query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">20</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+    <panel>
+      <title>Unblock / auto unblock log – last 30 days (audit log)</title>
+      <table>
+        <search>
+          <query>| inputlookup imperva_audit
+| eval _t=tonumber(time)
+| where _t&gt;=relative_time(now(), "-30d@d") AND (action="unblock" OR like(action, "auto_unblock%"))
+| sort 0 - _t
+| eval time=strftime(_t, "%Y-%m-%d %H:%M"), ticket=replace(coalesce(ticket, "-"), "(?i)ITHM\s*-?\s*", "")
+| table time user action ip policy status ticket description detail</query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+          <refresh>300s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="count">20</option>
         <option name="wrap">true</option>
         <option name="drilldown">none</option>
         <format type="color" field="status">

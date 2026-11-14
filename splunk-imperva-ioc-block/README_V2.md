@@ -9,7 +9,7 @@ When V2 is tested and confirmed, V1 is removed (see *Cut-over*).
 |---|---|---|
 | Cloud provider IPs (AWS, Google Cloud, Azure, ...) | never blocked (Not block only) | **blocked**, tagged "short block" |
 | Auto unblock | - | always on: IP rules of **every enabled WAF policy** are unblocked when the IP sent **no request for 7 days (cloud provider / shared IP) / 60 days (others)**, at most 50 per run (fixed values) |
-| Pages | 5 | 5: **Blocked IPs / Unblock / Auto unblock** is one page: every policy in one table (own policy read live), Status / Last attack / Attacks 24h / Unblock after / Unblock on, 🔓 Unblock from any policy, auto unblock rule per IP, run now and log |
+| Pages | 5 | 5: **Blocked IPs / Unblock / Auto unblock** is one page: every policy in one table (own policy read live), Status / Last attack / Attacks 24h / Unblock after / Unblock on, 🔓 Unblock from any policy, auto unblock rule per IP. Auto unblock run now, the policies and the unblock log are on the **Audit log** page |
 | Search / add | search box + separate *Add IPs manually* box | **one box**: text = search, full IPs = added; a **Found** box says where each typed IP is (every WAF policy with name and date, blocked from Splunk, Not block list, detected on which page); the Block button counts only the typed IPs that can be blocked (`impervafind`) |
 | VirusTotal column | 🔗 link + separate score | one column: the score (e.g. `9/92`); click = the IP's page on VirusTotal |
 | IP reputation | VirusTotal | VirusTotal + **AbuseIPDB** + **GreyNoise**, all through SOAR, 24 h cache; they adjust the Block suggestion |
@@ -99,7 +99,7 @@ V2 has its own playbook so the V1 playbook keeps running unchanged. Do this **be
    (`IMPERVA_API_ID`, `IMPERVA_API_KEY`, `IMPERVA_PROXY`, `IMPERVA_PROTECTED_NETWORKS`, `VT_API_KEY`, ...), then:
    * `"IMPERVA_POLICY_IDS": "2169031,<id>,<id>"`: every policy Auto unblock may change. Splunk always sends
      the policy ID with each request, so extra IDs do not send blocks elsewhere. List them on the Auto
-     unblock part of the Blocked IPs page (panel *Policies with BLOCK IP rules*) or with `| makeresults | impervaautounblock action=policies`.
+     Audit log page (panel *Policies with BLOCK IP rules*) or with `| makeresults | impervaautounblock action=policies`.
    * `"ABUSEIPDB_API_KEY"`: your AbuseIPDB key. `"GREYNOISE_API_KEY"`: your GreyNoise key (the Community API
      also answers without one, with a lower limit).
 5. Save, set the playbook **Active**. The same automation user / token as V1 is used.
