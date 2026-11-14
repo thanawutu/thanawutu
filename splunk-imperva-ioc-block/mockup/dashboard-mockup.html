@@ -181,23 +181,23 @@ td.aid:hover{background:var(--info-bg)!important}
   <div class="in">
     <div><span class="label">Apps › Imperva IOC Block</span><h1 id="pageTitle">Imperva WAF – IOC Block</h1></div>
     <div class="chips">
-      <span class="chip sim">Mockup v3.11 · simulated data</span>
+      <span class="chip sim">Mockup v3.10 · simulated data</span>
       <span class="chip">Policy 2169031 · via SOAR</span>
     </div>
   </div>
   <nav class="tabs" aria-label="Pages">
-    <a href="https://claude.ai/artifact/G8rueMdH1pDYoaoJa3M1fC#dash" target="_blank" rel="noopener" title="opens in a new tab" data-page="dash">⛔ Block – last 7 days<span class="cnt" id="nDash">0</span></a>
-    <a href="https://claude.ai/artifact/G8rueMdH1pDYoaoJa3M1fC#history" target="_blank" rel="noopener" title="opens in a new tab" data-page="history">🗂 Older detections<span class="cnt" id="nHist">0</span></a>
-    <a href="https://claude.ai/artifact/G8rueMdH1pDYoaoJa3M1fC#blocked" target="_blank" rel="noopener" title="opens in a new tab" data-page="blocked">🔓 Blocked IPs / Unblock<span class="cnt" id="nBlk">0</span></a>
-    <a href="https://claude.ai/artifact/G8rueMdH1pDYoaoJa3M1fC#auto" target="_blank" rel="noopener" title="opens in a new tab" data-page="auto">⏱ Auto unblock<span class="cnt" id="nAuto">0</span></a>
-    <a href="https://claude.ai/artifact/G8rueMdH1pDYoaoJa3M1fC#rules" target="_blank" rel="noopener" title="opens in a new tab" data-page="rules">⚙ Detection rules</a>
-    <a href="https://claude.ai/artifact/G8rueMdH1pDYoaoJa3M1fC#audit" target="_blank" rel="noopener" title="opens in a new tab" data-page="audit">📄 Audit log</a>
+    <a href="#" data-page="dash">⛔ Block – last 7 days<span class="cnt" id="nDash">0</span></a>
+    <a href="#history" data-page="history">🗂 Older detections<span class="cnt" id="nHist">0</span></a>
+    <a href="#blocked" data-page="blocked">🔓 Blocked IPs / Unblock<span class="cnt" id="nBlk">0</span></a>
+    <a href="#auto" data-page="auto">⏱ Auto unblock<span class="cnt" id="nAuto">0</span></a>
+    <a href="#rules" data-page="rules">⚙ Detection rules</a>
+    <a href="#audit" data-page="audit">📄 Audit log</a>
   </nav>
 </header>
 
 <!-- ============ Page 1: dashboard (7 days, search + Block) ============ -->
 <main class="wrap" id="v-dash">
-  <div class="review"><b>Mockup v3.11:</b> คลิกเมนูด้านบน (⛔ Block, 🗂 Older, 🔓 Blocked IPs, ⏱ Auto unblock, ⚙ Rules, 📄 Audit) = <b>เปิดในแท็บใหม่เสมอ</b> แท็บเดิมอยู่หน้าเดิม · <b>Auto unblock (V2):</b> หน้า <b>⏱ Auto unblock</b> แสดง IP ที่ถูก block จาก<b>ทุก rule / policy</b> ของ WAF · นับจาก<b>การโจมตีครั้งสุดท้าย</b> (log “Blocked IP” ของ Imperva = IP ยังส่ง request เข้ามา): IP ของ <b>cloud provider</b> ไม่โจมตีครบ <b>7 วัน</b> → unblock · IP อื่นไม่โจมตีครบ <b>90 วัน</b> → unblock · ถ้ายังโจมตีอยู่ นับใหม่อัตโนมัติ · IP ที่ไม่เคยเห็นโจมตีหลัง block นับจากวันที่ block (หรือวันที่ Splunk เห็นใน policy) · IP cloud block ได้ · Keep = ไม่ unblock · ส่วนอื่นเหมือน v3.8b</div>
+  <div class="review"><b>Mockup v3.10 – Auto unblock (ใน app เดิม):</b> หน้า <b>⏱ Auto unblock</b> แสดง IP ที่ถูก block จาก<b>ทุก rule / policy</b> ของ WAF · นับจาก<b>การโจมตีครั้งสุดท้าย</b> (log “Blocked IP” ของ Imperva = IP ยังส่ง request เข้ามา): IP ของ <b>cloud provider</b> ไม่โจมตีครบ <b>7 วัน</b> → unblock · IP อื่นไม่โจมตีครบ <b>90 วัน</b> → unblock · ถ้ายังโจมตีอยู่ นับใหม่อัตโนมัติ · IP ที่ไม่เคยเห็นโจมตีหลัง block นับจากวันที่ block (หรือวันที่ Splunk เห็นใน policy) · IP cloud block ได้ · Keep = ไม่ unblock · ส่วนอื่นเหมือน v3.8b</div>
   <section class="kpis" aria-label="Summary">
     <div class="kpi k-warn"><span class="label">Detected WAF IPs</span><span class="v" id="kDet">0</span><span class="s" id="kDetSub">last 7 days</span></div>
     <div class="kpi k-info"><span class="label">Blocked on WAF now</span><span class="v" id="kWaf">0</span><span class="s">policy 2169031 (live)</span></div>
