@@ -377,7 +377,7 @@ td.aid:hover{background:var(--info-bg)!important}
     <p class="note" style="margin:0 0 10px">ทุกการ Block / Unblock / แก้ Detection rule จะ append ลง <span class="mono">imperva_audit.csv</span> (outputlookup append=true, replicate ทั้ง search head cluster) · ใน Splunk: <span class="mono">| inputlookup imperva_audit.csv</span> · Export → CSV ได้</p>
     <div class="crow" style="margin-bottom:10px">
       <div class="field" style="flex:1 1 260px"><label for="aq">Search IP / Ticket / user</label><input type="text" id="aq"></div>
-      <div class="field" style="flex:0 0 160px"><label for="aact">Action</label><select id="aact"><option value="">All</option><option>block</option><option>unblock</option><option>not_block</option><option>restore</option><option>rule_add</option><option>rule_remove</option><option>rule_enable</option><option>rule_disable</option></select></div>
+      <div class="field" style="flex:0 0 160px"><label for="aact">Action</label><select id="aact"><option value="">All</option><option>block</option><option>unblock</option><option>not_block</option><option>restore</option><option>rule_add</option><option>rule_remove</option><option>rule_enable</option><option>rule_disable</option><option>auto_unblock_rule</option></select></div>
     </div>
     <div class="tbl-wrap" style="max-height:none"><table>
       <thead><tr><th>Time</th><th>User</th><th>Action</th><th>IP</th><th>Ticket / Incident no.</th><th>Description</th><th>Status</th><th>Verified</th><th>SOAR container</th></tr></thead>
@@ -443,9 +443,9 @@ const otherBlocked=[
 // def / cloud = days WITHOUT an attack before the IP is unblocked; scope = which policies are changed
 const AU=Object.freeze({mode:"auto", def:60, cloud:7, remind:7, max:50, scope:"all"});   // fixed values (v3.14): no settings, no report-only
 const auLog=[
- {t:now0-1*DAY-3*HOUR, ip:"80.94.95.115", act:"auto_unblock", st:"unblocked · verified", tk:"1000012", det:"no attack for 90 days (last seen 2026-08-12)"},
+ {t:now0-1*DAY-3*HOUR, ip:"80.94.95.115", act:"auto_unblock", st:"unblocked · verified", tk:"1000012", det:"no attack for 60 days (last seen 2026-09-12)"},
  {t:now0-1*DAY-3*HOUR, ip:"35.198.44.21", act:"auto_unblock", st:"unblocked · verified", tk:"1000118", det:"cloud provider IP (Google Cloud) – no attack for 7 days"},
- {t:now0-4*DAY-3*HOUR, ip:"92.118.39.120", act:"auto_unblock", st:"unblocked · verified", tk:"1000008", det:"no attack for 90 days (never seen after the block)"},
+ {t:now0-4*DAY-3*HOUR, ip:"92.118.39.120", act:"auto_unblock", st:"unblocked · verified", tk:"1000008", det:"no attack for 60 days (never seen after the block)"},
 ];
 const audit=blocked.map((b,i)=>({t:b.t,user:b.by,action:"block",ip:b.ip,tk:b.tk,desc:b.desc,status:"blocked",ver:"yes",cont:4700+i*13}));
 const rules=[

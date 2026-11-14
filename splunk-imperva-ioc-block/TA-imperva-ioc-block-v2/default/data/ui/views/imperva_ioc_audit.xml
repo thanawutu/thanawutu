@@ -17,6 +17,7 @@
         <choice value="not_block">not block</choice>
         <choice value="restore">restore (undo not block)</choice>
         <choice value="rule_*">detection rule changes</choice>
+        <choice value="auto_unblock_rule">auto unblock rule (Keep / Default / days)</choice>
         <default>*</default>
       </input>
       <input type="dropdown" token="a_days" searchWhenChanged="true">
