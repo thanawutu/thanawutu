@@ -104,12 +104,16 @@ def kv_get(session_key, key, collection=REGISTRY):
     return json.loads(content)
 
 
+KV_BATCH = 500     # limits.conf [kvstore] max_documents_per_batch_save = 1000 by default
+
+
 def kv_upsert(session_key, docs, collection=REGISTRY):
-    """docs: list of dicts each containing _key. Inserts or replaces."""
-    if not docs:
-        return
-    rest.simpleRequest(_kv_path("/batch_save", collection), sessionKey=session_key, method="POST",
-                       jsonargs=json.dumps(docs), raiseAllErrors=True)
+    """docs: list of dicts each containing _key. Inserts or replaces, KV_BATCH documents per request
+    (one batch_save of more than 1000 documents fails: "Request exceeds API limits")."""
+    docs = list(docs or [])
+    for k in range(0, len(docs), KV_BATCH):
+        rest.simpleRequest(_kv_path("/batch_save", collection), sessionKey=session_key, method="POST",
+                           jsonargs=json.dumps(docs[k:k + KV_BATCH]), raiseAllErrors=True)
 
 
 def kv_list(session_key, collection):
