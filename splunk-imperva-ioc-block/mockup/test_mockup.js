@@ -152,12 +152,14 @@ const wait = ms => page.waitForTimeout(ms);
   const ures = await txt('#b_res');
   T('Blocked+Auto', 'Unblock now: own + other policy, verified', ures.includes('Unblock 2 IP') && ures.includes('2169031') && ures.includes('1000001'), ures);
   T('Blocked+Auto', 'unblocked IPs leave the table, KPI Unblocked 7 days +2', (await rows('#b_tbl')).length === n0 - 2 && num(await txt('#bUn7')) === un0 + 2, `${un0} -> ${await txt('#bUn7')}`);
-  T('Blocked+Auto', 'manual unblocks appear in the run log', (await txt('#au_log')).includes('218.92.0.112'));
+  await go('audit');
+  T('Audit', 'manual unblocks appear in the unblock log (Audit log page)', (await txt('#au_log')).includes('218.92.0.112'));
   const due = num(await txt('#bDue'));
   T('Blocked+Auto', 'Next run plan = Due now', (await txt('#au_plan')).includes(`${Math.min(due, 50)}`) && due > 0, await txt('#au_plan'));
   await page.click('#au_run'); await wait(1800);
-  T('Blocked+Auto', 'Run now unblocks every due IP', (await txt('#au_res')).includes(`Unblocked ${due} IP`) && num(await txt('#bDue')) === 0, await txt('#au_res'));
-  T('Blocked+Auto', 'auto unblocks logged with the reason', /auto unblock[\s\S]*no attack for (7|60) days/.test(await txt('#au_log')));
+  T('Audit', 'Run now (Audit log page) unblocks every due IP', (await txt('#au_res')).includes(`Unblocked ${due} IP`) && num(await txt('#bDue')) === 0, await txt('#au_res'));
+  T('Audit', 'auto unblocks logged with the reason', /auto unblock[\s\S]*no attack for (7|60) days/.test(await txt('#au_log')));
+  await go('blocked');
 
   // ---------------- detection rules
   await go('rules');
