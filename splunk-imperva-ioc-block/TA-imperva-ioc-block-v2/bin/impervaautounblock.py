@@ -3,7 +3,8 @@ Splunk generating command: impervaautounblock (V2)
 
 Unblock IP rules of the WAF policies after a quiet period (see auto_unblock.py), fixed values:
 cloud provider and shared IPs after 7 days without an attack, other IPs after 60 days; every
-enabled policy; at most 50 rules per run. The countdown never starts before the day V2 first saw
+enabled policy; no daily limit (rounds of 10, each confirmed on the WAF before the next). The
+countdown never starts before the day V2 first saw
 the rule.
 
 Usage:
@@ -128,20 +129,35 @@ def audit_row(now, user, action, ip, sid, status, detail, ticket="-", comment="-
     return r
 
 
-def unblock_items(session_key, conf, items, user, log, now, meta_of, log_action):
+def unblock_items(session_key, conf, items, user, log, now, meta_of, log_action, _clock=time.time):
     """
-    Unblock plan items of ANY policy through the normal backend (SOAR in production): grouped by
-    policy (override_ids = that policy), 50 at a time. Registry closed for the own policy, rule
-    state deleted (a rule added again later starts a new countdown), policy cache refreshed.
-    meta_of(item) -> (registry meta, ticket, comment, detail suffix).
+    Unblock plan items of ANY policy through the normal backend (SOAR in production), grouped by
+    policy (override_ids = that policy), in rounds of au.BATCH_SIZE (10). Every round is one request
+    that writes the policy and re-reads it from Imperva: the next round of that policy starts only
+    when every IP of the round is confirmed gone (unblocked / not in the blacklist). Otherwise that
+    policy stops for this run (one "skipped" row says how many are left; retried at the next run).
+    No limit per run; no new round after au.RUN_TIME_BUDGET seconds.
+    Registry closed for the own policy, rule state deleted (a rule added again later starts a new
+    countdown), policy cache refreshed. meta_of(item) -> (registry meta, ticket, comment, suffix).
     """
     out, by_policy = [], {}
     for i in items:
         by_policy.setdefault(i["policy_id"], []).append(i)
     unblocked_keys, reg_docs = [], []
+    started = _clock()
     for pid, group in sorted(by_policy.items()):
-        for k in range(0, len(group), 50):
-            part = group[k:k + 50]
+        stop = None
+        for k in range(0, len(group), au.BATCH_SIZE):
+            part = group[k:k + au.BATCH_SIZE]
+            if stop is None and _clock() - started > au.RUN_TIME_BUDGET:
+                stop = "time budget of this run used up (%d min)" % (au.RUN_TIME_BUDGET // 60)
+            if stop is not None:
+                left = len(group) - k
+                out.append(audit_row(now, user, "unblock", "-", pid, "skipped",
+                                     "%d more IP rule(s) of policy %s not sent: %s - retried at the next run"
+                                     % (left, pid, stop)))
+                log.error("unblock: policy %s stopped, %d left: %s", pid, left, stop)
+                break
             ips = [i["cidr"] for i in part]
             try:
                 backend = get_backend(conf, load_credential, session_key, override_ids=pid)
@@ -153,7 +169,9 @@ def unblock_items(session_key, conf, items, user, log, now, meta_of, log_action)
                     _m, ticket, comment, _s = meta_of(i)
                     out.append(audit_row(now, user, "unblock", i["cidr"], pid, "error", str(e) + hint, ticket, comment))
                 log.error("unblock: policy %s failed: %s", pid, e)
+                stop = "the round before failed (%s)" % str(e)[:120]
                 continue
+            bad = 0
             for i in part:
                 meta, ticket, comment, suffix = meta_of(i)
                 r = res.get(i["cidr"]) or {"status": "error", "detail": "no answer for this IP", "verified_in_waf": "unknown"}
@@ -162,6 +180,8 @@ def unblock_items(session_key, conf, items, user, log, now, meta_of, log_action)
                                 r.get("verified_in_waf", "-"), mode,
                                 {"soar_container": r["soar_container"]} if "soar_container" in r else None)
                 out.append(row)
+                if r["status"] not in ("unblocked", "no_change"):
+                    bad += 1
                 if r["status"] in ("unblocked", "no_change"):
                     if i.get("key"):
                         unblocked_keys.append(i["key"])
@@ -175,6 +195,10 @@ def unblock_items(session_key, conf, items, user, log, now, meta_of, log_action)
                                                     user, int(now), meta)
                         if doc:
                             reg_docs.append(doc)
+            if bad:
+                stop = "%d of %d IP(s) of the round before not confirmed removed on the WAF" % (bad, len(part))
+            else:
+                log.info("unblock: policy %s round %d: %d IP(s) confirmed removed", pid, k // au.BATCH_SIZE + 1, len(part))
     try:
         kv_upsert(session_key, reg_docs)
     except Exception as e:  # noqa: BLE001 - the WAF change already happened
@@ -198,7 +222,7 @@ def unblock_items(session_key, conf, items, user, log, now, meta_of, log_action)
 
 def do_run(session_key, conf, log, now):
     items, _own = gather(session_key, conf, log, now)
-    due = au.due_items(items, au.MAX_PER_RUN)
+    due = au.due_items(items)
 
     def meta_of(i):
         why = au.reason_text(i)

@@ -191,7 +191,7 @@ td.aid:hover{background:var(--info-bg)!important}
   <div class="in">
     <div><span class="label">Apps › Imperva IOC Block</span><h1 id="pageTitle">Imperva WAF – IOC Block</h1></div>
     <div class="chips">
-      <span class="chip sim">Mockup v3.17 · simulated data</span>
+      <span class="chip sim">Mockup v3.18 · simulated data</span>
       <span class="chip">Policy 2169031 · via SOAR</span>
     </div>
   </div>
@@ -206,7 +206,7 @@ td.aid:hover{background:var(--info-bg)!important}
 
 <!-- ============ Page 1: dashboard (7 days, search + Block) ============ -->
 <main class="wrap" id="v-dash">
-  <div class="review"><b>Mockup v3.17:</b> Auto unblock run now และ log ย้ายไปหน้า <b>Audit log</b> · ช่อง VirusTotal = คะแนน (คลิกเปิด VirusTotal) · <b>v3.16:</b> เพิ่มคอลัมน์ <b>AbuseIPDB</b> (คะแนน % + จำนวน report 90 วัน) และ <b>GreyNoise</b> (malicious / benign / RIOT / not observed) ในหน้า Block และ Older detections · ตรวจผ่าน <b>SOAR</b> เหมือน VirusTotal เก็บ cache 24 ชม. · Suggestion ปรับตาม: AbuseIPDB ≥ 75% → BLOCK, ≥ 25% → อย่างน้อย REVIEW, GreyNoise malicious → อย่างน้อย REVIEW, GreyNoise RIOT / benign → ไม่เกิน REVIEW · IP detail มีกล่อง Threat intel และลิงก์ไปทั้ง 3 เว็บ · <b>v3.15:</b> รวมหน้า <b>Blocked IPs / Unblock</b> กับ <b>Auto unblock</b> เป็นหน้าเดียว: ตารางเดียวแสดง IP ที่ block จาก<b>ทุก policy</b> พร้อม Last attack / Attacks 24h / Unblock on / Status · เลือกแถวแล้วกด <b>🔓 Unblock</b> ทันที หรือ <b>Apply rule</b> (Keep / Default / จำนวนวัน) · แถบบนสุดบอกกฎ auto unblock (7 / 60 วัน · ทุก policy · 50 ต่อรอบ) · log ของ auto unblock อยู่ล่างสุด · <b>v3.14:</b> หน้า Auto unblock <b>ไม่มีหน้าตั้งค่าแล้ว</b> ใช้ค่าคงที่: unblock จริงทุกวัน (<b>ไม่มี Report only</b>) · cloud / shared IP <b>7 วัน</b> · IP อื่น <b>60 วัน</b> · <b>All enabled policies</b> · <b>max 50 IP ต่อรอบ</b> · <b>v3.13:</b> Auto unblock: IP <b>cloud และ shared IP</b> (เครือข่ายมือถือ) ไม่โจมตีครบ <b>7 วัน</b> → unblock · IP อื่นไม่โจมตีครบ <b>60 วัน</b> → unblock · หน้า Blocked IPs และ Auto unblock มีคอลัมน์ <b>Attacks 24h</b> (request ที่ WAF ยัง block จาก IP นั้นใน 24 ชม.) และยอดรวม · <b>v3.12:</b> ช่อง <b>Search</b> ใช้ทั้งค้นหาและ<b>เพิ่ม IP</b> (ตัดช่อง Add IPs manually ออก) · ค้นหาจาก<b>ทุกหน้าและทุก WAF policy</b>: กล่อง <b>Found</b> บอกว่า IP อยู่ที่ไหน – หน้านี้ / หน้าอื่น / <b>block แล้วใน policy ไหน วันไหน</b> / allow / Not block / <b>ไม่เจอ → นับเข้าปุ่ม Block ทันที</b> · ลองพิมพ์ <span class="mono">193.42.33.7, 185.220.101.47, 20.20.20.20, 45.95.147.236, 203.0.113.10</span> · <b>Auto unblock (V2):</b> หน้า <b>⏱ Auto unblock</b> แสดง IP ที่ถูก block จาก<b>ทุก rule / policy</b> ของ WAF · นับจาก<b>การโจมตีครั้งสุดท้าย</b> (log “Blocked IP” ของ Imperva = IP ยังส่ง request เข้ามา): IP ของ <b>cloud provider</b> ไม่โจมตีครบ <b>7 วัน</b> → unblock · IP อื่นไม่โจมตีครบ <b>60 วัน</b> → unblock · ถ้ายังโจมตีอยู่ นับใหม่อัตโนมัติ · IP ที่ไม่เคยเห็นโจมตีหลัง block นับจากวันที่ block (หรือวันที่ Splunk เห็นใน policy) · IP cloud block ได้ · Keep = ไม่ unblock · ส่วนอื่นเหมือน v3.8b</div>
+  <div class="review"><b>Mockup v3.18:</b> Auto unblock ไม่จำกัดวันละ 50 แล้ว: ปลดทีละ <b>10 IP</b> → อ่าน policy กลับจาก WAF ตรวจว่าลบแล้ว → ค่อยยิงรอบถัดไป จนหมด (ถ้ารอบไหนตรวจไม่ผ่าน หยุดเฉพาะ policy นั้น ลองใหม่รอบถัดไป) · <b>v3.17:</b> Auto unblock run now และ log ย้ายไปหน้า <b>Audit log</b> · ช่อง VirusTotal = คะแนน (คลิกเปิด VirusTotal) · <b>v3.16:</b> เพิ่มคอลัมน์ <b>AbuseIPDB</b> (คะแนน % + จำนวน report 90 วัน) และ <b>GreyNoise</b> (malicious / benign / RIOT / not observed) ในหน้า Block และ Older detections · ตรวจผ่าน <b>SOAR</b> เหมือน VirusTotal เก็บ cache 24 ชม. · Suggestion ปรับตาม: AbuseIPDB ≥ 75% → BLOCK, ≥ 25% → อย่างน้อย REVIEW, GreyNoise malicious → อย่างน้อย REVIEW, GreyNoise RIOT / benign → ไม่เกิน REVIEW · IP detail มีกล่อง Threat intel และลิงก์ไปทั้ง 3 เว็บ · <b>v3.15:</b> รวมหน้า <b>Blocked IPs / Unblock</b> กับ <b>Auto unblock</b> เป็นหน้าเดียว: ตารางเดียวแสดง IP ที่ block จาก<b>ทุก policy</b> พร้อม Last attack / Attacks 24h / Unblock on / Status · เลือกแถวแล้วกด <b>🔓 Unblock</b> ทันที หรือ <b>Apply rule</b> (Keep / Default / จำนวนวัน) · แถบบนสุดบอกกฎ auto unblock (7 / 60 วัน · ทุก policy · 50 ต่อรอบ) · log ของ auto unblock อยู่ล่างสุด · <b>v3.14:</b> หน้า Auto unblock <b>ไม่มีหน้าตั้งค่าแล้ว</b> ใช้ค่าคงที่: unblock จริงทุกวัน (<b>ไม่มี Report only</b>) · cloud / shared IP <b>7 วัน</b> · IP อื่น <b>60 วัน</b> · <b>All enabled policies</b> · <b>max 50 IP ต่อรอบ</b> · <b>v3.13:</b> Auto unblock: IP <b>cloud และ shared IP</b> (เครือข่ายมือถือ) ไม่โจมตีครบ <b>7 วัน</b> → unblock · IP อื่นไม่โจมตีครบ <b>60 วัน</b> → unblock · หน้า Blocked IPs และ Auto unblock มีคอลัมน์ <b>Attacks 24h</b> (request ที่ WAF ยัง block จาก IP นั้นใน 24 ชม.) และยอดรวม · <b>v3.12:</b> ช่อง <b>Search</b> ใช้ทั้งค้นหาและ<b>เพิ่ม IP</b> (ตัดช่อง Add IPs manually ออก) · ค้นหาจาก<b>ทุกหน้าและทุก WAF policy</b>: กล่อง <b>Found</b> บอกว่า IP อยู่ที่ไหน – หน้านี้ / หน้าอื่น / <b>block แล้วใน policy ไหน วันไหน</b> / allow / Not block / <b>ไม่เจอ → นับเข้าปุ่ม Block ทันที</b> · ลองพิมพ์ <span class="mono">193.42.33.7, 185.220.101.47, 20.20.20.20, 45.95.147.236, 203.0.113.10</span> · <b>Auto unblock (V2):</b> หน้า <b>⏱ Auto unblock</b> แสดง IP ที่ถูก block จาก<b>ทุก rule / policy</b> ของ WAF · นับจาก<b>การโจมตีครั้งสุดท้าย</b> (log “Blocked IP” ของ Imperva = IP ยังส่ง request เข้ามา): IP ของ <b>cloud provider</b> ไม่โจมตีครบ <b>7 วัน</b> → unblock · IP อื่นไม่โจมตีครบ <b>60 วัน</b> → unblock · ถ้ายังโจมตีอยู่ นับใหม่อัตโนมัติ · IP ที่ไม่เคยเห็นโจมตีหลัง block นับจากวันที่ block (หรือวันที่ Splunk เห็นใน policy) · IP cloud block ได้ · Keep = ไม่ unblock · ส่วนอื่นเหมือน v3.8b</div>
   <section class="kpis" aria-label="Summary">
     <div class="kpi k-warn"><span class="label">Detected WAF IPs</span><span class="v" id="kDet">0</span><span class="s" id="kDetSub">last 7 days</span></div>
     <div class="kpi k-info"><span class="label">Blocked on WAF now</span><span class="v" id="kWaf">0</span><span class="s">policy 2169031 (live)</span></div>
@@ -297,7 +297,7 @@ td.aid:hover{background:var(--info-bg)!important}
     <span>☁ Cloud provider / shared IP: <b>7 days</b> without an attack</span>
     <span>Other IPs: <b>60 days</b> without an attack</span>
     <span>All enabled policies</span>
-    <span>Max <b>50</b> per run</span>
+    <span>Rounds of <b>10</b> IPs, each confirmed on the WAF · no daily limit</span>
     <span class="note">every day 02:17 · fixed values</span>
     <button type="button" class="lnk" id="b_howBtn" aria-expanded="false">How it works ▾</button>
   </section>
@@ -444,7 +444,7 @@ const otherBlocked=[
 ];
 // Auto unblock rules (fixed values since v3.14; shown in the strip on the Blocked IPs page)
 // def / cloud = days WITHOUT an attack before the IP is unblocked; scope = which policies are changed
-const AU=Object.freeze({mode:"auto", def:60, cloud:7, remind:7, max:50, scope:"all"});   // fixed values (v3.14): no settings, no report-only
+const AU=Object.freeze({mode:"auto", def:60, cloud:7, remind:7, batch:10, scope:"all"});   // fixed values (v3.14): no settings, no report-only
 const auLog=[
  {t:now0-1*DAY-3*HOUR, ip:"80.94.95.115", act:"auto_unblock", st:"unblocked · verified", tk:"1000012", det:"no attack for 60 days (last seen 2026-09-12)"},
  {t:now0-1*DAY-3*HOUR, ip:"35.198.44.21", act:"auto_unblock", st:"unblocked · verified", tk:"1000118", det:"cloud provider IP (Google Cloud) – no attack for 7 days"},
@@ -706,7 +706,7 @@ function renderBlocked(){
   const man7=daily.slice(-7).reduce((a,d)=>a+d.u,0), auto7=auLog.filter(l=>l.act==="auto_unblock"&&Date.now()-l.t<=7*DAY).length;
   $("bUn7").textContent=man7+auto7; $("bUn7Sub").textContent=`manual ${man7} · auto ${auto7}`;
   $("bRead").textContent=`read ${fmt(Date.now()).slice(11)} · auto refresh every 5 min · sorted by unblock date`;
-  $("au_plan").innerHTML=`Next auto unblock (02:17): <b>${Math.min(dueM,AU.max)}</b> to unblock${dueM>AU.max?` (max ${AU.max} per run, ${dueM-AU.max} at the following run)`:""} · <b>${cnt.attacking}</b> still attacking · <b>${cnt.keep}</b> kept`;
+  $("au_plan").innerHTML=`Next auto unblock (02:17): <b>${dueM}</b> to unblock${dueM?` in ${Math.ceil(dueM/AU.batch)} round${Math.ceil(dueM/AU.batch)===1?"":"s"} of ${AU.batch} (each round confirmed on the WAF before the next)`:""} · <b>${cnt.attacking}</b> still attacking · <b>${cnt.keep}</b> kept`;
   const A={auto_unblock:["a-unblock","auto unblock"],set_period:["a-set","set unblock rule"],unblock:["a-unblock","unblock (manual)"]};
   $("au_log").innerHTML=auLog.slice().sort((a,c)=>c.t-a.t).map(l=>`<tr><td class="mono nw">${fmt(l.t)}</td><td class="ip">${esc(l.ip)}</td><td><span class="${(A[l.act]||A.unblock)[0]}">${(A[l.act]||A.unblock)[1]}</span></td><td class="nw">${esc(l.st)}</td><td class="mono nw">${esc(l.tk)}</td><td class="small">${esc(l.desc||l.det)}</td></tr>`).join("");
   auChart();
@@ -906,13 +906,13 @@ $("b_apply").addEventListener("click",()=>{ const pg=P.blocked, v=$("b_setDur").
   const r=$("b_res"); r.hidden=false; r.className="result ok"; r.textContent=`✔ Auto unblock rule set for ${n} IP (${$("b_setDur").selectedOptions[0].textContent}) · ไม่ได้ส่งอะไรไป WAF · บันทึกลง audit log`;
   pg.sel.clear(); $("b_tk").value=""; $("b_desc").value=""; renderAll(); });
 $("au_run").addEventListener("click",async()=>{ const btn=$("au_run"), res=$("au_res"); btn.disabled=true; res.hidden=false; res.className="result info";
-  res.textContent="กำลังตรวจ IP ที่ครบเวลา → SOAR → Imperva policy 2169031 → verify…"; await sleep(1300);
-  const t=Date.now(), items=allBlocked().map(b=>({b,i:expInfo(b)})), due=items.filter(x=>x.i.st==="due").slice(0,AU.max);
+  res.textContent=`กำลังปลดทีละ ${AU.batch} IP → SOAR → Imperva → อ่านกลับตรวจว่าลบแล้ว → รอบถัดไป…`; await sleep(1300);
+  const t=Date.now(), items=allBlocked().map(b=>({b,i:expInfo(b)})), due=items.filter(x=>x.i.st==="due");
   const why=({b,i})=>`${i.cl?`cloud provider IP (${cloudOf(b.ip)}) – `:""}no attack for ${i.days} days (${b.seen?"last seen "+fmt(b.seen).slice(0,10):"not seen since the block"})${i.pol!==2169031?` · policy ${i.pol}`:""}`;
   due.forEach(x=>{ const list=x.b.pol?otherBlocked:blocked; list.splice(list.indexOf(x.b),1);
     auLog.push({t,ip:x.b.ip,act:"auto_unblock",st:"unblocked · verified",tk:x.b.tk||"-",det:why(x)});
     audit.push({t,user:"auto-unblock",action:"unblock",ip:x.b.ip,tk:x.b.tk||"-",desc:"auto unblock: "+why(x),status:"unblocked",ver:"removed",cont:soarSeq++}); });
-  res.className="result ok"; res.textContent=`✔ Unblocked ${due.length} IP · verified on the WAF · written to the audit log`;
+  res.className="result ok"; res.textContent=`✔ Unblocked ${due.length} IP in ${Math.ceil(due.length/AU.batch)} round${Math.ceil(due.length/AU.batch)===1?"":"s"} of ${AU.batch} · each round confirmed on the WAF before the next · written to the audit log`;
   btn.disabled=false; P.blocked.sel.clear(); renderAll(); });
 
 const TITLES={dash:"Imperva WAF – IOC Block",history:"Imperva IOC Block – Older detections",blocked:"Imperva IOC Block – Blocked IPs / Unblock / Auto unblock",rules:"Imperva IOC Block – Detection rules",audit:"Imperva IOC Block – Audit log"};

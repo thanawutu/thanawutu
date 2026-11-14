@@ -128,7 +128,7 @@
           <span>☁ Cloud provider / shared IP: <b>7 days</b> without an attack</span>
           <span>Other IPs: <b>60 days</b> without an attack</span>
           <span>All enabled policies</span>
-          <span>Max <b>50</b> per run</span>
+          <span>Rounds of <b>10</b> IPs, each confirmed on the WAF · no daily limit</span>
           <span style="opacity:.75">every day 02:17 · fixed values · the countdown starts at the latest of the last attack (Imperva "Blocked IP" log), the block date and the day V2 first saw the rule</span>
         </div>
       </html>

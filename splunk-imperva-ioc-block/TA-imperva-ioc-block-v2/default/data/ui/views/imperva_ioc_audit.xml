@@ -70,7 +70,7 @@
           <query>| makeresults | impervaautounblock action=list
 | eval _r=$au_refresh|s$
 | stats count(eval(status_code="due")) AS due
-| eval Run=if(due>0, "▶ RUN NOW (".due." due)", "Nothing due now"), note=if(due>50, "50 per run - the rest at the next run", "-")
+| eval Run=if(due>0, "▶ RUN NOW (".due." due)", "Nothing due now"), note=if(due>10, "rounds of 10 IPs per policy, each confirmed on the WAF before the next", "-")
 | table Run due note</query>
           <earliest>-1m</earliest>
           <latest>now</latest>

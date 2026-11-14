@@ -8,7 +8,7 @@ When V2 is tested and confirmed, V1 is removed (see *Cut-over*).
 | | V1 (1.3.x) | V2 (2.0.0) |
 |---|---|---|
 | Cloud provider IPs (AWS, Google Cloud, Azure, ...) | never blocked (Not block only) | **blocked**, tagged "short block" |
-| Auto unblock | - | always on: IP rules of **every enabled WAF policy** are unblocked when the IP sent **no request for 7 days (cloud provider / shared IP) / 60 days (others)**, at most 50 per run (fixed values) |
+| Auto unblock | - | always on: IP rules of **every enabled WAF policy** are unblocked when the IP sent **no request for 7 days (cloud provider / shared IP) / 60 days (others)**, no daily limit: rounds of 10 IPs, each confirmed on the WAF before the next (fixed values) |
 | Pages | 5 | 5: **Blocked IPs / Unblock / Auto unblock** is one page: every policy in one table (own policy read live), Status / Last attack / Attacks 24h / Unblock after / Unblock on, 🔓 Unblock from any policy, auto unblock rule per IP. Auto unblock run now, the policies and the unblock log are on the **Audit log** page |
 | Search / add | search box + separate *Add IPs manually* box | **one box**: text = search, full IPs = added; a **Found** box says where each typed IP is (every WAF policy with name and date, blocked from Splunk, Not block list, detected on which page); the Block button counts only the typed IPs that can be blocked (`impervafind`) |
 | VirusTotal column | 🔗 link + separate score | one column: the score (e.g. `9/92`); click = the IP's page on VirusTotal |
@@ -34,7 +34,10 @@ Everything else (Decision aid, IP detail, card, Select all, incident digits) is 
   unblocks the selected IPs at once, each from the policy that holds it
   (`impervaautounblock action=unblock`); IPs marked *NOT on WAF* close their registry entry.
 * Fixed values, no settings and no report-only mode: always on, 7 days for cloud provider / shared IPs,
-  60 days for other IPs, every enabled policy, at most 50 IP rules per run (the rest at the next run).
+  60 days for other IPs, every enabled policy, no daily limit. Due rules go in rounds of 10 IPs per policy:
+  each round is written and re-read from Imperva, and the next round starts only when every IP of the
+  round is confirmed gone; otherwise that policy stops (one *skipped* row says how many are left) and
+  is retried at the next run. No new round after 3.5 h (the daily search may run up to 4 h).
   The Blocked IPs page shows them in one line at the top.
 * Only `BLOCK` IP / CIDR rules of IP settings are handled; ALLOW rules, exceptions and range rules
   (`a-b`) are never touched. Disabled policies are ignored (except the own policy).

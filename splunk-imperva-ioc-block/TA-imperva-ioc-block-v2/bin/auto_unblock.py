@@ -6,7 +6,8 @@ IP has sent no request for N days (fixed values, no settings):
     cloud provider IP (imperva.conf cloud_providers)          7 days
     shared IP, e.g. mobile carrier NAT (shared_ip_providers)  7 days
     any other IP                                              60 days
-Always on (unblocks, no report-only mode), every enabled policy, at most 50 rules per run.
+Always on (unblocks, no report-only mode), every enabled policy, no daily limit: due rules are unblocked
+in rounds of 10 per policy, and the next round starts only when the WAF confirmed the previous one.
 "Request" = an Imperva event "Blocked IP" / act REQ_BLOCKED_ACL from the IP, collected every hour
 by the saved search "Imperva V2 - Last attack of blocked IPs (hourly)" into KV imperva_blocked_seen.
 
@@ -33,7 +34,8 @@ ATTACKING_SECONDS = DAY              # a request in the last 24 h = "attacking n
 
 DEFAULT_DAYS = 60                    # other IPs
 CLOUD_DAYS = 7                       # cloud provider / shared IPs
-MAX_PER_RUN = 50                     # IP rules unblocked per run
+BATCH_SIZE = 10                      # IP rules per round (one SOAR request, re-read from the WAF)
+RUN_TIME_BUDGET = 3 * 3600 + 1800    # no new round after 3.5 h (saved search max time 4 h): rest next run
 
 
 def entry_key(policy_id, cidr):
@@ -189,9 +191,9 @@ def plan(now, entries, own_ids, states, seen, registry, owners, short_of, hits=N
     return items, new_states
 
 
-def due_items(items, max_per_run=MAX_PER_RUN):
-    """Rules to unblock now: due, oldest first, at most max_per_run."""
-    return [i for i in items if i["status"] == "due"][:max(0, int(max_per_run))]
+def due_items(items):
+    """Rules to unblock now: every due rule, oldest first (no limit: they go in rounds of BATCH_SIZE)."""
+    return [i for i in items if i["status"] == "due"]
 
 
 def reason_text(item, now=None):

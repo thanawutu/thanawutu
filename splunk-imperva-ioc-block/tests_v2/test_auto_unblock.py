@@ -112,8 +112,8 @@ class TestPlan(unittest.TestCase):
             pid = "1000001" if ip == "192.0.2.77" else "2169031"
             states.update(st(ip, pid, first=T - (300 + k) * DAY))
         items, _ = plan(states)
-        due = au.due_items(sorted(items.values(), key=lambda i: i["unblock_on"]), 2)
-        self.assertEqual([i["cidr"] for i in due], ["54.245.198.114", "203.0.113.10"])
+        due = au.due_items(sorted(items.values(), key=lambda i: i["unblock_on"]))
+        self.assertEqual([i["cidr"] for i in due], ["54.245.198.114", "203.0.113.10", "192.0.2.77"])   # no limit
 
     def test_attacks_in_the_last_24h(self):
         items, _ = au.plan(T, ENTRIES, OWN, {}, {}, {}, {}, CLOUD,
@@ -149,7 +149,8 @@ class TestPlan(unittest.TestCase):
                       au.reason_text({"days": 7, "last_seen": 0, "blocked_at": 0, "cloud": "Amazon.com, Inc."}))
 
     def test_fixed_values(self):
-        self.assertEqual((au.CLOUD_DAYS, au.DEFAULT_DAYS, au.MAX_PER_RUN), (7, 60, 50))
+        self.assertEqual((au.CLOUD_DAYS, au.DEFAULT_DAYS, au.BATCH_SIZE), (7, 60, 10))
+        self.assertFalse(hasattr(au, "MAX_PER_RUN"))                         # no daily limit any more
         self.assertFalse(any(hasattr(au, n) for n in ("normalize_settings", "merge_settings", "load_settings")))
         self.assertEqual(au.rule_of("Keep"), "keep")
         self.assertEqual(au.rule_of("30"), 30)
@@ -163,7 +164,8 @@ class TestPlan(unittest.TestCase):
         self.assertNotIn("[auto_unblock]", conf + spec)
         for gone in ("action=settings", "SAVE SETTINGS", "due_not_managed", 'token="a_en"', "scope"):
             self.assertNotIn(gone, page)
-        for shown in ("AUTO UNBLOCK ON", "<b>7 days</b>", "<b>60 days</b>", "All enabled policies", "Max <b>50</b>"):
+        for shown in ("AUTO UNBLOCK ON", "<b>7 days</b>", "<b>60 days</b>", "All enabled policies",
+                      "Rounds of <b>10</b> IPs, each confirmed on the WAF · no daily limit"):
             self.assertIn(shown, page)
 
 
@@ -177,11 +179,15 @@ class FakeBackend(object):
         CALLS.append((self.pid, action, list(ips), user))
         if self.fail_on:
             raise RuntimeError(self.fail_on)
-        return [{"ip": ip, "site_id": self.pid, "status": "unblocked", "verified_in_waf": "removed",
-                 "detail": "ok", "soar_container": 9} for ip in ips]
+        return [{"ip": ip, "site_id": self.pid, "status": "error" if ip in NOT_REMOVED else "unblocked",
+                 "verified_in_waf": "no" if ip in NOT_REMOVED else "removed",
+                 "detail": "write accepted but NOT confirmed on re-read from WAF" if ip in NOT_REMOVED else "ok",
+                 "soar_container": 9} for ip in ips]
 
 
 CALLS = []
+NOT_REMOVED = set()          # IPs the fake WAF still has after the write (re-read)
+MANY = [E("100.64.%d.%d" % (k // 200, k % 200 + 1), pid="1000001") for k in range(25)] + [E("203.0.113.10", enabled=False)]
 
 
 class TestCommand(unittest.TestCase):
@@ -189,6 +195,7 @@ class TestCommand(unittest.TestCase):
         import impervaautounblock as c
         self.c = c
         del CALLS[:]
+        NOT_REMOVED.clear()
         self.kv = {au.STATE: {}, au.SEEN: {}, "imperva_block_registry": {}}
         self.out, self.refreshed, self.fail_on = {}, [], {}
         c.load_conf_stanza = lambda sk, conf, stanza: {"policy_ids": "2169031", "cloud_providers": "amazon|aws"}
@@ -264,14 +271,51 @@ class TestCommand(unittest.TestCase):
         self.assertTrue(any(k.startswith("e_1000001_") for k in self.kv[au.STATE]))   # retried next run
         self.assertEqual(set(r["status"] for r in rows if r["site_id"] == "2169031"), {"unblocked"})
 
-    def test_run_respects_max_per_run(self):
+    def test_run_has_no_limit_and_goes_in_rounds_of_10(self):
+        self.c.load_entries = lambda sk, conf, log: (MANY, OWN)
         self.run_("action=list")
         self.age_all(100)
-        saved, self.c.au.MAX_PER_RUN = self.c.au.MAX_PER_RUN, 1
+        rows = self.run_("action=run")
+        self.assertEqual([(c[0], len(c[2])) for c in CALLS], [("1000001", 10), ("1000001", 10), ("1000001", 5), ("2169031", 1)])
+        self.assertEqual(len(rows), 26)
+        self.assertEqual(set(r["status"] for r in rows), {"unblocked"})
+        self.assertEqual(self.kv[au.STATE], {})                               # every countdown done
+
+    def test_a_round_not_confirmed_stops_that_policy_only(self):
+        self.c.load_entries = lambda sk, conf, log: (MANY, OWN)
+        self.run_("action=list")
+        self.age_all(100)
+        first = sorted(i["cidr"] for i in MANY if i["policy_id"] == "1000001")
+        NOT_REMOVED.add("100.64.0.10")                                      # in the first round
+        rows = self.run_("action=run")
+        self.assertEqual([(c[0], len(c[2])) for c in CALLS], [("1000001", 10), ("2169031", 1)])   # rounds 2 and 3 not sent
+        skipped = [r for r in rows if r["status"] == "skipped"]
+        self.assertEqual(len(skipped), 1)
+        self.assertEqual(skipped[0]["detail"], "15 more IP rule(s) of policy 1000001 not sent: 1 of 10 IP(s) of the round "
+                                               "before not confirmed removed on the WAF - retried at the next run")
+        self.assertEqual([r["status"] for r in rows if r["ip"] == "100.64.0.10"], ["error"])
+        self.assertIn(au.entry_key("1000001", "100.64.0.10"), self.kv[au.STATE])            # still due next run
+        self.assertEqual(sum(1 for k in self.kv[au.STATE] if k.startswith("e_1000001_")), 16)
+        self.assertTrue(first)
+
+    def test_error_of_a_round_stops_that_policy_and_time_budget(self):
+        self.c.load_entries = lambda sk, conf, log: (MANY, OWN)
+        self.run_("action=list")
+        self.age_all(100)
+        self.fail_on["1000001"] = "SOAR HTTP 500"
+        rows = self.run_("action=run")
+        self.assertEqual([(c[0], len(c[2])) for c in CALLS], [("1000001", 10), ("2169031", 1)])
+        self.assertIn("the round before failed (SOAR HTTP 500)", [r for r in rows if r["status"] == "skipped"][0]["detail"])
+        del CALLS[:]
+        self.fail_on.clear()
+        saved, self.c.au.RUN_TIME_BUDGET = self.c.au.RUN_TIME_BUDGET, -1
         try:
-            self.assertEqual(len(self.run_("action=run")), 1)
+            rows = self.run_("action=run")
         finally:
-            self.c.au.MAX_PER_RUN = saved
+            self.c.au.RUN_TIME_BUDGET = saved
+        self.assertEqual(CALLS, [])
+        self.assertEqual(sorted(r["site_id"] for r in rows), ["1000001"])     # own rule unblocked by the run above
+        self.assertIn("time budget of this run used up", rows[0]["detail"])
 
     def test_set_keep_and_default(self):
         self.run_("action=list")
