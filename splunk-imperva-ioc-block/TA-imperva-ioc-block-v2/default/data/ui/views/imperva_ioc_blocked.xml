@@ -270,7 +270,8 @@
           <colorPalette type="expression">if(like(value, "✔%"), "#1F6F8B", "#3C444D")</colorPalette>
         </format>
         <drilldown>
-          <condition field="Apply">
+          <!-- only with IPs selected: a click on "Select IPs in the table below" does nothing -->
+          <condition match="'click.name2'==&quot;Apply&quot; AND 'row.selected_ips'!=&quot;-&quot;">
             <set token="b_rule_ips">$row.selected_ips$</set>
             <set token="b_rule_val">$row.rule$</set>
             <set token="b_rule_why">$row.reason$</set>

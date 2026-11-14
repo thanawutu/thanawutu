@@ -436,6 +436,7 @@ class TestMergedPage(unittest.TestCase):
         self.assertIn("| impervaautounblock action=unblock ip=$b_exec_ips|s$ incident_no=$b_exec_tk|s$ description=$b_exec_desc|s$", p)
         self.assertNotIn("impervablock action=unblock", p)
         self.assertIn("| makeresults | impervaautounblock action=set ip=$b_rule_ips|s$ rule=$b_rule_val|s$ reason=$b_rule_why|s$", p)
+        self.assertIn("""<condition match="'click.name2'==&quot;Apply&quot; AND 'row.selected_ips'!=&quot;-&quot;">""", p)  # no IP: no run
         for moved in ("impervaautounblock action=run", "impervaautounblock action=policies", "Unblock / auto unblock log"):
             self.assertNotIn(moved, p)                     # on the Audit log page since the merged page review
         audit = open(os.path.join(self.views, "imperva_ioc_audit.xml"), encoding="utf-8").read()
