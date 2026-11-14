@@ -5,15 +5,17 @@
  *
  *   Search or add IPs (IP / Ticket / Incident no. / Rule)   - one box (mockup v3.12)
  *   Found: where the typed IPs are - every page and every WAF policy (detection pages)
- *   Selected IPs (× = unselect) | Ticket / Incident no. | Description | [⛔ Block n IPs] [✖ Not block n IPs]
+ *   Selected IPs (× = unselect) | Ticket / Incident no. | Description | [⛔ Block n IPs] [🔓 Unblock n IPs] [✖ Not block n IPs]
  *   WAF check of the selected IPs (detection pages)
  *
  * Full IPs typed in the search box are the manual IPs: the card puts them in $p_add$ for the action
  * search and reads the search "<p>_find" (impervafind: every WAF policy, registry, Not block list,
- * ES detections of both pages). The Block button counts only the typed IPs that can be blocked.
+ * ES detections of both pages). A typed IP that is already blocked (a rule of exactly that IP in any
+ * policy) can only be unblocked: the 🔓 Unblock button ($p_unb_*$ -> impervaautounblock action=unblock);
+ * a typed IP that is not blocked can only be blocked: the Block button counts only those.
  *
  * The card only reads and sets the SAME tokens as the Simple XML panel ($p_q$, $p_add$, $p_tk$,
- * $p_desc$, $p_sel$, $p_exec_*$, $p_nb_*$), so the searches of the views do not change.
+ * $p_desc$, $p_sel$, $p_exec_*$, $p_nb_*$, $p_unb_*$), so the searches of the views do not change.
  * If this script does not load, the Simple XML inputs and the action table stay visible and
  * work as before.
  *
@@ -60,6 +62,7 @@ require([
         ".imp-tag.imp-man{border-style:dashed;background:var(--imp-warn-bg);padding-right:8px}",
         ".imp-tag.imp-bad{border-color:var(--imp-crit);background:var(--imp-crit-bg);color:var(--imp-crit);padding-right:8px}",
         ".imp-tag.imp-cloud{border-color:var(--imp-warn);background:var(--imp-warn-bg);color:var(--imp-warn)}",
+        ".imp-tag.imp-untag{border-color:var(--imp-ok);background:var(--imp-ok-bg);color:var(--imp-ok);padding-right:8px}",
         ".imp-scroll{max-height:360px;overflow-y:auto}",
         ".imp-tag button{border:0;background:transparent;padding:0 5px;margin:0;font-size:15px;line-height:1;color:var(--imp-muted);cursor:pointer}",
         ".imp-tag button:hover{color:var(--imp-fg)}",
@@ -226,7 +229,7 @@ require([
         this.chk = null;         // last WAF check text
         this.chkFor = null;      // IPs that WAF check was made for
         this.chkWait = false;
-        this.found = {};         // typed IP -> {lines, blockable, cloud} from the search <p>_find
+        this.found = {};         // typed IP -> {lines, blockable, unblockable, unblockPolicy, cloud} (search <p>_find)
         this.findText = null;    // Found lines of a text search (no IP typed)
         this.findErr = false;
         this.findMsg = "";       // why the Found search failed (shown in the box)
@@ -285,8 +288,13 @@ require([
         var go = el("button", "imp-run" + (cfg.verb === "unblock" ? " imp-un" : ""));
         go.type = "button";
         row2.appendChild(go);
-        var nb = null;
+        var nb = null, un = null;
         if (cfg.manual) {
+            // a typed IP that is already blocked can only be unblocked (shown only when there is one)
+            un = el("button", "imp-run imp-un imp-hidden");
+            un.type = "button";
+            un.title = "remove the typed IPs that are already blocked from the policy that holds them";
+            row2.appendChild(un);
             nb = el("button", "imp-run imp-nb");
             nb.type = "button";
             nb.title = "hide the selected IPs until they are detected again (nothing is sent to the WAF)";
@@ -302,7 +310,7 @@ require([
         card.appendChild(chk);
 
         this.el = {card: card, q: q.input, tk: tk.input, desc: desc.input,
-            sel: selBox, all: allBtn, clear: clearBtn, go: go, nb: nb, chk: chk, find: find};
+            sel: selBox, all: allBtn, clear: clearBtn, go: go, un: un, nb: nb, chk: chk, find: find};
 
         // --- put the card in the panel, hide the Simple XML inputs + action table
         var $dp = $panel.find(".dashboard-panel").first();
@@ -394,6 +402,11 @@ require([
                 self.notBlock();
             });
         }
+        if (un) {
+            $(un).on("click", function () {
+                self.unblock();
+            });
+        }
 
         // --- tokens -> card (row clicks, Ticket filled from the clicked finding, resets)
         onTok(p + "_sel", function () {
@@ -454,6 +467,15 @@ require([
         return out;
     };
 
+    // typed IPs that are already blocked by a rule of exactly that IP: the 🔓 Unblock button
+    Card.prototype.unblockTargets = function () {
+        var self = this, sel = this.selected();
+        return this.manualItems().filter(function (x) {
+            var f = self.found[x];
+            return f && f.unblockable === "yes" && sel.indexOf(x) < 0;
+        });
+    };
+
     var ICON = {no: "⛔ ", al: "✅ ", ok: "✔ ", pg: "• "};
 
     // "Found" box under the search field (mockup v3.12)
@@ -487,7 +509,9 @@ require([
                         : "⏳ checking every page and every WAF policy …"));
                 } else {
                     lineEls(row, f.lines);
-                    row.appendChild(el("span", "imp-f-note", f.blockable === "yes" ? "→ included in Block" : "→ not blocked again"));
+                    row.appendChild(el("span", "imp-f-note", f.unblockable === "yes"
+                        ? "→ included in Unblock" + (f.unblockPolicy && f.unblockPolicy !== "-" ? " (policy " + f.unblockPolicy + ")" : "")
+                        : f.blockable === "yes" ? "→ included in Block" : "→ not blocked again"));
                 }
                 box.appendChild(row);
             });
@@ -551,7 +575,8 @@ require([
                 if (!ip || ip === "-") {
                     self.findText = lines;
                 } else {
-                    self.found[ip] = {lines: lines, blockable: col(r, "find_blockable"), cloud: col(r, "find_cloud")};
+                    self.found[ip] = {lines: lines, blockable: col(r, "find_blockable"), cloud: col(r, "find_cloud"),
+                        unblockable: col(r, "find_unblockable"), unblockPolicy: col(r, "find_unblock_policy")};
                 }
             });
             self.render();
@@ -560,6 +585,7 @@ require([
 
     Card.prototype.render = function () {
         var e = this.el, sel = this.selected(), man = this.manualItems(), all = this.targets();
+        var unb = e.un ? this.unblockTargets() : [];
         var verb = this.cfg.verb === "block" ? "⛔ Block " : "🔓 Unblock ";
 
         var cloud = this.cloud;
@@ -583,13 +609,20 @@ require([
             if (sel.indexOf(x) >= 0) {
                 return;
             }
-            var f = found[x];
+            var f = found[x], t;
+            if (f && f.unblockable === "yes") {     // already blocked: only the Unblock button
+                t = el("span", "imp-tag imp-untag", "🔓 " + x);
+                t.title = "typed in the search box - already blocked (policy " + (f.unblockPolicy || "-") + "): only Unblock";
+                e.sel.appendChild(t);
+                tagged++;
+                return;
+            }
             if (f && f.blockable !== "yes") {
-                return;              // already blocked / allowed / cannot be blocked: see Found
+                return;              // covered by a CIDR rule / allowed / cannot be blocked: see Found
             }
             var pending = !f && !findErr;
             var isCloud = (f && f.cloud && f.cloud !== "-") || cloud.indexOf(x) >= 0;
-            var t = el("span", "imp-tag " + (pending ? "imp-wait" : "imp-man") + (isCloud ? " imp-cloud" : ""),
+            t = el("span", "imp-tag " + (pending ? "imp-wait" : "imp-man") + (isCloud ? " imp-cloud" : ""),
                 (pending ? "⏳ " : "✍ ") + (isCloud ? "☁ " + x + " · short block" : x));
             t.title = pending ? "typed in the search box - checking every WAF policy …"
                 : "typed in the search box" + (isCloud ? " - cloud provider / shared IP, short block (Auto unblock)" : "");
@@ -602,6 +635,11 @@ require([
 
         e.go.textContent = verb + plural(all.length);
         e.go.disabled = !all.length;
+        if (e.un) {
+            e.un.textContent = "🔓 Unblock " + plural(unb.length);
+            $(e.un).toggleClass("imp-hidden", !unb.length);
+            e.un.disabled = !unb.length;
+        }
         if (e.nb) {
             e.nb.textContent = "✖ Not block " + plural(sel.length);
             e.nb.disabled = !sel.length;
@@ -745,6 +783,7 @@ require([
         setInputTok(p + "_tk", "-");
         setInputTok(p + "_desc", "-");
         if (clearManual && this.cfg.manual) {     // typed IPs are in the search box
+            this.found = {};                      // checked again when typed again
             e.q.value = "";
             setInputTok(p + "_q", "*");
             setInputTok(p + "_add", "-");
@@ -764,6 +803,22 @@ require([
         setTok(p + "_exec_tk", ticket);
         setTok(p + "_exec_desc", desc);
         setTok(p + "_exec_ips", ips.join(", "));
+        this.reset(true);
+    };
+
+    // "Unblock" on a detection page: typed IPs that are already blocked, removed from the policy that
+    // holds each one (impervaautounblock action=unblock, verified on the WAF, written to the audit log)
+    Card.prototype.unblock = function () {
+        var p = this.p, ips = this.unblockTargets();
+        if (!ips.length) {
+            return;
+        }
+        this.flushAll();
+        var ticket = this.ticket(), desc = this.el.desc.value.trim() || "-";
+        unsetTok(p + "_unb_ips");           // first, so the result search never runs with old IPs
+        setTok(p + "_unb_tk", ticket);
+        setTok(p + "_unb_desc", desc);
+        setTok(p + "_unb_ips", ips.join(", "));
         this.reset(true);
     };
 

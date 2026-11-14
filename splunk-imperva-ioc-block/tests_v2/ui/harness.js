@@ -73,13 +73,17 @@
   window.RUNS = [];
   sub.on("change:" + p + "_exec_ips", function (m, v) { if (v !== undefined) window.RUNS.push({kind: "exec", ips: v, tk: sub.get(p + "_exec_tk"), desc: sub.get(p + "_exec_desc")}); });
   sub.on("change:" + p + "_nb_exec", function (m, v) { if (v !== undefined) window.RUNS.push({kind: "nb", ips: v, tk: sub.get(p + "_nb_tk"), desc: sub.get(p + "_nb_desc")}); });
+  sub.on("change:" + p + "_unb_ips", function (m, v) { if (v !== undefined) window.RUNS.push({kind: "unb", ips: v, tk: sub.get(p + "_unb_tk"), desc: sub.get(p + "_unb_desc")}); });
+  [p + "_unb_tk", p + "_unb_desc"].forEach(function (k) { sub.on("change:" + k, function () { if (sub.get(p + "_unb_ips") !== undefined) window.RUNS.push({kind: "STALE", ips: sub.get(p + "_unb_ips")}); }); });
   // ... and catch a run with stale IPs: exec_tk / exec_desc changing while exec_ips is set
   [p + "_exec_tk", p + "_exec_desc"].forEach(function (k) { sub.on("change:" + k, function () { if (sub.get(p + "_exec_ips") !== undefined) window.RUNS.push({kind: "STALE", ips: sub.get(p + "_exec_ips")}); }); });
 
   // search <p>_find (impervafind + ES detections): answers for the IPs typed in the search box
+  // [find_blockable, found lines, find_unblockable, find_unblock_policy]
   var FIND = {
     "192.0.2.55": ["no", "al¦ALLOWED by policy 1000002 Allowlist-Partners (192.0.2.55) - cannot be blocked"],
-    "185.220.101.47": ["no", "no¦already BLOCKED in policy 1000001 Block DDoS policy · on the policy since 2026-05-01 (block date not kept by Imperva)"],
+    "185.220.101.47": ["no", "no¦already BLOCKED in policy 1000001 Block DDoS policy · on the policy since 2026-05-01 (block date not kept by Imperva)", "yes", "1000001"],
+    "45.95.147.236": ["no", "no¦already BLOCKED in policy 1000003 Block IOC attack (rule 45.95.147.0/24 - unblock that rule on the Blocked IPs page)", "no", "-"],
     "54.245.10.21": ["yes", "ok¦not on the WAF and not blocked from Splunk - can be blocked ‖ pg¦detected 2026-11-14 08:00 · Threat - WAF scanner · ticket 1000101 · on the " + (p === "h" ? "Older detections" : "Block – last 7 days") + " page"]
   };
   var fmgr = new Mgr(p + "_find"), ft = null;
@@ -97,12 +101,12 @@
       if (ips.length) {
         ips.forEach(function (ip) {
           var f = FIND[ip] || ["yes", "ok¦not on the WAF and not blocked from Splunk - can be blocked"];
-          rows.push([ip, f[1] + (CLOUD[ip] ? " ‖ pg¦cloud provider (" + CLOUD[ip] + ") - short block: auto unblock after 7 days without an attack" : ""), f[0], CLOUD[ip] || "-"]);
+          rows.push([ip, f[1] + (CLOUD[ip] ? " ‖ pg¦cloud provider (" + CLOUD[ip] + ") - short block: auto unblock after 7 days without an attack" : ""), f[0], CLOUD[ip] || "-", f[2] || "no", f[3] || "-"]);
         });
       } else if (q) {
-        rows.push(["-", "pg¦2 blocked from Splunk (Blocked IPs page) ‖ pg¦1 IP rules in other WAF policies ‖ pg¦0 in the Not block list", "-", "-"]);
+        rows.push(["-", "pg¦2 blocked from Splunk (Blocked IPs page) ‖ pg¦1 IP rules in other WAF policies ‖ pg¦0 in the Not block list", "-", "-", "-", "-"]);
       }
-      fmgr.res.d = {fields: ["ip", "found", "find_blockable", "find_cloud"], rows: rows};
+      fmgr.res.d = {fields: ["ip", "found", "find_blockable", "find_cloud", "find_unblockable", "find_unblock_policy"], rows: rows};
       fmgr.res.trigger("data");
     }, cfg.findDelay || 60);
     if (cfg.findDelay) setTimeout(function () { fmgr.trigger("search:progress"); }, 5);

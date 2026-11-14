@@ -12,7 +12,10 @@ Rows with an IP get:
     find_lines      "<cls>¦<text>" lines joined with " ‖ "   cls: no = already blocked / cannot be blocked,
                     al = allowed by a policy, pg = information, ok = can be blocked
     find_blockable  yes | no     (yes = the Block button includes this IP)
+    find_unblockable yes | no    (yes = blocked by a rule of exactly this IP: the Unblock button includes it)
+    find_unblock_policy  policy ID(s) the Unblock removes it from, or "-"
     find_cloud      AS owner of a cloud provider / shared IP (short block) or "-"
+A blocked IP can only be unblocked, an IP that is not blocked can only be blocked.
 A row with text instead (no IP in the search box) gets find_lines with the number of matches in
 the registry (Blocked IPs page), in the rules of the other WAF policies and in the Not block list.
 
@@ -52,13 +55,16 @@ def line(cls, text):
 
 
 def find_ip(ip, entries, own, registry, dismissed, states, owner, short_of, protected, conf, cloud_days):
-    """-> (lines, blockable, cloud_owner) for one IP / CIDR typed in the search box."""
+    """-> (lines, blockable, cloud_owner, unblock_policies) for one IP / CIDR typed in the search box.
+    unblock_policies: policies with a BLOCK rule of exactly this IP (the Unblock button removes it)."""
+    lines, stop, unblock = [], False, []
+    own = set(str(x) for x in own)
+    exact = [m for m in il.match_policies(ip, entries) if m.get("enabled", True) and m["cidr"] == ip
+             and str(m["action"]).startswith("BLOCK") and m.get("kind") != "exception"]
     accepted, rejected = il.validate_ips([ip], protected, int(conf.get("max_cidr_prefix_v4", 24)),
                                          int(conf.get("max_cidr_prefix_v6", 48)))
-    if rejected:
-        return [line("no", "cannot be blocked: %s" % rejected[0][1])], "no", "-"
-    lines, stop = [], False
-    own = set(str(x) for x in own)
+    if rejected and not exact:            # a rule on the WAF can still be removed, whatever the address
+        return [line("no", "cannot be blocked: %s" % rejected[0][1])], "no", "-", []
     for m in il.match_policies(ip, entries):
         if not m.get("enabled", True):
             continue
@@ -76,8 +82,10 @@ def find_ip(ip, entries, own, registry, dismissed, states, owner, short_of, prot
                 st = states.get(au.entry_key(pid, m["cidr"])) or {}
                 since = (" · on the policy since %s (block date not kept by Imperva)" % fmt(st["first_listed"])[:10]
                          if st.get("first_listed") else "")
-                cover = "" if m["cidr"] == ip else " (rule %s)" % m["cidr"]
+                cover = "" if m["cidr"] == ip else " (rule %s - unblock that rule on the Blocked IPs page)" % m["cidr"]
                 lines.append(line("no", "already BLOCKED in policy %s %s%s%s" % (pid, name, cover, since)))
+            if m["cidr"] == ip and pid not in unblock:
+                unblock.append(pid)
             stop = True
     if not stop:
         for (pid, rip), reg in registry.items():
@@ -85,6 +93,7 @@ def find_ip(ip, entries, own, registry, dismissed, states, owner, short_of, prot
                 lines.append(line("no", "blocked from Splunk %s by %s · ticket %s (policy cache refresh pending)" % (
                     fmt(reg.get("blocked_at")), reg.get("blocked_by") or "-", reg.get("incident_no") or "-")))
                 stop = True
+                unblock.append(pid)
                 break
     d = dismissed.get(ip)
     if d:
@@ -99,7 +108,9 @@ def find_ip(ip, entries, own, registry, dismissed, states, owner, short_of, prot
                 "cloud provider" if short[0] == "cloud" else "shared IP", short[1], cloud_days)))
     if not stop:
         lines.insert(0, line("ok", "not on the WAF and not blocked from Splunk - can be blocked"))
-    return lines, "no" if stop else "yes", cloud
+    if any(x.startswith("al" + SEP) for x in lines):
+        unblock = []                      # allowed by a policy: nothing to unblock from the Block page
+    return lines, "no" if stop else "yes", cloud, unblock
 
 
 def find_text(text, entries, own, registry_docs, dismissed_docs):
@@ -156,12 +167,15 @@ def main():
         for r in results:
             ip = (r.get(field) or "").strip()
             if ip:
-                lines, ok, cloud = find_ip(ip, entries, own, registry, dismissed, states, owners.get(ip),
-                                           lambda o: ip_owner.short_class(o, rx, srx), protected, conf, au.CLOUD_DAYS)
+                lines, ok, cloud, unblock = find_ip(ip, entries, own, registry, dismissed, states, owners.get(ip),
+                                                    lambda o: ip_owner.short_class(o, rx, srx), protected, conf,
+                                                    au.CLOUD_DAYS)
                 r["find_lines"], r["find_blockable"], r["find_cloud"] = JOIN.join(lines), ok, cloud
+                r["find_unblockable"] = "yes" if unblock else "no"
+                r["find_unblock_policy"] = ",".join(unblock) or "-"
             elif (r.get(tfield) or "").strip():
                 r["find_lines"] = JOIN.join(find_text(r[tfield], entries, own, reg_docs, dis_docs))
-                r["find_blockable"], r["find_cloud"] = "-", "-"
+                r["find_blockable"], r["find_cloud"], r["find_unblockable"], r["find_unblock_policy"] = "-", "-", "-", "-"
         si.outputResults(results)
     except Exception as e:  # noqa: BLE001
         log.error("impervafind failed: %s", e)

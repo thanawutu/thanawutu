@@ -90,7 +90,7 @@ class TestFind(unittest.TestCase):
         self.assertIn("by analyst01 · ticket 1000090", own)
         self.assertEqual((self.lines(r["20.20.20.20"])[0], r["20.20.20.20"]["find_blockable"]),
                          ("al¦ALLOWED by policy 1000002 Allow partner DC (20.20.20.20) - cannot be blocked", "no"))
-        self.assertIn("(rule 45.95.147.0/24)", self.lines(r["45.95.147.236"])[0])
+        self.assertIn("(rule 45.95.147.0/24 - unblock that rule on the Blocked IPs page)", self.lines(r["45.95.147.236"])[0])
         self.assertEqual((self.lines(r["1.1.1.1"]), r["1.1.1.1"]["find_blockable"]),
                          (["ok¦not on the WAF and not blocked from Splunk - can be blocked"], "yes"))   # disabled policy ignored
         self.assertIn("(policy cache refresh pending)", self.lines(r["8.8.4.4"])[0])
@@ -104,6 +104,36 @@ class TestFind(unittest.TestCase):
         for bad in ("10.1.2.3", "203.0.113.10"):                 # private / protected network
             self.assertEqual(r[bad]["find_blockable"], "no")
             self.assertTrue(self.lines(r[bad])[0].startswith("no¦cannot be blocked: "), r[bad])
+
+    def test_blocked_ip_can_only_be_unblocked(self):
+        ips = ["185.220.101.47", "54.245.198.114", "20.20.20.20", "45.95.147.236", "1.1.1.1", "8.8.4.4",
+               "77.88.8.8", "10.1.2.3"]
+        r = self.run_([{"ip": ip} for ip in ips])
+        got = dict((ip, (r[ip]["find_blockable"], r[ip]["find_unblockable"], r[ip]["find_unblock_policy"])) for ip in ips)
+        self.assertEqual(got, {
+            "185.220.101.47": ("no", "yes", "1000001"),     # exact rule in another policy: unblock from it
+            "54.245.198.114": ("no", "yes", "2169031"),     # exact rule in the own policy
+            "20.20.20.20": ("no", "no", "-"),               # allowed: nothing to unblock
+            "45.95.147.236": ("no", "no", "-"),             # covered by a CIDR rule: Blocked IPs page
+            "1.1.1.1": ("yes", "no", "-"),                  # rule of a disabled policy: not blocked
+            "8.8.4.4": ("no", "yes", "2169031"),            # blocked from Splunk, policy cache pending
+            "77.88.8.8": ("yes", "no", "-"),                # Not block list only
+            "10.1.2.3": ("no", "no", "-")})                 # private, no rule
+
+    def test_rule_of_a_non_public_address_can_still_be_removed(self):
+        saved = list(ENTRIES)
+        ENTRIES.append(E("203.0.113.77", "2169031", name="BlockIOCsFromSplunk"))   # protected network
+        try:
+            r = self.run_([{"ip": "203.0.113.77"}])["203.0.113.77"]
+        finally:
+            ENTRIES[:] = saved
+        self.assertEqual((r["find_blockable"], r["find_unblockable"], r["find_unblock_policy"]), ("no", "yes", "2169031"))
+        self.assertTrue(self.lines(r)[0].startswith("no¦already BLOCKED in policy 2169031"), r)
+
+    def test_text_row_has_no_actions(self):
+        r = self.run_([{"_text": "ddos"}], "text_field=_text")["text"]
+        self.assertEqual((r["find_blockable"], r["find_unblockable"], r["find_unblock_policy"], r["find_cloud"]),
+                         ("-", "-", "-", "-"))
 
     def test_text_search_counts(self):
         r = self.run_([{"_text": "1000090"}], "text_field=_text")["text"]
@@ -126,9 +156,21 @@ class TestViews(unittest.TestCase):
             self.assertIn("| impervafind field=ip text_field=_text", x)
             self.assertIn('"\\"imperva_no_ip_typed\\""', x)                     # never an unfiltered notable search
             self.assertIn('mvjoin(mvmap(t, "\\"".t."\\""), " OR ")', x)
-            self.assertIn("| table ip found find_blockable find_cloud", x)
+            self.assertIn("| table ip found find_blockable find_cloud find_unblockable find_unblock_policy", x)
             self.assertGreaterEqual(x.count("_hit=if(coalesce(_iptok, 0)&gt;0") + x.count("_hit=if(coalesce(_iptok, 0)>0"), 2)
             self.assertIn("Search or add IPs", x)
+
+    def test_unblock_result_panel_on_both_detection_pages(self):
+        for v, p in (("imperva_ioc_block.xml", "d"), ("imperva_ioc_history.xml", "h")):
+            x = self.read(v)
+            self.assertIn('<panel depends="$%s_unb_ips$">' % p, x)
+            self.assertIn("| impervaautounblock action=unblock ip=$%s_unb_ips|s$ incident_no=$%s_unb_tk|s$ "
+                          "description=$%s_unb_desc|s$" % (p, p, p), x)
+            i = x.index('<panel depends="$%s_unb_ips$">' % p)
+            panel = x[i:x.index("</panel>", i)]
+            self.assertIn("| `imperva_audit_write`", panel)
+            self.assertIn('<set token="%s_refresh">$job.sid$</set>' % p, panel)
+            self.assertIn('<unset token="%s_unb_ips"></unset>' % p, panel)
 
     def test_virustotal_is_one_clickable_column(self):
         macros = open(os.path.join(APP, "default", "macros.conf"), encoding="utf-8").read()
