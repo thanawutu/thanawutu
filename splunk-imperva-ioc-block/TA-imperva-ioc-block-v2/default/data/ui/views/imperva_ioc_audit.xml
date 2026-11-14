@@ -2,18 +2,6 @@
   <label>Imperva IOC Block V2 – audit log</label>
   <description>Every Block / Unblock / Detection-rule change from the dashboards, stored in the CSV lookup imperva_audit.csv (| inputlookup imperva_audit). Export: the ⤓ Export button under the table → CSV.</description>
 
-  <row>
-    <panel>
-      <html>
-        <div><a href="imperva_ioc_block" style="display:inline-block;padding:6px 14px;border:1px solid #3c444d;border-radius:4px;text-decoration:none;font-weight:600;margin:0 6px 4px 0;color:#c3cbd4">⛔ Block – last 7 days</a>
-        <a href="imperva_ioc_history" style="display:inline-block;padding:6px 14px;border:1px solid #3c444d;border-radius:4px;text-decoration:none;font-weight:600;margin:0 6px 4px 0;color:#c3cbd4">🗂 Older detections</a>
-        <a href="imperva_ioc_blocked" style="display:inline-block;padding:6px 14px;border:1px solid #3c444d;border-radius:4px;text-decoration:none;font-weight:600;margin:0 6px 4px 0;color:#c3cbd4">🔓 Blocked IPs / Unblock</a>
-        <a href="imperva_ioc_auto_unblock" style="display:inline-block;padding:6px 14px;border:1px solid #3c444d;border-radius:4px;text-decoration:none;font-weight:600;margin:0 6px 4px 0;color:#c3cbd4">⏱ Auto unblock</a>
-        <a href="imperva_ioc_rules" style="display:inline-block;padding:6px 14px;border:1px solid #3c444d;border-radius:4px;text-decoration:none;font-weight:600;margin:0 6px 4px 0;color:#c3cbd4">⚙ Detection rules</a>
-        <a href="imperva_ioc_audit" style="display:inline-block;padding:6px 14px;border:1px solid #3c444d;border-radius:4px;text-decoration:none;font-weight:600;margin:0 6px 4px 0;background:#1F6F8B;color:#fff;border-color:#1F6F8B">📄 Audit log</a></div>
-      </html>
-    </panel>
-  </row>
 
   <row>
     <panel>
