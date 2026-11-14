@@ -354,7 +354,7 @@
           <scale type="threshold">25,75</scale>
         </format>
         <format type="color" field="GreyNoise">
-          <colorPalette type="expression">case(like(value, "RIOT%"), "#53A051", like(value, "benign%"), "#53A051", like(value, "malicious%"), "#DC4E41", true(), "#3C444D")</colorPalette>
+          <colorPalette type="expression">case(like(value, "RIOT%"), "#53A051", like(value, "benign%"), "#53A051", like(value, "malicious%"), "#DC4E41", like(value, "suspicious%"), "#F8BE34", true(), "#3C444D")</colorPalette>
         </format>
         <format type="color" field="suggestion">
           <colorPalette type="map">{"BLOCK":#DC4E41,"REVIEW":#F8BE34,"MONITOR":#5A9BD5,"ALREADY_BLOCKED":#708794,"DO_NOT_BLOCK":#53A051}</colorPalette>
@@ -526,7 +526,7 @@
           <scale type="threshold">25,75</scale>
         </format>
         <format type="color" field="GreyNoise">
-          <colorPalette type="expression">case(like(value, "RIOT%"), "#53A051", like(value, "benign%"), "#53A051", like(value, "malicious%"), "#DC4E41", true(), "#3C444D")</colorPalette>
+          <colorPalette type="expression">case(like(value, "RIOT%"), "#53A051", like(value, "benign%"), "#53A051", like(value, "malicious%"), "#DC4E41", like(value, "suspicious%"), "#F8BE34", true(), "#3C444D")</colorPalette>
         </format>
         <format type="color" field="suggestion">
           <colorPalette type="map">{"BLOCK":#DC4E41,"REVIEW":#F8BE34,"MONITOR":#5A9BD5,"ALREADY_BLOCKED":#708794,"DO_NOT_BLOCK":#53A051}</colorPalette>

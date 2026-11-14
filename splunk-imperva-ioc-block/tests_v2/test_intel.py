@@ -172,6 +172,9 @@ class TestAdjust(unittest.TestCase):
         self.assertEqual(self.A("MONITOR", "VT clean", ok(30))[0], "REVIEW")
         self.assertEqual(self.A("REVIEW", "x", ok(10)), ("REVIEW", "x"))                 # nothing to add
         self.assertEqual(self.A("MONITOR", "x", {"gn_status": "ok", "gn_classification": "malicious", "gn_riot": "no"})[0], "REVIEW")
+        s, why = self.A("MONITOR", "x", {"gn_status": "ok", "gn_classification": "suspicious", "gn_riot": "no"})
+        self.assertEqual((s, why), ("REVIEW", "x; GreyNoise suspicious"))      # seen on the production SH
+        self.assertEqual(self.A("BLOCK", "x", {"gn_status": "ok", "gn_classification": "suspicious", "gn_riot": "no"})[0], "BLOCK")
         s, why = self.A("BLOCK", "5 VT engines", {"gn_status": "ok", "gn_riot": "yes", "gn_name": "Google", "gn_classification": "benign"})
         self.assertEqual(s, "REVIEW")
         self.assertIn("GreyNoise RIOT known service (Google) - check before blocking", why)

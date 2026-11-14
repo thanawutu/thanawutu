@@ -877,7 +877,7 @@ AbuseIPDB  APIv2  GET https://api.abuseipdb.com/api/v2/check?ipAddress=<ip>&maxA
                   headers  Key: <api key>   Accept: application/json
                   -> data.abuseConfidenceScore (0-100), totalReports, numDistinctUsers, ...
 GreyNoise  Community API v3  GET https://api.greynoise.io/v3/community/<ip>   header key: <api key>
-                  -> noise, riot, classification (benign | malicious | unknown), name, last_seen
+                  -> noise, riot, classification (benign | malicious | suspicious | unknown), name, last_seen
                   HTTP 404 = IP not observed scanning the internet and not in RIOT
 
 Every top-level name here is prefixed (intel_ / abuse / gn / INTEL_): the SOAR playbook inlines
@@ -1136,7 +1136,7 @@ def intel_adjust(suggestion, reason, info, thresholds=None):
     VirusTotal suggestion (vt_lib.suggest) + AbuseIPDB / GreyNoise -> (suggestion, reason).
       AbuseIPDB score >= abuse_block_score              -> BLOCK
       AbuseIPDB score >= abuse_review_score             -> at least REVIEW
-      GreyNoise classification malicious                -> at least REVIEW
+      GreyNoise classification malicious / suspicious   -> at least REVIEW
       GreyNoise RIOT / benign, AbuseIPDB whitelisted    -> at most REVIEW (known service:
                                                            the analyst decides)
     DO_NOT_BLOCK / ALREADY_BLOCKED and missing data never change anything.
@@ -1157,10 +1157,11 @@ def intel_adjust(suggestion, reason, info, thresholds=None):
                 s = "REVIEW"
             notes.append(txt)
     gn_ok = info.get("gn_status") == "ok"
-    if gn_ok and str(info.get("gn_classification")) == "malicious" and str(info.get("gn_riot")) != "yes":
+    gn_cls = str(info.get("gn_classification"))
+    if gn_ok and gn_cls in ("malicious", "suspicious") and str(info.get("gn_riot")) != "yes":
         if _INTEL_RANK[s] > _INTEL_RANK["REVIEW"]:
             s = "REVIEW"
-        notes.append("GreyNoise malicious scanner")
+        notes.append("GreyNoise malicious scanner" if gn_cls == "malicious" else "GreyNoise suspicious")
     benign = []
     if gn_ok and (str(info.get("gn_riot")) == "yes" or str(info.get("gn_classification")) == "benign"):
         benign.append("GreyNoise %s (%s)" % ("RIOT known service" if str(info.get("gn_riot")) == "yes" else "benign",
