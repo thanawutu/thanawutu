@@ -9,7 +9,7 @@ When V2 is tested and confirmed, V1 is removed (see *Cut-over*).
 |---|---|---|
 | Cloud provider IPs (AWS, Google Cloud, Azure, ...) | never blocked (Not block only) | **blocked**, tagged "short block" |
 | Auto unblock | - | always on: IP rules of **every enabled WAF policy** are unblocked when the IP sent **no request for 7 days (cloud provider / shared IP) / 60 days (others)**, at most 50 per run (fixed values) |
-| Pages | 5 | 6 (new **⏱ Auto unblock**; Blocked IPs page shows *Attacks 24h / Last attack / Unblock after / Unblock on / Auto unblock*) |
+| Pages | 5 | 5: **Blocked IPs / Unblock / Auto unblock** is one page: every policy in one table (own policy read live), Status / Last attack / Attacks 24h / Unblock after / Unblock on, 🔓 Unblock from any policy, auto unblock rule per IP, run now and log |
 | IP reputation | VirusTotal | VirusTotal + **AbuseIPDB** + **GreyNoise**, all through SOAR, 24 h cache; they adjust the Block suggestion |
 | SOAR playbook | `imperva_ioc_block` | its own playbook **`imperva_ioc_block_v2`** (label `imperva_ioc_block_v2`): same code + AbuseIPDB / GreyNoise; the V1 playbook is not touched |
 
@@ -21,16 +21,19 @@ Everything else (Decision aid, IP detail, card, Select all, incident digits) is 
   block list and still sends requests), collected every hour by
   **"Imperva V2 - Last attack of blocked IPs (hourly)"** into KV `imperva_blocked_seen`, together with
   the number of requests the WAF still blocked from each IP in the last 24 hours (**Attacks 24h**, per IP
-  and as a total on the Blocked IPs and Auto unblock pages).
+  and as a total on the Blocked IPs page).
 * The countdown of a rule starts at the latest of: last attack, block date (registry), the day V2
   first saw the rule (= **the day V2 is installed** for rules already on the WAF).
 * **"Imperva V2 - Auto unblock (daily)"** (02:17) unblocks what is due through the normal backend
   (SOAR) with the rule's policy ID, writes the audit CSV (`user = auto-unblock`) and closes the
   registry entry of IPs blocked from Splunk. A rule added again later starts a new countdown.
-* Per rule (Auto unblock page): **📌 Keep** (never unblock), **↺ Default**, **🔓 Unblock now**.
+* Per IP (Blocked IPs page: select rows, then *Auto unblock rule for the selected IPs* > ✔ APPLY RULE):
+  **Default**, **📌 Keep** (never unblock) or 7 / 30 / 90 / 180 / 365 quiet days. **🔓 UNBLOCK** in the card
+  unblocks the selected IPs at once, each from the policy that holds it
+  (`impervaautounblock action=unblock`); IPs marked *NOT on WAF* close their registry entry.
 * Fixed values, no settings and no report-only mode: always on, 7 days for cloud provider / shared IPs,
   60 days for other IPs, every enabled policy, at most 50 IP rules per run (the rest at the next run).
-  The Auto unblock page shows them in one line at the top.
+  The Blocked IPs page shows them in one line at the top.
 * Only `BLOCK` IP / CIDR rules of IP settings are handled; ALLOW rules, exceptions and range rules
   (`a-b`) are never touched. Disabled policies are ignored (except the own policy).
 * Cloud provider / shared IP = VirusTotal AS owner matches `imperva.conf cloud_providers` (AWS, Google,
@@ -94,7 +97,7 @@ V2 has its own playbook so the V1 playbook keeps running unchanged. Do this **be
    (`IMPERVA_API_ID`, `IMPERVA_API_KEY`, `IMPERVA_PROXY`, `IMPERVA_PROTECTED_NETWORKS`, `VT_API_KEY`, ...), then:
    * `"IMPERVA_POLICY_IDS": "2169031,<id>,<id>"`: every policy Auto unblock may change. Splunk always sends
      the policy ID with each request, so extra IDs do not send blocks elsewhere. List them on the Auto
-     unblock page (panel *Policies with BLOCK IP rules*) or with `| makeresults | impervaautounblock action=policies`.
+     unblock part of the Blocked IPs page (panel *Policies with BLOCK IP rules*) or with `| makeresults | impervaautounblock action=policies`.
    * `"ABUSEIPDB_API_KEY"`: your AbuseIPDB key. `"GREYNOISE_API_KEY"`: your GreyNoise key (the Community API
      also answers without one, with a lower limit).
 5. Save, set the playbook **Active**. The same automation user / token as V1 is used.

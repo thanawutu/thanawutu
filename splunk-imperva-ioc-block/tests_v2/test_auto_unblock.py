@@ -159,11 +159,11 @@ class TestPlan(unittest.TestCase):
         root = os.path.join(HERE, "..", "TA-imperva-ioc-block-v2")
         conf = open(os.path.join(root, "default", "imperva.conf"), encoding="utf-8").read()
         spec = open(os.path.join(root, "README", "imperva.conf.spec"), encoding="utf-8").read()
-        page = open(os.path.join(root, "default", "data", "ui", "views", "imperva_ioc_auto_unblock.xml"), encoding="utf-8").read()
+        page = open(os.path.join(root, "default", "data", "ui", "views", "imperva_ioc_blocked.xml"), encoding="utf-8").read()
         self.assertNotIn("[auto_unblock]", conf + spec)
         for gone in ("action=settings", "SAVE SETTINGS", "due_not_managed", 'token="a_en"', "scope"):
             self.assertNotIn(gone, page)
-        for shown in ("AUTO UNBLOCK ON", "<b>7 days</b>", "<b>60 days</b>", "All enabled WAF policies", "Max <b>50</b>"):
+        for shown in ("AUTO UNBLOCK ON", "<b>7 days</b>", "<b>60 days</b>", "All enabled policies", "Max <b>50</b>"):
             self.assertIn(shown, page)
 
 
@@ -287,8 +287,63 @@ class TestCommand(unittest.TestCase):
     def test_settings_action_is_gone(self):
         with self.assertRaises(AssertionError) as ctx:
             self.run_("action=settings", "default_days=90")
-        self.assertIn("action must be list, run, set, policies or annotate", str(ctx.exception))
+        self.assertIn("action must be list, run, set, unblock, policies or annotate", str(ctx.exception))
         self.assertEqual(self.kv[au.STATE], {})
+
+    def test_unblock_now_from_the_policy_that_holds_each_ip(self):
+        self.run_("action=list")
+        self.kv["imperva_block_registry"]["2169031_54.245.198.114"] = {
+            "_key": "2169031_54.245.198.114", "site_id": "2169031", "ip": "54.245.198.114", "status": "blocked",
+            "blocked_at": 1, "incident_no": "1000101", "comment": "AWS bot"}
+        rows = self.run_("action=unblock", 'ip="192.0.2.77,', '54.245.198.114"', "incident_no=1000123",
+                         'description="false', 'positive"')
+        self.assertEqual(sorted((c[0], tuple(c[2]), c[3]) for c in CALLS),
+                         [("1000001", ("192.0.2.77",), "alice"), ("2169031", ("54.245.198.114",), "alice")])
+        by = dict((r["ip"], r) for r in rows)
+        self.assertEqual((by["192.0.2.77"]["user"], by["192.0.2.77"]["action"], by["192.0.2.77"]["status"],
+                          by["192.0.2.77"]["incident_no"], by["192.0.2.77"]["comment"], by["192.0.2.77"]["site_id"]),
+                         ("alice", "unblock", "unblocked", "1000123", "false positive", "1000001"))
+        reg = self.kv["imperva_block_registry"]["2169031_54.245.198.114"]
+        self.assertEqual((reg["status"], reg.get("unblocked_by", reg.get("updated_by", "alice"))), ("unblocked", "alice"))
+        self.assertNotIn(au.entry_key("1000001", "192.0.2.77"), self.kv[au.STATE])     # countdown cleared
+        self.assertIn(au.entry_key("2169031", "203.0.113.10"), self.kv[au.STATE])      # others untouched
+        self.assertEqual(self.refreshed, [1])
+
+    def test_unblock_ip_not_in_the_policy_cache_goes_to_the_own_policy(self):
+        self.kv["imperva_block_registry"]["2169031_198.51.100.200"] = {
+            "_key": "2169031_198.51.100.200", "site_id": "2169031", "ip": "198.51.100.200", "status": "blocked",
+            "blocked_at": 1, "incident_no": "1000140", "comment": "removed outside Splunk"}
+        rows = self.run_("action=unblock", "ip=198.51.100.200", "incident_no=-")
+        self.assertEqual([(c[0], c[2]) for c in CALLS], [("2169031", ["198.51.100.200"])])
+        self.assertEqual(rows[0]["status"], "unblocked")
+        self.assertEqual(self.kv["imperva_block_registry"]["2169031_198.51.100.200"]["status"], "unblocked")
+
+    def test_unblock_keeps_the_ticket_of_the_ip_when_none_given_and_checks_input(self):
+        self.kv["imperva_block_registry"]["2169031_54.245.198.114"] = {
+            "_key": "2169031_54.245.198.114", "site_id": "2169031", "ip": "54.245.198.114", "status": "blocked",
+            "blocked_at": 1, "incident_no": "1000101", "comment": "AWS bot"}
+        rows = self.run_("action=unblock", "ip=54.245.198.114")
+        self.assertEqual((rows[0]["incident_no"], rows[0]["comment"]), ("1000101", "-"))
+        rows = self.run_("action=unblock", "ip=not-an-ip")
+        self.assertEqual(rows[0]["status"], "rejected")
+        with self.assertRaises(AssertionError) as ctx:
+            self.run_("action=unblock", "ip=-")
+        self.assertIn("no IP selected", str(ctx.exception))
+        with self.assertRaises(AssertionError):
+            self.run_("action=set", "ip=-", "rule=keep")
+
+    def test_unblock_error_of_one_policy_does_not_stop_the_other(self):
+        self.fail_on["1000001"] = "policy ids ['1000001'] are not allowed on SOAR (IMPERVA_POLICY_IDS)"
+        rows = dict((r["ip"], r) for r in self.run_("action=unblock", 'ip="192.0.2.77,', '54.245.198.114"'))
+        self.assertEqual(rows["192.0.2.77"]["status"], "error")
+        self.assertIn("add the policy ID to IMPERVA_POLICY_IDS on SOAR", rows["192.0.2.77"]["detail"])
+        self.assertEqual(rows["54.245.198.114"]["status"], "unblocked")
+
+    def test_annotate_gives_status_code_owner_and_policy_name(self):
+        self.input = [{"ip": "54.245.198.114", "site_id": "2169031"}]
+        r = self.run_("action=annotate", "field=ip", "policy_field=site_id")[0]
+        self.assertEqual((r["auto_status_code"], r["auto_owner"], r["auto_policy_name"]),
+                         ("quiet", "Amazon.com, Inc.", "BlockIOCsFromSplunk"))
 
     def test_list_and_annotate_show_attacks_24h(self):
         self.kv[au.SEEN]["192.0.2.77"] = {"_key": "192.0.2.77", "src": "192.0.2.77", "last_seen": 1, "hits_24h": 412}
@@ -307,6 +362,40 @@ class TestCommand(unittest.TestCase):
         rows = self.run_("action=annotate", "field=ip", "policy_field=site_id")
         self.assertEqual(rows[0]["auto_unblock_after"], "cloud 7 d quiet")
         self.assertNotIn("auto_status", rows[1])
+
+
+
+class TestMergedPage(unittest.TestCase):
+    """Blocked IPs / Unblock and Auto unblock are one page since mockup v3.15."""
+    def setUp(self):
+        root = os.path.join(HERE, "..", "TA-imperva-ioc-block-v2", "default", "data", "ui")
+        self.views = os.path.join(root, "views")
+        self.page = open(os.path.join(self.views, "imperva_ioc_blocked.xml"), encoding="utf-8").read()
+        self.nav = open(os.path.join(root, "nav", "default.xml"), encoding="utf-8").read()
+
+    def test_old_auto_unblock_page_is_gone(self):
+        self.assertFalse(os.path.exists(os.path.join(self.views, "imperva_ioc_auto_unblock.xml")))
+        self.assertNotIn("imperva_ioc_auto_unblock", self.nav)
+        self.assertIn('<view name="imperva_ioc_blocked" />', self.nav)
+
+    def test_one_table_of_every_policy(self):
+        p = self.page
+        self.assertIn("| impervalist", p)                                              # own policy: live
+        self.assertIn('| append [| makeresults | impervaautounblock action=list | where own_policy="no"', p)
+        self.assertIn("| impervaautounblock action=annotate field=ip policy_field=site_id", p)
+        for f in ("all", "own", "other", "cloud", "attacking", "soon", "due", "kept", "not_on_waf"):
+            self.assertIn('<choice value="%s">' % f, p)
+        self.assertIn('<set token="b_sel">$b_sel$,$row.ip$,</set>', p)
+
+    def test_actions(self):
+        p = self.page
+        self.assertIn("| impervaautounblock action=unblock ip=$b_exec_ips|s$ incident_no=$b_exec_tk|s$ description=$b_exec_desc|s$", p)
+        self.assertNotIn("impervablock action=unblock", p)
+        self.assertIn("| makeresults | impervaautounblock action=set ip=$b_rule_ips|s$ rule=$b_rule_val|s$ reason=$b_rule_why|s$", p)
+        self.assertIn("| makeresults | impervaautounblock action=run", p)
+        self.assertIn("| makeresults | impervaautounblock action=policies", p)
+        for k in ("Blocked on the WAF", "Attacking now", "Attacks in the last 24 h", "Due now", "Kept", "Unblocked 7 days"):
+            self.assertIn("<title>%s</title>" % k, p)
 
 
 if __name__ == "__main__":

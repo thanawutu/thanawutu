@@ -9,6 +9,8 @@ the rule.
 Usage:
     | makeresults | impervaautounblock                  (= action=list: every BLOCK IP rule + plan)
     | makeresults | impervaautounblock action=run | `imperva_audit_write`        (unblock what is due)
+    | makeresults | impervaautounblock action=unblock ip="1.2.3.4,5.6.7.8" incident_no="1000123"
+          description="false positive" | `imperva_audit_write`   (Unblock now, any policy)
     | makeresults | impervaautounblock action=set ip="1.2.3.4" rule=keep reason="C2" | `imperva_audit_write`
           rule = keep (never) | default | <days>; policy_id=<id> to change one policy only
     | makeresults | impervaautounblock action=policies  (policies holding BLOCK IP rules)
@@ -22,6 +24,7 @@ Unblocking goes through the normal backend (SOAR in production) with the policy 
 SOAR must allow that policy ID (IMPERVA_POLICY_IDS).
 """
 
+import ipaddress
 import os
 import sys
 import time
@@ -125,40 +128,43 @@ def audit_row(now, user, action, ip, sid, status, detail, ticket="-", comment="-
     return r
 
 
-def do_run(session_key, conf, log, now):
-    items, _own = gather(session_key, conf, log, now)
-    due = au.due_items(items, au.MAX_PER_RUN)
+def unblock_items(session_key, conf, items, user, log, now, meta_of, log_action):
+    """
+    Unblock plan items of ANY policy through the normal backend (SOAR in production): grouped by
+    policy (override_ids = that policy), 50 at a time. Registry closed for the own policy, rule
+    state deleted (a rule added again later starts a new countdown), policy cache refreshed.
+    meta_of(item) -> (registry meta, ticket, comment, detail suffix).
+    """
     out, by_policy = [], {}
-    for i in due:
+    for i in items:
         by_policy.setdefault(i["policy_id"], []).append(i)
     unblocked_keys, reg_docs = [], []
     for pid, group in sorted(by_policy.items()):
         for k in range(0, len(group), 50):
             part = group[k:k + 50]
             ips = [i["cidr"] for i in part]
-            meta = {"reason": "auto unblock: no attack for the quiet period", "threat_actor": "",
-                    "incident_no": "-", "comment": "auto unblock (V2)"}
             try:
                 backend = get_backend(conf, load_credential, session_key, override_ids=pid)
-                res = dict((r["ip"], r) for r in backend.execute("unblock", ips, False, meta, AUTO_USER))
+                res = dict((r["ip"], r) for r in backend.execute("unblock", ips, False, meta_of(part[0])[0], user))
                 mode = backend.mode
             except (il.ImpervaError, SoarError, Exception) as e:  # noqa: BLE001 - per policy
                 hint = " (add the policy ID to IMPERVA_POLICY_IDS on SOAR)" if "not allowed" in str(e) else ""
                 for i in part:
-                    out.append(audit_row(now, AUTO_USER, "unblock", i["cidr"], pid, "error", str(e) + hint,
-                                         i["ticket"], au.reason_text(i)))
-                log.error("auto unblock: policy %s failed: %s", pid, e)
+                    _m, ticket, comment, _s = meta_of(i)
+                    out.append(audit_row(now, user, "unblock", i["cidr"], pid, "error", str(e) + hint, ticket, comment))
+                log.error("unblock: policy %s failed: %s", pid, e)
                 continue
             for i in part:
+                meta, ticket, comment, suffix = meta_of(i)
                 r = res.get(i["cidr"]) or {"status": "error", "detail": "no answer for this IP", "verified_in_waf": "unknown"}
-                why = au.reason_text(i)
-                row = audit_row(now, AUTO_USER, "unblock", i["cidr"], r.get("site_id", pid), r["status"],
-                                (r.get("detail") or "") + " | " + why, i["ticket"], why,
+                row = audit_row(now, user, "unblock", i["cidr"], r.get("site_id", pid), r["status"],
+                                (r.get("detail") or "") + suffix, ticket, comment,
                                 r.get("verified_in_waf", "-"), mode,
                                 {"soar_container": r["soar_container"]} if "soar_container" in r else None)
                 out.append(row)
                 if r["status"] in ("unblocked", "no_change"):
-                    unblocked_keys.append(i["key"])
+                    if i.get("key"):
+                        unblocked_keys.append(i["key"])
                     if i["own"]:
                         key = registry_key(pid, i["cidr"])
                         try:
@@ -166,33 +172,83 @@ def do_run(session_key, conf, log, now):
                         except Exception:  # noqa: BLE001
                             existing = None
                         doc = il.build_registry_doc(existing, key, pid, i["cidr"], "unblock", r["status"],
-                                                    AUTO_USER, int(now), {"reason": why, "incident_no": "-",
-                                                                          "comment": why, "threat_actor": ""})
+                                                    user, int(now), meta)
                         if doc:
                             reg_docs.append(doc)
     try:
         kv_upsert(session_key, reg_docs)
     except Exception as e:  # noqa: BLE001 - the WAF change already happened
-        log.error("auto unblock: registry write failed: %s", e)
-    for k in unblocked_keys:     # a rule added again later starts a new countdown
+        log.error("unblock: registry write failed: %s", e)
+        for r in out:
+            r["detail"] += " | WARNING: registry not updated: %s" % e
+    for k in unblocked_keys:
         try:
             kv_delete(session_key, k, au.STATE)
         except Exception:  # noqa: BLE001
             pass
     for r in out:
-        log.info('user=%s action=auto_unblock ip=%s site_id=%s status=%s verified_in_waf=%s dry_run=False '
-                 'incident_no="%s" comment="%s" reason="%s" detail="%s"', r["user"], r["ip"], r["site_id"],
-                 r["status"], r["verified_in_waf"], r["incident_no"], r["comment"], r["comment"],
+        log.info('user=%s action=%s ip=%s site_id=%s status=%s verified_in_waf=%s dry_run=False '
+                 'incident_no="%s" comment="%s" reason="%s" detail="%s"', r["user"], log_action, r["ip"],
+                 r["site_id"], r["status"], r["verified_in_waf"], r["incident_no"], r["comment"], r["comment"],
                  str(r["detail"]).replace('"', "'"))
     if out:
         refresh_entries(session_key, conf, log)
     return out
 
 
-def do_set(session_key, conf, log, now, opts, user):
-    ips = il.parse_ip_list(opts.get("ip"))
+def do_run(session_key, conf, log, now):
+    items, _own = gather(session_key, conf, log, now)
+    due = au.due_items(items, au.MAX_PER_RUN)
+
+    def meta_of(i):
+        why = au.reason_text(i)
+        return ({"reason": why, "incident_no": "-", "comment": why, "threat_actor": ""}, i["ticket"], why, " | " + why)
+    return unblock_items(session_key, conf, due, AUTO_USER, log, now, meta_of, "auto_unblock")
+
+
+def clean_text(v, default="-"):
+    return (str(v or "").replace('"', "'").strip() or default)
+
+
+def do_unblock(session_key, conf, log, now, opts, user):
+    """Unblock now (Blocked IPs / Unblock page): the selected IPs, from whichever policy holds them.
+    An IP that is not in the policy cache (just blocked, or removed outside Splunk) is unblocked
+    from the own policies, which also closes its registry entry."""
+    ips = [ip for ip in il.parse_ip_list(opts.get("ip")) if ip not in ("-", "")]
     if not ips:
-        raise ValueError("no IP given (ip=...)")
+        raise ValueError("no IP selected - click rows in the table first")
+    ticket = clean_text(opts.get("incident_no"))
+    desc = clean_text(opts.get("description") or opts.get("reason"))
+    pid = (opts.get("policy_id") or "").strip()
+    # removing a rule is always safe: only strings that are not an IP / CIDR are refused
+    # (a non-public rule put on a policy by mistake can be removed too)
+    accepted, rejected = [], []
+    for ip in ips:
+        try:
+            ipaddress.ip_network(ip, strict=False)
+            accepted.append(ip)
+        except ValueError:
+            rejected.append((ip, "not an IP / CIDR"))
+    items, own = gather(session_key, conf, log, now)
+    out = [audit_row(now, user, "unblock", ip, "-", "rejected", why, ticket, desc) for ip, why in rejected]
+    chosen = []
+    for ip in accepted:
+        hits = [i for i in items if i["cidr"] == ip and (not pid or i["policy_id"] == pid)]
+        if not hits:
+            hits = [{"policy_id": p, "cidr": ip, "own": True, "key": au.entry_key(p, ip), "ticket": "-"}
+                    for p in ([pid] if pid else own)]
+        chosen += hits
+
+    def meta_of(i):
+        tk = ticket if ticket != "-" else (i.get("ticket") or "-")
+        return ({"reason": desc, "incident_no": tk, "comment": desc, "threat_actor": ""}, tk, desc, "")
+    return out + unblock_items(session_key, conf, chosen, user, log, now, meta_of, "unblock")
+
+
+def do_set(session_key, conf, log, now, opts, user):
+    ips = [ip for ip in il.parse_ip_list(opts.get("ip")) if ip not in ("-", "")]
+    if not ips:
+        raise ValueError("no IP selected - click rows in the table first")
     rule = au.rule_of(opts.get("rule"))
     reason = (opts.get("reason") or opts.get("description") or "-").replace('"', "'").strip() or "-"
     pid = (opts.get("policy_id") or "").strip()
@@ -235,7 +291,7 @@ def do_policies(items, own):
 def main():
     results, _dummy, settings_ctx = si.getOrganizedResults()
     opts = parse_options(sys.argv[1:], ("action", "ip", "policy_id", "rule", "reason", "description",
-                                        "field", "policy_field"))
+                                        "incident_no", "field", "policy_field"))
     session_key = settings_ctx.get("sessionKey")
     user = settings_ctx.get("owner", "unknown")
     log = get_logger("imperva_auto_unblock", "imperva_auto_unblock.log")
@@ -247,6 +303,8 @@ def main():
             si.outputResults(do_run(session_key, conf, log, now))
         elif action == "set":
             si.outputResults(do_set(session_key, conf, log, now, opts, user))
+        elif action == "unblock":
+            si.outputResults(do_unblock(session_key, conf, log, now, opts, user))
         elif action in ("list", "policies", "annotate"):
             items, own = gather(session_key, conf, log, now)
             if action == "list":
@@ -259,11 +317,12 @@ def main():
                 for r in results:
                     p = by.get((str(r.get(pfield, "")), (r.get(field) or "").strip()))
                     if p:
-                        for k in ("unblock_after", "last_attack", "attacks_24h", "unblock_on", "days_left", "status", "cloud_provider", "short_block"):
+                        for k in ("unblock_after", "last_attack", "attacks_24h", "unblock_on", "days_left", "status",
+                                  "status_code", "cloud_provider", "short_block", "owner", "policy_name"):
                             r["auto_" + k] = p[k]
                 si.outputResults(results)
         else:
-            raise ValueError("action must be list, run, set, policies or annotate")
+            raise ValueError("action must be list, run, set, unblock, policies or annotate")
     except Exception as e:  # noqa: BLE001
         log.error('user=%s action=auto_unblock_%s status=failed error="%s"', user, action, e)
         si.generateErrorResults("impervaautounblock: %s" % e)

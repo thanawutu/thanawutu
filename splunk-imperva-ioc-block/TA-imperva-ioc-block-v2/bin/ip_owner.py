@@ -3,7 +3,7 @@ Owner of an IP (VirusTotal AS owner) and whether it belongs to a cloud provider.
 
 V2: cloud provider IPs (AWS, Google Cloud, Azure, ...) MAY be blocked; their IPs are shared and
 re-assigned to other customers, so Auto unblock removes them after a short quiet period
-([auto_unblock] cloud_days, default 7 days without an attack; other IPs default_days = 90).
+(7 days without an attack; other IPs 60 days).
 
     imperva.conf [settings]
     cloud_providers = amazon|aws|google|...   words matched in the AS owner (whole words, any case)
