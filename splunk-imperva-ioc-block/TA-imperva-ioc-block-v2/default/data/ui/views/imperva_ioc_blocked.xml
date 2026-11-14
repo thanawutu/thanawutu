@@ -1,0 +1,361 @@
+<form version="1.1" theme="dark" hideFilters="true" script="imperva_form.js">
+  <label>Imperva IOC Block V2 – Blocked IPs / Unblock / Auto unblock</label>
+  <description>IPs blocked on the WAF: your policy read live from Imperva, the other enabled policies from the policy cache (5 min). Click rows to select, then 🔓 UNBLOCK (from whichever policy holds the IP) or set the auto unblock rule. Auto unblock: cloud provider / shared IPs after 7 days without an attack, other IPs after 60 days, every day at 02:17. Every action is written to the audit log; Auto unblock run now, the policies and the unblock log are on the Audit log page.</description>
+  <init>
+    <set token="b_sel">,</set>
+    <set token="b_refresh">init</set>
+  </init>
+
+
+  <!-- own policy: LIVE from the WAF + registry (description); other enabled policies: Auto unblock plan (policy cache) -->
+  <search id="waf_list">
+    <query><![CDATA[| impervalist
+| eval _refresh=$b_refresh|s$
+| lookup imperva_block_registry site_id ip OUTPUT status AS reg_status blocked_at blocked_by incident_no comment source
+| append [| inputlookup imperva_block_registry where status="blocked" | eval in_waf="no" | rename status AS reg_status | fields site_id ip in_waf reg_status blocked_at blocked_by incident_no comment source]
+| stats max(in_waf) AS in_waf values(site_name) AS site_name values(reg_status) AS reg_status max(blocked_at) AS blocked_at values(blocked_by) AS blocked_by values(incident_no) AS incident_no values(comment) AS comment values(source) AS source values(detail) AS detail max(checked_at) AS checked_at BY site_id ip
+| eventstats max(eval(if(in_waf="error",1,0))) AS site_err max(checked_at) AS last_check BY site_id
+| where (ip!="-" AND in_waf!="empty") OR in_waf="error"
+| eval verification=case(in_waf="error", "⚠ Cannot read WAF: ".mvjoin(detail," "),
+                         in_waf="yes" AND reg_status="blocked", "✔ Verified on WAF",
+                         in_waf="yes", "✔ On WAF (blocked outside Splunk)",
+                         site_err=1, "⚠ Unknown (WAF read error)",
+                         true(), "✖ NOT on WAF - removed outside Splunk")
+| eval since=if(isnotnull(blocked_at), strftime(blocked_at, "%Y-%m-%d %H:%M"), "-")
+| eval ticket=coalesce(mvjoin(mvmap(incident_no, replace(incident_no, "(?i)ITHM\s*-?\s*", "")), ", "), "-"), description=coalesce(mvjoin(comment, "; "), "-"), blocked_by=coalesce(mvjoin(blocked_by, ", "), "-")
+| impervaautounblock action=annotate field=ip policy_field=site_id
+| eval policy=site_id, policy_name=coalesce(auto_policy_name, mvjoin(site_name, ", "), "-"), own_policy="yes", owner=coalesce(auto_owner, "-")
+| append [| makeresults | impervaautounblock action=list | where own_policy="no"
+  | eval site_id=policy_id, policy=policy_id, in_waf="yes", verification="✔ On WAF (other policy)", since=listed_since." (listed)"
+  | rename unblock_after AS auto_unblock_after, last_attack AS auto_last_attack, attacks_24h AS auto_attacks_24h, unblock_on AS auto_unblock_on, days_left AS auto_days_left, status AS auto_status, status_code AS auto_status_code, short_block AS auto_short_block
+  | fields site_id ip policy policy_name own_policy owner in_waf verification since ticket description blocked_by auto_*]
+| eval auto_status=case(like(verification, "✖%"), "✖ NOT on WAF - removed outside Splunk", like(verification, "⚠%"), verification, true(), coalesce(auto_status, "-")), auto_status_code=if(like(verification, "✖%"), "not_on_waf", coalesce(auto_status_code, "-")), auto_attacks_24h=coalesce(auto_attacks_24h, 0)
+| eval _ord=case(auto_status_code="not_on_waf", 0, like(verification, "⚠%"), 1, true(), 2), _un=if(isnull(auto_unblock_on) OR auto_unblock_on="-", "9999", auto_unblock_on)
+| sort 0 _ord _un ip]]></query>
+    <earliest>-1m</earliest>
+    <latest>now</latest>
+    <refresh>300s</refresh>
+    <refreshType>delay</refreshType>
+  </search>
+  <search id="audit7">
+    <query>| `imperva_audit_daily(7)`
+| eval _r=$b_refresh|s$</query>
+    <earliest>-1m</earliest>
+    <latest>now</latest>
+    <refresh>300s</refresh>
+    <refreshType>delay</refreshType>
+  </search>
+
+  <row>
+    <panel>
+      <single>
+        <title>Blocked on the WAF</title>
+        <search base="waf_list">
+          <query>| where in_waf="yes" | stats count</query>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x5A9BD5","0x5A9BD5"]</option>
+        <option name="useColors">1</option>
+        <option name="underLabel">all policies · own policy read live</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Attacking now</title>
+        <search base="waf_list">
+          <query>| where auto_status_code="attacking" | stats count</query>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0xDC4E41","0xDC4E41"]</option>
+        <option name="useColors">1</option>
+        <option name="underLabel">blocked IPs with a request in the last 24 h</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Attacks in the last 24 h</title>
+        <search base="waf_list">
+          <query>| where in_waf="yes" | stats sum(auto_attacks_24h) AS attacks</query>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0xDC4E41","0xDC4E41"]</option>
+        <option name="useColors">1</option>
+        <option name="underLabel">requests the WAF still blocked</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Due now</title>
+        <search base="waf_list">
+          <query>| where auto_status_code="due" | stats count</query>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x5A9BD5","0x5A9BD5"]</option>
+        <option name="useColors">1</option>
+        <option name="underLabel">auto unblocked at the next run (02:17)</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Kept</title>
+        <search base="waf_list">
+          <query>| where auto_status_code="kept" | stats count</query>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x53A051","0x53A051"]</option>
+        <option name="useColors">1</option>
+        <option name="underLabel">never auto unblocked</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Unblocked 7 days</title>
+        <search base="audit7">
+          <query>| stats sum("Unblocked IPs") AS unblocked</query>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x53A051","0x53A051"]</option>
+        <option name="useColors">1</option>
+        <option name="underLabel">manual + auto, from the audit log</option>
+      </single>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <html>
+        <div style="display:flex;flex-wrap:wrap;gap:6px 20px;align-items:center;padding:2px;font-size:13px;line-height:1.5">
+          <span style="background:#53A051;color:#fff;border-radius:3px;padding:2px 8px;font-weight:600">⏱ AUTO UNBLOCK ON</span>
+          <span>☁ Cloud provider / shared IP: <b>7 days</b> without an attack</span>
+          <span>Other IPs: <b>60 days</b> without an attack</span>
+          <span>All enabled policies</span>
+          <span>Rounds of <b>10</b> IPs, each confirmed on the WAF · no daily limit</span>
+          <span style="opacity:.75">every day 02:17 · fixed values · the countdown starts at the latest of the last attack (Imperva "Blocked IP" log), the block date and the day V2 first saw the rule</span>
+        </div>
+      </html>
+    </panel>
+  </row>
+
+  <row>
+    <panel id="b_actpanel">
+      <title>Search and Unblock</title>
+      <input type="text" token="b_q" searchWhenChanged="true">
+        <label>🔎 Search IP / Ticket / Incident no. / Description / Policy (* = all)</label>
+        <default>*</default>
+      </input>
+      <input type="text" token="b_tk" searchWhenChanged="true">
+        <label>Ticket / Incident no. ("-" if none)</label>
+        <default>-</default>
+      </input>
+      <input type="text" token="b_desc" searchWhenChanged="true">
+        <label>Description – why ("-" if none)</label>
+        <default>-</default>
+      </input>
+      <table id="b_acttable">
+        <search id="b_act">
+          <query>| makeresults
+| eval ip=split("-,".trim($b_sel|s$, ","), ",")
+| mvexpand ip
+| where ip!="" AND ip!="-"
+| stats count BY ip
+| where count%2=1
+| stats count AS _c values(ip) AS ip
+| eval ips=coalesce(mvjoin(ip, ","), ""), n=if(ips="", 0, coalesce(mvcount(split(ips, ",")), 0))
+| eval Action=if(n=0, "Click rows below to select IPs", "🔓 UNBLOCK ".n." IP".if(n=1, "", "s")), Clear=if(n=0, "-", "✖ Clear selection")
+| eval selected_ips=if(n=0, "-", replace(ips, ",", ", ")), ticket=$b_tk|s$, description=$b_desc|s$
+| table Action Clear selected_ips ticket description</query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">1</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">cell</option>
+        <format type="color" field="Action">
+          <colorPalette type="expression">if(like(value, "🔓%"), "#53A051", "#3C444D")</colorPalette>
+        </format>
+        <format type="color" field="NotBlock">
+          <colorPalette type="expression">if(like(value, "✖%"), "#5C6773", "#3C444D")</colorPalette>
+        </format>
+        <format type="color" field="SelectAll">
+          <colorPalette type="expression">if(like(value, "☑%"), "#1F6F8B", "#3C444D")</colorPalette>
+        </format>
+        <format type="color" field="waf_check">
+          <colorPalette type="expression">if(like(value, "✔%") OR value=="-", "#3C444D", "#B26B00")</colorPalette>
+        </format>
+        <drilldown>
+          <!-- one click = do it (no second confirm) -->
+          <condition field="Action">
+            <set token="b_exec_ips">$row.selected_ips$</set>
+            <set token="b_exec_tk">$row.ticket$</set>
+            <set token="b_exec_desc">$row.description$</set>
+            <set token="b_sel">,</set>
+            <set token="form.b_tk">-</set>
+            <set token="form.b_desc">-</set>
+          </condition>
+          <condition field="SelectAll">
+            <!-- replaces the selection with every IP that matches the search box -->
+            <set token="b_sel">,$click.value2$,</set>
+          </condition>
+          <condition field="Clear">
+            <set token="b_sel">,</set>
+          </condition>
+          <condition></condition>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel depends="$b_exec_ips$">
+      <title>Unblock result – from the policy that holds each IP, written to the audit log (click a row to close)</title>
+      <table>
+        <search>
+          <query>| makeresults
+| impervaautounblock action=unblock ip=$b_exec_ips|s$ incident_no=$b_exec_tk|s$ description=$b_exec_desc|s$
+| `imperva_audit_write`
+| table time ip action status verified policy ticket description backend soar_container detail</query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+          <done>
+            <set token="b_refresh">$job.sid$</set>
+          </done>
+        </search>
+        <option name="count">50</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">cell</option>
+        <format type="color" field="status">
+          <colorPalette type="map">{"blocked":#DC4E41,"unblocked":#53A051,"no_change":#708794,"rejected":#AF575A,"error":#B6488E,"dismissed":#5C6773,"restored":#5A9BD5}</colorPalette>
+        </format>
+        <format type="color" field="verified">
+          <colorPalette type="map">{"yes":#53A051,"no":#DC4E41,"unknown":#F8BE34}</colorPalette>
+        </format>
+        <drilldown>
+          <unset token="b_exec_ips"></unset>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Auto unblock rule for the selected IPs – does not change the WAF, only when the IP is unblocked</title>
+      <input type="dropdown" token="b_rule" searchWhenChanged="true">
+        <label>Unblock after</label>
+        <choice value="default">Default (cloud / shared 7 · others 60 quiet days)</choice>
+        <choice value="keep">📌 Keep (never unblock)</choice>
+        <choice value="7">7 quiet days</choice>
+        <choice value="30">30 quiet days</choice>
+        <choice value="90">90 quiet days</choice>
+        <choice value="180">180 quiet days</choice>
+        <choice value="365">365 quiet days</choice>
+        <default>default</default>
+      </input>
+      <table>
+        <search>
+          <query>| makeresults
+| eval ip=split("-,".trim($b_sel|s$, ","), ",")
+| mvexpand ip
+| where ip!="" AND ip!="-"
+| stats count BY ip
+| where count%2=1
+| stats count AS n values(ip) AS ip
+| eval n=coalesce(n, 0), ips=coalesce(mvjoin(ip, ", "), "")
+| eval Apply=if(n=0, "Select IPs in the table below", "✔ APPLY RULE to ".n." IP".if(n=1, "", "s")), selected_ips=if(n=0, "-", ips), rule=$b_rule|s$, reason=$b_desc|s$
+| table Apply selected_ips rule reason</query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">1</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">cell</option>
+        <format type="color" field="Apply">
+          <colorPalette type="expression">if(like(value, "✔%"), "#1F6F8B", "#3C444D")</colorPalette>
+        </format>
+        <drilldown>
+          <!-- only with IPs selected: a click on "Select IPs in the table below" does nothing -->
+          <condition match="'click.name2'==&quot;Apply&quot; AND 'row.selected_ips'!=&quot;-&quot;">
+            <set token="b_rule_ips">$row.selected_ips$</set>
+            <set token="b_rule_val">$row.rule$</set>
+            <set token="b_rule_why">$row.reason$</set>
+            <set token="b_sel">,</set>
+          </condition>
+          <condition></condition>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel depends="$b_rule_ips$">
+      <title>Auto unblock rule saved – written to the audit log (click a row to close)</title>
+      <table>
+        <search>
+          <query>| makeresults | impervaautounblock action=set ip=$b_rule_ips|s$ rule=$b_rule_val|s$ reason=$b_rule_why|s$
+| `imperva_audit_write`
+| table time ip policy action status detail description</query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+          <done>
+            <set token="b_refresh">$job.sid$</set>
+          </done>
+        </search>
+        <option name="count">20</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">cell</option>
+        <format type="color" field="status">
+          <colorPalette type="map">{"blocked":#DC4E41,"unblocked":#53A051,"no_change":#708794,"rejected":#AF575A,"error":#B6488E,"dismissed":#5C6773,"restored":#5A9BD5}</colorPalette>
+        </format>
+        <format type="color" field="verified">
+          <colorPalette type="map">{"yes":#53A051,"no":#DC4E41,"unknown":#F8BE34}</colorPalette>
+        </format>
+        <drilldown>
+          <unset token="b_rule_ips"></unset>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>IPs blocked on the WAF – all policies, sorted by unblock date (click a row to select / unselect it)</title>
+      <input type="dropdown" token="b_f" searchWhenChanged="true">
+        <label>Show</label>
+        <choice value="all">All</choice>
+        <choice value="own">Own policy (read live)</choice>
+        <choice value="other">Other policies</choice>
+        <choice value="cloud">Cloud / shared IPs</choice>
+        <choice value="attacking">Attacking now</choice>
+        <choice value="soon">Unblock soon</choice>
+        <choice value="due">Due</choice>
+        <choice value="kept">Kept</choice>
+        <choice value="not_on_waf">NOT on WAF (removed outside Splunk)</choice>
+        <default>all</default>
+      </input>
+      <table id="b_table">
+        <search base="waf_list">
+          <query><![CDATA[| eval _q=replace(lower(trim(replace($b_q|s$, "[*]", ""))), "^ithm[\s:#-]*", ""), _f=$b_f|s$
+| where _q="" OR like(lower(ip." ".ticket." ".description." ".blocked_by." ".policy." ".policy_name." ".owner), "%"._q."%")
+| where _f="all" OR auto_status_code=_f OR (_f="own" AND own_policy="yes") OR (_f="other" AND own_policy="no") OR (_f="cloud" AND isnotnull(auto_short_block) AND auto_short_block!="-")
+| eval Events="🔍 Search", policy=policy." ".policy_name
+| table ip auto_status auto_last_attack auto_attacks_24h auto_unblock_after auto_unblock_on auto_days_left owner auto_short_block policy since ticket description blocked_by Events
+| rename auto_status AS Status, auto_last_attack AS "Last attack", auto_attacks_24h AS "Attacks 24h", auto_unblock_after AS "Unblock after", auto_unblock_on AS "Unblock on", auto_days_left AS "Days left", auto_short_block AS "Cloud / shared", since AS "Blocked / listed since", blocked_by AS "Blocked by"]]></query>
+        </search>
+        <option name="count">25</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">cell</option>
+        <format type="color" field="Status">
+          <colorPalette type="expression">case(like(value,"Due%"),"#5A9BD5", like(value,"Attacking%"),"#DC4E41", like(value,"Unblock soon%"),"#F8BE34", like(value,"Kept%"),"#53A051", like(value,"✖%"),"#DC4E41", like(value,"⚠%"),"#F8BE34", true(),"#3C444D")</colorPalette>
+        </format>
+        <format type="color" field="Attacks 24h">
+          <colorPalette type="expression">if(tonumber(value)&gt;0, "#DC4E41", "#3C444D")</colorPalette>
+        </format>
+        <drilldown>
+          <condition field="Events">
+            <link target="_blank">search?q=search%20index%3Dimperva%20sourcetype%3D%22incapsula%3Acef%22%20src%3D$row.ip|u$&amp;earliest=-7d%40d&amp;latest=now</link>
+          </condition>
+          <condition>
+            <set token="b_sel">$b_sel$,$row.ip$,</set>
+            <eval token="form.b_tk">if(isnull('form.b_tk') OR 'form.b_tk'=="-" OR 'form.b_tk'=="", 'row.ticket', 'form.b_tk')</eval>
+          </condition>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+</form>

@@ -1,0 +1,941 @@
+<title>Imperva IOC Block Console</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg:#eef1f4; --panel:#ffffff; --panel-2:#f5f7f9; --line:#d7dde3; --fg:#18202a; --muted:#5d6b78;
+  --accent:#1f6f8b; --sel:#e3f0f5;
+  --crit:#c4362b; --crit-bg:#fbe7e5; --warn:#a86b00; --warn-bg:#fdf1d8; --ok:#2f7d4a; --ok-bg:#e3f3e8;
+  --info:#2c62b3; --info-bg:#e4ecf9; --mute-bg:#e9edf1; --grid:#e3e7eb;
+  --font-ui:"IBM Plex Sans Thai","Noto Sans Thai","Segoe UI",system-ui,sans-serif;
+  --font-data:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace; --r:6px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f141a; --panel:#161d25; --panel-2:#1b242e; --line:#2a3542; --fg:#e3e9ef; --muted:#8d9cab;
+  --accent:#4fb3d4; --sel:#18323d;
+  --crit:#ff6b5e; --crit-bg:#3a1a19; --warn:#f2b445; --warn-bg:#3a2c12; --ok:#5fcf86; --ok-bg:#16301f;
+  --info:#7aa7f0; --info-bg:#1a2740; --mute-bg:#232d38; --grid:#222c37; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f141a; --panel:#161d25; --panel-2:#1b242e; --line:#2a3542; --fg:#e3e9ef; --muted:#8d9cab;
+  --accent:#4fb3d4; --sel:#18323d;
+  --crit:#ff6b5e; --crit-bg:#3a1a19; --warn:#f2b445; --warn-bg:#3a2c12; --ok:#5fcf86; --ok-bg:#16301f;
+  --info:#7aa7f0; --info-bg:#1a2740; --mute-bg:#232d38; --grid:#222c37; color-scheme:dark}
+*{box-sizing:border-box} [hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font-ui);font-size:14px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-bottom:40px}
+.wrap{max-width:1380px;margin:0 auto;display:flex;flex-direction:column;gap:14px;padding-top:14px}
+.mono{font-family:var(--font-data);font-variant-numeric:tabular-nums}
+h1,h2{margin:0;text-wrap:balance} h1{font-size:19px;font-weight:600} h2{font-size:14px;font-weight:600}
+.label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.note{font-size:12px;color:var(--muted)}
+.topbar{background:var(--panel);border-bottom:1px solid var(--line);margin:0 calc(-1 * max(16px,env(safe-area-inset-right,0px))) 0 calc(-1 * max(16px,env(safe-area-inset-left,0px)));
+  padding:calc(12px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) 0 max(16px,env(safe-area-inset-left,0px))}
+.topbar .in{max-width:1380px;margin:0 auto;display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;justify-content:space-between}
+.tabs{max-width:1380px;margin:10px auto 0;display:flex;gap:2px;overflow-x:auto}
+.tabs a{padding:8px 14px;text-decoration:none;color:var(--muted);font-weight:600;font-size:13px;white-space:nowrap;border-bottom:3px solid transparent}
+.tabs a:hover{color:var(--fg)}
+.tabs a[aria-current="page"]{color:var(--accent);border-bottom-color:var(--accent)}
+.tabs .cnt{display:inline-block;margin-left:6px;background:var(--mute-bg);color:var(--fg);border-radius:999px;padding:0 7px;font-size:11px;font-family:var(--font-data)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:12px;background:var(--panel-2);white-space:nowrap}
+.sim{background:var(--warn-bg);color:var(--warn);border-color:transparent;font-weight:600}
+a{color:var(--accent)}
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;min-width:0}
+.panel-head{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;justify-content:space-between;margin-bottom:10px}
+.panel-head p{margin:0;color:var(--muted);font-size:12px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-top:3px solid var(--line);border-radius:var(--r);padding:10px 12px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.kpi .v{font-family:var(--font-data);font-size:26px;font-weight:600;line-height:1.1;font-variant-numeric:tabular-nums}
+.kpi .s{font-size:11.5px;color:var(--muted)}
+.k-crit{border-top-color:var(--crit)} .k-warn{border-top-color:var(--warn)} .k-ok{border-top-color:var(--ok)} .k-info{border-top-color:var(--info)}
+.flash{animation:flash 1.2s ease-out} @keyframes flash{0%{background:var(--warn-bg)}100%{background:var(--panel)}}
+@media (prefers-reduced-motion: reduce){.flash{animation:none}}
+.chart-wrap{overflow-x:auto} .chart-wrap svg{display:block;width:100%;height:auto}
+.chart-wrap rect.hit{fill:transparent} .chart-wrap g.day:hover rect.hit{fill:var(--grid)}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:11.5px;color:var(--muted)} .legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px}
+.control{position:sticky;top:0;z-index:6;background:var(--panel);border:1px solid var(--accent);border-radius:var(--r);padding:12px 14px;display:flex;flex-direction:column;gap:10px;box-shadow:0 4px 14px rgba(0,0,0,.06)}
+.control.u{border-color:var(--ok)}
+.crow{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-end}
+.field{display:flex;flex-direction:column;gap:3px;min-width:0}
+.field label,.field .flabel{font-size:11.5px;color:var(--muted);font-weight:500}
+input[type=text],select{font:inherit;font-size:13px;padding:7px 9px;border:1px solid var(--line);border-radius:5px;background:var(--panel-2);color:var(--fg);min-width:0;width:100%}
+button{font:inherit;font-size:13px;border-radius:5px;border:1px solid var(--line);background:var(--panel-2);color:var(--fg);padding:6px 12px;cursor:pointer;white-space:nowrap}
+button:disabled{opacity:.45;cursor:not-allowed}
+.run{font-weight:700;padding:8px 18px;border:0;color:#fff;background:var(--crit)}
+.run.nb{background:var(--muted);color:var(--bg)}
+.run.u{background:var(--ok)}
+.tag.un{border-color:var(--ok);background:var(--ok-bg);color:var(--ok)}
+.selbox{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:36px;border:1px dashed var(--line);border-radius:5px;padding:4px 8px;background:var(--panel-2)}
+.tag{display:inline-flex;align-items:center;gap:4px;font-family:var(--font-data);font-size:12px;background:var(--sel);border:1px solid var(--accent);border-radius:4px;padding:1px 4px 1px 8px}
+.tag.man{border-style:dashed;background:var(--warn-bg)} .tag.bad{border-color:var(--crit);background:var(--crit-bg);color:var(--crit)}
+.tag button{border:0;background:transparent;padding:0 4px;font-size:14px;line-height:1;color:var(--muted)}
+.result{font-size:12.5px;border-radius:5px;padding:7px 10px}
+.result.ok{background:var(--ok-bg);color:var(--ok)} .result.running{background:var(--warn-bg);color:var(--warn)}
+.tbl-wrap{overflow:auto;border:1px solid var(--line);border-radius:var(--r);max-height:560px}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th{position:sticky;top:0;z-index:1;background:var(--panel-2);text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;padding:7px 9px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:7px 9px;border-bottom:1px solid var(--line);vertical-align:top}
+tbody tr[data-ip]{cursor:pointer} tbody tr[data-ip]:hover td{background:var(--panel-2)}
+tbody tr.selected td{background:var(--sel)}
+tbody tr.cloudrow td:not(.aid){color:var(--muted)}
+/* v3.9 Auto unblock */
+.cols{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:14px}
+@media (max-width:900px){.cols{grid-template-columns:1fr}}
+.flow{display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0;list-style:none;counter-reset:st}
+.flow li{flex:1 1 150px;min-width:0;border:1px solid var(--line);border-radius:5px;padding:8px 10px;background:var(--panel-2);font-size:12px;counter-increment:st}
+.flow li::before{content:counter(st);display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:var(--accent);color:var(--panel);font-size:11px;font-weight:700;margin-right:6px}
+.flow b{display:block;font-size:12.5px;margin:2px 0}
+.form{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px} @media (max-width:560px){.form{grid-template-columns:1fr}}
+.form .wide{grid-column:1/-1}
+input[type=number]{font:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:5px;background:var(--panel-2);color:var(--fg);width:70px;text-align:right;font-family:var(--font-data)}
+.inline{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:13px}
+.inline input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--panel-2);width:max-content}
+.seg button{border:0;border-radius:0;background:transparent;padding:7px 14px;font-weight:600;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--panel)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:var(--panel);font-weight:700}
+.btn-ok{background:var(--ok);border-color:var(--ok);color:var(--panel);font-weight:700}
+.btn-crit{background:var(--crit);border-color:var(--crit);color:#fff;font-weight:700}
+.austrip{display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:9px 14px;margin:0 0 14px;font-size:13px}
+.austrip .lnk{margin-left:auto}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;margin-bottom:10px}
+.filters{display:flex;flex-wrap:wrap;gap:6px}
+.filters button{border-radius:999px;padding:4px 12px;font-size:12px}
+.filters button[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.filters .n{font-family:var(--font-data);margin-left:5px;opacity:.75}
+.actbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--sel);border:1px solid var(--accent);border-radius:5px;padding:8px 10px;margin-bottom:10px}
+.actbar select,.actbar input[type=text]{width:auto;min-width:0;background:var(--panel)}
+.actbar input[type=text]{flex:1 1 200px}
+.p-active{background:var(--mute-bg);color:var(--fg)} .p-soon{background:var(--warn-bg);color:var(--warn)}
+.p-due{background:var(--crit-bg);color:var(--crit)} .p-extend{background:var(--info-bg);color:var(--info)} .p-keep{background:var(--ok-bg);color:var(--ok)}
+.dur{display:inline-block;font-size:11px;border:1px solid var(--line);border-radius:4px;padding:0 6px;white-space:nowrap}
+.dur.custom{border-color:var(--accent);color:var(--accent);font-weight:600} .dur.keep{border-color:var(--ok);color:var(--ok);font-weight:600} .dur.cloud{border-color:var(--warn);color:var(--warn);font-weight:600}
+.left{display:flex;flex-direction:column;gap:3px;min-width:92px}
+.bar{height:5px;border-radius:3px;background:var(--grid);overflow:hidden} .bar i{display:block;height:100%;background:var(--accent)}
+.bar.soon i{background:var(--warn)} .bar.due i{background:var(--crit)}
+#au_chart svg{display:block;width:100%;height:auto} #au_chart text{fill:var(--muted);font-family:var(--font-data);font-size:10px}
+#au_chart .b{fill:var(--accent)} #au_chart .b.soon{fill:var(--warn)} #au_chart .gl{stroke:var(--grid)}
+.runbox{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;border:1px dashed var(--line);border-radius:5px;padding:10px 12px;background:var(--panel-2);margin-bottom:10px}
+.plan{font-size:12.5px} .plan b{font-family:var(--font-data)}
+.result.info{background:var(--info-bg);color:var(--info)}
+.find{background:var(--panel-2);border:1px solid var(--line);color:var(--fg);display:flex;flex-direction:column;gap:3px}
+.find .fl{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.find .fl b.mono{min-width:120px}
+.find .ok{color:var(--ok);font-weight:600} .find .no{color:var(--crit);font-weight:600} .find .pg{color:var(--info);font-weight:600} .find .al{color:var(--ok);font-weight:600}
+.find .hd{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
+.a-unblock{color:var(--ok);font-weight:600} .a-extend{color:var(--info);font-weight:600} .a-report{color:var(--warn);font-weight:600} .a-set{color:var(--accent);font-weight:600}
+.chip.mode-report{background:var(--info-bg);color:var(--info);border-color:transparent;font-weight:600}
+.chip.mode-auto{background:var(--ok-bg);color:var(--ok);border-color:transparent;font-weight:600}
+.sel-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.lnk{border:0;background:none;padding:0;margin:0 0 0 12px;color:var(--accent);font-size:11.5px;font-weight:600;cursor:pointer}
+.lnk:hover{text-decoration:underline}
+.tag.cloud{border-color:var(--warn);background:var(--warn-bg);color:var(--warn)}
+td.ip{font-family:var(--font-data);white-space:nowrap;font-weight:500} td.num{text-align:right;font-family:var(--font-data)}
+td.small{font-size:11.5px;color:var(--muted);min-width:170px}
+td.nw{white-space:nowrap}
+.pill{display:inline-block;border-radius:4px;padding:1px 7px;font-size:11px;font-weight:600;white-space:nowrap}
+.p-block{background:var(--crit-bg);color:var(--crit)} .p-review{background:var(--warn-bg);color:var(--warn)} .p-monitor{background:var(--info-bg);color:var(--info)}
+.p-done{background:var(--mute-bg);color:var(--muted)} .p-safe{background:var(--ok-bg);color:var(--ok)}
+.sev-high{background:var(--crit-bg);color:var(--crit)} .sev-medium{background:var(--warn-bg);color:var(--warn)} .sev-low{background:var(--info-bg);color:var(--info)}
+.box{width:15px;height:15px;border:1.5px solid var(--muted);border-radius:3px;display:inline-block;vertical-align:-3px}
+tr.selected .box{background:var(--accent);border-color:var(--accent)}
+.toast{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:10px 14px;border-radius:6px;font-size:13px;max-width:min(440px,calc(100vw - 32px));z-index:20}
+.review{border-left:4px solid var(--warn);background:var(--warn-bg);color:var(--fg);padding:10px 14px;border-radius:var(--r);font-size:12.5px}
+.review b{color:var(--warn)}
+.sw{position:relative;width:36px;height:20px;border-radius:999px;border:0;padding:0;background:var(--line)}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:#fff;transition:left .15s}
+.sw[aria-checked="true"]{background:var(--ok)} .sw[aria-checked="true"]::after{left:19px}
+tr.off td:not(:first-child){opacity:.45}
+b.bk{color:var(--crit)} b.al{color:var(--ok)}
+.paths{font-family:var(--font-data);font-size:11px;line-height:1.45;min-width:250px;white-space:nowrap}
+.paths .bk{color:var(--crit);font-weight:600} .paths .al{color:var(--ok);font-weight:600} .paths a{text-decoration:none}
+a.ab,a.gn{display:inline-block;border-radius:4px;padding:1px 7px;font-size:11.5px;font-weight:600;text-decoration:none;border:1px solid transparent}
+a.ab-h{background:var(--crit-bg);color:var(--crit);border-color:var(--crit)}a.ab-m{background:var(--warn-bg);color:var(--warn);border-color:var(--warn)}a.ab-l{background:var(--mute-bg);color:var(--muted)}
+a.gn-m{background:var(--crit-bg);color:var(--crit)}a.gn-b{background:var(--ok-bg);color:var(--ok)}a.gn-u{background:var(--info-bg);color:var(--info)}a.gn-n{background:var(--mute-bg);color:var(--muted)}
+a.vt{display:inline-block;background:var(--info);color:#fff;border-radius:4px;padding:1px 7px;font-size:11.5px;font-weight:600;text-decoration:none}
+.del{color:var(--crit);border-color:transparent;background:transparent}
+.new{display:inline-block;background:var(--accent);color:#fff;border-radius:3px;padding:0 5px;font-size:9.5px;font-weight:700;letter-spacing:.04em;vertical-align:1px;margin-left:4px}
+td.aid{min-width:230px;font-size:11.5px;line-height:1.5;cursor:zoom-in}
+td.aid:hover{background:var(--info-bg)!important}
+.aid .row{display:flex;gap:6px;align-items:baseline;white-space:nowrap}
+.risk{font-family:var(--font-data);font-weight:700}
+.r-hi{color:var(--crit)} .r-mid{color:var(--warn)} .r-lo{color:var(--muted)}
+.own{display:inline-block;border-radius:4px;padding:0 6px;font-size:11px;font-weight:600;white-space:nowrap}
+.o-host{background:var(--mute-bg);color:var(--fg)} .o-isp{background:var(--info-bg);color:var(--info)}
+.o-mob,.o-thmob,.o-cloud{background:var(--warn-bg);color:var(--warn)} .o-bot,.o-asset{background:var(--ok-bg);color:var(--ok)}
+.sig{display:inline-block;font-size:11px;white-space:nowrap}
+.sig.w{color:var(--crit);font-weight:600} .sig.c{color:var(--warn);font-weight:600} .sig.i{color:var(--muted)}
+.detail{border-color:var(--accent);border-width:1.5px}
+.dgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px}
+.dbox{border:1px solid var(--line);border-radius:5px;padding:9px 11px;background:var(--panel-2);min-width:0;font-size:12.5px}
+.dbox.wide{grid-column:1/-1}
+.dbox .label{display:block;margin-bottom:5px}
+.dbox ul{margin:0;padding:0;list-style:none} .dbox li{display:flex;justify-content:space-between;gap:10px;padding:1px 0;border-bottom:1px dashed var(--grid)}
+.dbox li:last-child{border-bottom:0} .dbox li span:last-child{font-family:var(--font-data);white-space:nowrap}
+.big{font-family:var(--font-data);font-size:24px;font-weight:700;line-height:1.1}
+.spark{display:block;width:100%;height:46px}
+.spark rect{fill:var(--accent)} .spark rect.z{fill:var(--grid)}
+.dact{display:flex;flex-wrap:wrap;gap:6px}
+.dhead{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center}
+.cols2{display:grid;grid-template-columns:1fr 1fr;gap:12px} @media (max-width:640px){.cols2{grid-template-columns:1fr}}
+.ua{font-family:var(--font-data);font-size:11px;word-break:break-all}
+.ptbl-wrap{max-height:270px;overflow:auto;border:1px solid var(--line);border-radius:5px;background:var(--panel)}
+.ptbl{font-size:12px} .ptbl th{font-size:10px;padding:5px 8px} .ptbl td{padding:4px 8px;border-bottom:1px dashed var(--grid)}
+.ptbl td.p{font-family:var(--font-data);font-size:11.5px;word-break:break-all} .ptbl td.n{text-align:right;font-family:var(--font-data);white-space:nowrap}
+.ptbl tr.both td.p::after{content:" ⚠ blocked + let through";color:var(--warn);font-family:var(--font-ui);font-size:10.5px;font-weight:600}
+</style>
+
+<header class="topbar">
+  <div class="in">
+    <div><span class="label">Apps › Imperva IOC Block</span><h1 id="pageTitle">Imperva WAF – IOC Block</h1></div>
+    <div class="chips">
+      <span class="chip sim">Mockup v3.20 · simulated data</span>
+      <span class="chip">Policy 2169031 · via SOAR</span>
+    </div>
+  </div>
+  <nav class="tabs" aria-label="Pages">
+    <a href="#" data-page="dash">⛔ Block – last 7 days<span class="cnt" id="nDash">0</span></a>
+    <a href="#history" data-page="history">🗂 Older detections<span class="cnt" id="nHist">0</span></a>
+    <a href="#blocked" data-page="blocked">🔓 Blocked IPs / Unblock · ⏱ Auto<span class="cnt" id="nBlk">0</span></a>
+    <a href="#rules" data-page="rules">⚙ Detection rules</a>
+    <a href="#audit" data-page="audit">📄 Audit log</a>
+  </nav>
+</header>
+
+<!-- ============ Page 1: dashboard (7 days, search + Block) ============ -->
+<main class="wrap" id="v-dash">
+  <div class="review"><b>Mockup v3.20:</b> ช่องค้นหาหน้า Block / Older detections: IP ที่<b>ถูก block อยู่แล้ว</b> (rule ของ IP นั้นตรง ๆ ใน policy ใดก็ได้) กดได้แค่ <b>🔓 Unblock</b> (ปุ่มสีเขียวโผล่มาเฉพาะตอนมี IP แบบนี้ · ปลดจาก policy ที่ถือ IP นั้น verify บน WAF และลง audit) · IP ที่<b>ยังไม่ถูก block</b> กดได้แค่ <b>⛔ Block</b> · IP ที่อยู่ใน CIDR rule ใหญ่ ให้ไป unblock rule นั้นที่หน้า Blocked IPs · ลองพิมพ์ <span class="mono">45.9.20.18, 203.0.113.10</span> · <b>v3.19:</b> เอาตาราง <b>Not blocked (hidden)</b> ออกจากหน้า Older detections: IP ที่กด Not block จะซ่อนไว้ และ<b>กลับมาที่ตาราง detect เอง</b>เมื่อมี rule detect IP นั้นใหม่ (ค้นหา IP นั้นในช่องค้นหายังเห็นว่า "hidden by Not block") · <b>v3.18:</b> Auto unblock ไม่จำกัดวันละ 50 แล้ว: ปลดทีละ <b>10 IP</b> → อ่าน policy กลับจาก WAF ตรวจว่าลบแล้ว → ค่อยยิงรอบถัดไป จนหมด (ถ้ารอบไหนตรวจไม่ผ่าน หยุดเฉพาะ policy นั้น ลองใหม่รอบถัดไป) · <b>v3.17:</b> Auto unblock run now และ log ย้ายไปหน้า <b>Audit log</b> · ช่อง VirusTotal = คะแนน (คลิกเปิด VirusTotal) · <b>v3.16:</b> เพิ่มคอลัมน์ <b>AbuseIPDB</b> (คะแนน % + จำนวน report 90 วัน) และ <b>GreyNoise</b> (malicious / benign / RIOT / not observed) ในหน้า Block และ Older detections · ตรวจผ่าน <b>SOAR</b> เหมือน VirusTotal เก็บ cache 24 ชม. · Suggestion ปรับตาม: AbuseIPDB ≥ 75% → BLOCK, ≥ 25% → อย่างน้อย REVIEW, GreyNoise malicious → อย่างน้อย REVIEW, GreyNoise RIOT / benign → ไม่เกิน REVIEW · IP detail มีกล่อง Threat intel และลิงก์ไปทั้ง 3 เว็บ · <b>v3.15:</b> รวมหน้า <b>Blocked IPs / Unblock</b> กับ <b>Auto unblock</b> เป็นหน้าเดียว: ตารางเดียวแสดง IP ที่ block จาก<b>ทุก policy</b> พร้อม Last attack / Attacks 24h / Unblock on / Status · เลือกแถวแล้วกด <b>🔓 Unblock</b> ทันที หรือ <b>Apply rule</b> (Keep / Default / จำนวนวัน) · แถบบนสุดบอกกฎ auto unblock (7 / 60 วัน · ทุก policy · 50 ต่อรอบ) · log ของ auto unblock อยู่ล่างสุด · <b>v3.14:</b> หน้า Auto unblock <b>ไม่มีหน้าตั้งค่าแล้ว</b> ใช้ค่าคงที่: unblock จริงทุกวัน (<b>ไม่มี Report only</b>) · cloud / shared IP <b>7 วัน</b> · IP อื่น <b>60 วัน</b> · <b>All enabled policies</b> · <b>max 50 IP ต่อรอบ</b> · <b>v3.13:</b> Auto unblock: IP <b>cloud และ shared IP</b> (เครือข่ายมือถือ) ไม่โจมตีครบ <b>7 วัน</b> → unblock · IP อื่นไม่โจมตีครบ <b>60 วัน</b> → unblock · หน้า Blocked IPs และ Auto unblock มีคอลัมน์ <b>Attacks 24h</b> (request ที่ WAF ยัง block จาก IP นั้นใน 24 ชม.) และยอดรวม · <b>v3.12:</b> ช่อง <b>Search</b> ใช้ทั้งค้นหาและ<b>เพิ่ม IP</b> (ตัดช่อง Add IPs manually ออก) · ค้นหาจาก<b>ทุกหน้าและทุก WAF policy</b>: กล่อง <b>Found</b> บอกว่า IP อยู่ที่ไหน – หน้านี้ / หน้าอื่น / <b>block แล้วใน policy ไหน วันไหน</b> / allow / Not block / <b>ไม่เจอ → นับเข้าปุ่ม Block ทันที</b> · ลองพิมพ์ <span class="mono">193.42.33.7, 185.220.101.47, 20.20.20.20, 45.95.147.236, 203.0.113.10</span> · <b>Auto unblock (V2):</b> หน้า <b>⏱ Auto unblock</b> แสดง IP ที่ถูก block จาก<b>ทุก rule / policy</b> ของ WAF · นับจาก<b>การโจมตีครั้งสุดท้าย</b> (log “Blocked IP” ของ Imperva = IP ยังส่ง request เข้ามา): IP ของ <b>cloud provider</b> ไม่โจมตีครบ <b>7 วัน</b> → unblock · IP อื่นไม่โจมตีครบ <b>60 วัน</b> → unblock · ถ้ายังโจมตีอยู่ นับใหม่อัตโนมัติ · IP ที่ไม่เคยเห็นโจมตีหลัง block นับจากวันที่ block (หรือวันที่ Splunk เห็นใน policy) · IP cloud block ได้ · Keep = ไม่ unblock · ส่วนอื่นเหมือน v3.8b</div>
+  <section class="kpis" aria-label="Summary">
+    <div class="kpi k-warn"><span class="label">Detected WAF IPs</span><span class="v" id="kDet">0</span><span class="s" id="kDetSub">last 7 days</span></div>
+    <div class="kpi k-info"><span class="label">Blocked on WAF now</span><span class="v" id="kWaf">0</span><span class="s">policy 2169031 (live)</span></div>
+    <div class="kpi k-crit"><span class="label">Blocked today</span><span class="v" id="kToday">0</span><span class="s" id="kTodaySub">yesterday 0</span></div>
+    <div class="kpi k-crit"><span class="label">Blocked 7 days</span><span class="v" id="k7">0</span><span class="s" id="k7Sub">avg 0 / day</span></div>
+    <div class="kpi k-ok"><span class="label">Unblocked 7 days</span><span class="v" id="kUn7">0</span><span class="s">from audit CSV</span></div>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><h2>Blocked / unblocked IPs per day – last 7 days</h2><div class="legend"><span><i style="background:var(--crit)"></i>Blocked</span><span><i style="background:var(--ok)"></i>Unblocked (+n)</span><span>30 days → Older detections</span></div></div>
+    <div class="chart-wrap" id="chart7"></div>
+  </section>
+  <section class="control" aria-label="Search and block">
+    <div class="crow">
+      <div class="field" style="flex:1 1 600px"><label for="d_q">🔎 Search or add IPs – IP / Ticket / Incident no. / Rule · searches every page and every WAF policy</label><input type="text" id="d_q" placeholder="เช่น 54.245 · 1000101 · หรือวาง IP หลายตัว 203.0.113.10, 198.51.100.7"></div>
+    </div>
+    <div class="result find" id="d_find" hidden></div>
+    <div class="crow">
+      <div class="field" style="flex:1 1 340px"><div class="flabel sel-head"><span>Selected IPs — คลิกแถวในตารางด้านล่าง</span><span><button class="lnk" id="d_all" type="button" hidden>☑ Select all 0 shown</button><button class="lnk" id="d_clr" type="button" hidden>✖ Clear</button></span></div><div class="selbox" id="d_sel"></div></div>
+      <div class="field" style="flex:0 1 190px"><label for="d_tk">Ticket / Incident no.</label><input type="text" id="d_tk" placeholder="1234567"></div>
+      <div class="field" style="flex:1 1 240px"><label for="d_desc">Description</label><input type="text" id="d_desc" placeholder="เหตุผล / รายละเอียด"></div>
+      <button class="run" id="d_run" type="button" disabled>⛔ Block 0 IPs</button>
+      <button class="run u" id="d_un" type="button" hidden title="typed IPs that are already blocked: remove them from the policy that holds them">🔓 Unblock 0 IPs</button>
+      <button class="run nb" id="d_nb" type="button" disabled title="hide the selected IPs until they are detected again">✖ Not block 0 IPs</button>
+    </div>
+    <div class="result running" id="d_chk" hidden></div>
+    <div class="result" id="d_res" hidden></div>
+  </section>
+  <section class="panel detail" id="d_detail" hidden aria-live="polite"></section>
+  <section class="panel">
+    <div class="panel-head">
+      <h2>IPs detected by WAF rules – last 7 days</h2>
+      <p>คลิกแถวเพื่อเลือก · Ticket/Incident no. เติมเลข incident จาก finding note (ตัดคำว่า ITHM ออก) · IP ที่ block แล้วจะย้ายไปหน้า Blocked IPs</p>
+    </div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th></th><th>IP</th><th>VirusTotal</th><th title="AbuseIPDB: confidence of abuse 0-100 % (red ≥ 75, yellow ≥ 25) and number of reports in 90 days · click = AbuseIPDB page">AbuseIPDB</th><th title="GreyNoise: malicious / benign internet scanner, RIOT = known service (CDN, search engine, SaaS), not observed · click = GreyNoise page">GreyNoise</th><th>Rule</th><th>Incident no.</th><th>Severity</th><th>Last detected</th><th style="text-align:right">Findings</th><th style="text-align:right" title="WAF requests in the last 24 h: blocked / allowed">Block / Allow (24h)</th><th style="text-align:right" title="websites the IP tried in the last 24 h: blocked on / allowed on">Web Block / Allow (24h)</th><th title="top URLs of this IP in the last 24 h: red = blocked by the WAF, green = let through">Top paths (24h)</th><th>Suggestion</th><th>Location</th><th title="new: owner of the IP and warning signals – click to open IP detail">Decision aid (24h)<span class="new">NEW</span></th></tr></thead>
+      <tbody id="d_tbl"></tbody></table></div>
+  </section>
+</main>
+
+<!-- ============ Page 2: older detections (> 7 days, search + Block) ============ -->
+<main class="wrap" id="v-history" hidden>
+  <section class="panel">
+    <div class="panel-head"><h2>Blocked / unblocked IPs per day – last 30 days</h2><div class="legend"><span><i style="background:var(--crit)"></i>Blocked</span><span><i style="background:var(--ok)"></i>Unblocked (+n)</span><span>hover a day for details</span></div></div>
+    <div class="chart-wrap" id="chart30"></div>
+  </section>
+  <section class="control" aria-label="Search and block older detections">
+    <div class="crow">
+      <div class="field" style="flex:1 1 500px"><label for="h_q">🔎 Search or add IPs – IP / Ticket / Incident no. / Rule · searches every page and every WAF policy</label><input type="text" id="h_q" placeholder="เช่น 45.95 · 1000060 · หรือวาง IP หลายตัว 203.0.113.10, 198.51.100.7"></div>
+      <div class="field" style="flex:0 0 210px"><label for="h_rng">Detected</label><select id="h_rng"><option value="30">8 – 30 days ago</option><option value="90">31 – 90 days ago</option><option value="all">older than 7 days (all)</option></select></div>
+    </div>
+    <div class="crow">
+      <div class="field" style="flex:1 1 340px"><div class="flabel sel-head"><span>Selected IPs — คลิกแถวในตารางด้านล่าง</span><span><button class="lnk" id="h_all" type="button" hidden>☑ Select all 0 shown</button><button class="lnk" id="h_clr" type="button" hidden>✖ Clear</button></span></div><div class="selbox" id="h_sel"></div></div>
+      <div class="field" style="flex:0 1 190px"><label for="h_tk">Ticket / Incident no.</label><input type="text" id="h_tk" placeholder="1234567"></div>
+      <div class="field" style="flex:1 1 240px"><label for="h_desc">Description</label><input type="text" id="h_desc" placeholder="เหตุผล / รายละเอียด"></div>
+      <button class="run" id="h_run" type="button" disabled>⛔ Block 0 IPs</button>
+      <button class="run u" id="h_un" type="button" hidden title="typed IPs that are already blocked: remove them from the policy that holds them">🔓 Unblock 0 IPs</button>
+      <button class="run nb" id="h_nb" type="button" disabled title="hide the selected IPs until they are detected again">✖ Not block 0 IPs</button>
+    </div>
+    <div class="result find" id="h_find" hidden></div>
+    <div class="result running" id="h_chk" hidden></div>
+    <div class="result" id="h_res" hidden></div>
+  </section>
+  <section class="panel detail" id="h_detail" hidden aria-live="polite"></section>
+  <section class="panel">
+    <div class="panel-head"><h2 id="h_title">IPs detected by WAF rules – 8 to 30 days ago</h2><p>ยังไม่ได้ block · คลิกแถวเพื่อเลือก</p></div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th></th><th>IP</th><th>VirusTotal</th><th title="AbuseIPDB: confidence of abuse 0-100 % (red ≥ 75, yellow ≥ 25) and number of reports in 90 days · click = AbuseIPDB page">AbuseIPDB</th><th title="GreyNoise: malicious / benign internet scanner, RIOT = known service (CDN, search engine, SaaS), not observed · click = GreyNoise page">GreyNoise</th><th>Rule</th><th>Incident no.</th><th>Severity</th><th>Last detected</th><th style="text-align:right">Findings</th><th style="text-align:right" title="WAF requests in the last 30 days: blocked / allowed">Block / Allow (30d)</th><th style="text-align:right" title="websites the IP tried in the last 30 days: blocked on / allowed on">Web Block / Allow (30d)</th><th title="top URLs of this IP in the last 30 days: red = blocked by the WAF, green = let through">Top paths (30d)</th><th title="last request of this IP seen on the WAF (30 days)">WAF last seen</th><th>Suggestion</th><th>Location</th><th title="new: owner of the IP and warning signals – click to open IP detail">Decision aid (30d)<span class="new">NEW</span></th></tr></thead>
+      <tbody id="h_tbl"></tbody></table></div>
+  </section>
+</main>
+
+<!-- ============ Page 3: Blocked IPs / Unblock + Auto unblock (one page since v3.15) ============ -->
+<main class="wrap" id="v-blocked" hidden>
+  <section class="kpis" aria-label="Blocked IPs summary">
+    <div class="kpi k-info"><span class="label">Blocked on the WAF</span><span class="v" id="bWaf">0</span><span class="s" id="bWafSub">all policies</span></div>
+    <div class="kpi k-warn"><span class="label">Attacking now</span><span class="v" id="bAtt">0</span><span class="s">blocked IPs with a request in the last 24 h</span></div>
+    <div class="kpi k-crit"><span class="label">Attacks in the last 24 h</span><span class="v" id="bAtk">0</span><span class="s" id="bAtkSub">requests the WAF still blocked</span></div>
+    <div class="kpi k-crit"><span class="label">Due now</span><span class="v" id="bDue">0</span><span class="s">auto unblocked at the next run (02:17)</span></div>
+    <div class="kpi k-ok"><span class="label">Kept (no expiry)</span><span class="v" id="bKeep">0</span><span class="s">never auto unblocked</span></div>
+    <div class="kpi"><span class="label">Unblocked · 7 days</span><span class="v" id="bUn7">0</span><span class="s" id="bUn7Sub">from the audit log</span></div>
+  </section>
+  <section class="austrip" aria-label="Auto unblock rules">
+    <span class="pill p-safe">⏱ AUTO UNBLOCK ON</span>
+    <span>☁ Cloud provider / shared IP: <b>7 days</b> without an attack</span>
+    <span>Other IPs: <b>60 days</b> without an attack</span>
+    <span>All enabled policies</span>
+    <span>Rounds of <b>10</b> IPs, each confirmed on the WAF · no daily limit</span>
+    <span class="note">every day 02:17 · fixed values</span>
+    <button type="button" class="lnk" id="b_howBtn" aria-expanded="false">How it works ▾</button>
+  </section>
+  <section class="cols" id="b_how" hidden>
+    <section class="panel" aria-labelledby="au_hFlow">
+      <div class="panel-head"><h2 id="au_hFlow">How it works</h2><p>saved search “Imperva V2 - Auto unblock (daily)” · 02:17</p></div>
+      <ol class="flow">
+        <li><b>Read</b>IP rule ของทุก policy (cache ทุก 5 นาที) + IP ที่ block จาก Splunk</li>
+        <li><b>Last attack</b>log “Blocked IP” ของ Imperva ทุกชั่วโมง = IP ยังส่ง request เข้ามา</li>
+        <li><b>Check daily</b>ไม่โจมตีครบ 7 วัน (cloud / shared IP) / 60 วัน → unblock · ข้าม Keep</li>
+        <li><b>Unblock</b>ผ่าน SOAR + verify · audit log · ถ้าโจมตีใหม่ → กลับมาหน้า Block</li>
+      </ol>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><h2>Expiring in the next 30 days</h2><p id="au_chartNote"></p></div>
+      <div id="au_chart"></div>
+    </section>
+  </section>
+  <section class="control u" aria-label="Search, unblock and auto unblock rule">
+    <div class="crow">
+      <div class="field" style="flex:1 1 300px"><label for="b_q">🔎 Search IP / Ticket / Incident no. / Description / Policy</label><input type="text" id="b_q" placeholder="เช่น 193.42 หรือ 1000090 หรือ DDoS"></div>
+    </div>
+    <div class="crow">
+      <div class="field" style="flex:1 1 340px"><div class="flabel sel-head"><span>Selected IPs — คลิกแถวในตารางด้านล่าง (ทุก policy)</span><span><button class="lnk" id="b_clr" type="button" hidden>✖ Clear</button></span></div><div class="selbox" id="b_sel"></div></div>
+      <div class="field" style="flex:0 1 190px"><label for="b_tk">Ticket / Incident no.</label><input type="text" id="b_tk" placeholder="1234567"></div>
+      <div class="field" style="flex:1 1 240px"><label for="b_desc">Description / reason</label><input type="text" id="b_desc" placeholder="เหตุผล (บันทึกลง audit log)"></div>
+      <button class="run u" id="b_run" type="button" disabled>🔓 Unblock 0 IPs</button>
+    </div>
+    <div class="crow">
+      <div class="field" style="flex:0 1 330px"><label for="b_setDur">Auto unblock rule for the selected IPs</label><select id="b_setDur"><option value="default">Default (cloud / shared 7 · others 60 quiet days)</option><option value="keep">📌 Keep (never unblock)</option><option value="7">7 quiet days</option><option value="30">30 quiet days</option><option value="90">90 quiet days</option><option value="180">180 quiet days</option><option value="365">365 quiet days</option></select></div>
+      <button type="button" class="btn-primary" id="b_apply" disabled>Apply rule</button>
+      <span class="note">ไม่ส่งอะไรไป WAF – เปลี่ยนแค่เวลาที่จะ auto unblock</span>
+    </div>
+    <div class="result" id="b_res" hidden></div>
+  </section>
+  <section class="panel" aria-labelledby="b_hTbl">
+    <div class="panel-head"><h2 id="b_hTbl">IPs blocked on the WAF – all policies (read live)</h2><p id="bRead"></p></div>
+    <div class="toolbar"><div class="filters" role="group" aria-label="Filter" id="b_filters"></div></div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th></th><th>IP</th><th>Status</th><th>Last attack</th><th style="text-align:right" title="requests the WAF still blocked from this IP in the last 24 h">Attacks 24h</th><th title="unblocked when the IP sent no request for this many days (cloud provider / shared 7, others 60, or set per IP)">Unblock after</th><th>Unblock on</th><th>Left</th><th>Owner</th><th>Policy</th><th title="block date (from Splunk) or the first time Splunk saw the rule in the policy">Blocked / listed since</th><th>Ticket</th><th>Description</th><th>Blocked by</th><th>Detected by rule</th></tr></thead>
+      <tbody id="b_tbl"></tbody></table></div>
+  </section>
+</main>
+
+<!-- ============ Page 4: detection rules ============ -->
+<main class="wrap" id="v-rules" hidden>
+  <section class="panel">
+    <div class="panel-head"><h2>Detection rules · KV store imperva_ioc_rules</h2></div>
+    <p class="note" style="margin:0 0 12px">หน้า Block ดึง finding เฉพาะ rule ที่ <b>Include</b> และไม่ตรงกับ rule ที่ <b>Exclude</b> · ใช้ <span class="mono">*</span> เป็น wildcard ได้ · เปลี่ยนแล้วมีผลทันที ไม่ต้องแก้ code หรือ deploy app ใหม่ · ทุกการเปลี่ยนแปลงบันทึกลง audit CSV</p>
+    <div class="crow" style="margin-bottom:12px;padding:10px;border:1px dashed var(--line);border-radius:var(--r)">
+      <div class="field" style="flex:1 1 320px"><label for="rName">Rule name / pattern (เลือกจาก ES หรือพิมพ์เอง)</label><input type="text" id="rName" list="esRules" placeholder="เช่น WAF - SQL Injection Burst หรือ *WAF*"><datalist id="esRules"></datalist></div>
+      <div class="field" style="flex:0 0 150px"><label for="rMode">Mode</label><select id="rMode"><option value="include">Include</option><option value="exclude">Exclude</option></select></div>
+      <div class="field" style="flex:1 1 220px"><label for="rNote">Note</label><input type="text" id="rNote" placeholder="เหตุผล (optional)"></div>
+      <button class="run u" id="rAdd" type="button">＋ Add rule</button>
+    </div>
+    <div class="tbl-wrap" style="max-height:none"><table>
+      <thead><tr><th>Enabled</th><th>Rule name / pattern</th><th>Mode</th><th style="text-align:right">Findings 7d</th><th>Note</th><th>Updated by</th><th>Updated</th><th></th></tr></thead>
+      <tbody id="rules"></tbody></table></div>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><h2>Preview · ES correlation searches ที่สร้าง finding (7 days)</h2><p>✔ = ถูกดึงเข้าหน้า Block</p></div>
+    <div class="tbl-wrap" style="max-height:none"><table>
+      <thead><tr><th>Used</th><th>ES correlation search</th><th style="text-align:right">Findings 7d</th><th>Matched by</th></tr></thead>
+      <tbody id="esPrev"></tbody></table></div>
+  </section>
+</main>
+
+<!-- ============ Page 5: audit log ============ -->
+<main class="wrap" id="v-audit" hidden>
+  <section class="panel">
+    <div class="panel-head"><h2>Audit log · lookup imperva_audit.csv</h2></div>
+    <p class="note" style="margin:0 0 10px">ทุกการ Block / Unblock / แก้ Detection rule จะ append ลง <span class="mono">imperva_audit.csv</span> (outputlookup append=true, replicate ทั้ง search head cluster) · ใน Splunk: <span class="mono">| inputlookup imperva_audit.csv</span> · Export → CSV ได้</p>
+    <div class="crow" style="margin-bottom:10px">
+      <div class="field" style="flex:1 1 260px"><label for="aq">Search IP / Ticket / user</label><input type="text" id="aq"></div>
+      <div class="field" style="flex:0 0 160px"><label for="aact">Action</label><select id="aact"><option value="">All</option><option>block</option><option>unblock</option><option>not_block</option><option>restore</option><option>rule_add</option><option>rule_remove</option><option>rule_enable</option><option>rule_disable</option><option>auto_unblock_rule</option></select></div>
+    </div>
+    <div class="tbl-wrap" style="max-height:none"><table>
+      <thead><tr><th>Time</th><th>User</th><th>Action</th><th>IP</th><th>Ticket / Incident no.</th><th>Description</th><th>Status</th><th>Verified</th><th>SOAR container</th></tr></thead>
+      <tbody id="audit"></tbody></table></div>
+  </section>
+  <section class="panel" aria-labelledby="au_hRun">
+    <div class="panel-head"><h2 id="au_hRun">Auto unblock – run now and unblock log</h2><p>เขียนลง audit log เดิม (imperva_audit.csv) · ดูได้ที่หน้า Audit log ด้วย</p></div>
+    <div class="runbox"><div class="plan" id="au_plan"></div><button type="button" class="btn-ok" id="au_run">▶ Run now</button></div>
+    <div class="result" id="au_res" hidden></div>
+    <div class="tbl-wrap" style="max-height:340px"><table>
+      <thead><tr><th>Time</th><th>IP</th><th>Action</th><th>Status</th><th>Ticket</th><th>Detail</th></tr></thead>
+      <tbody id="au_log"></tbody></table></div>
+  </section>
+</main>
+
+<div class="toast" id="toast" hidden role="status"></div>
+
+<script>
+(function(){
+"use strict";
+const USER="analyst01", HOUR=3600e3, DAY=86400e3, now0=Date.now();
+const RULES=["WAF - High-Volume Blocked Requests from Single Source","WAF - Partner Site Attack","WAF - DDoS Behavior Detection","WAF - Abnormal User-Agent Length","WAF - Attack Analytics Multi-Category"];
+const D=(ip,rule,inc,sev,ageH,n,vt,loc,sug,pol)=>({ip,rule:RULES[rule],inc,sev,last:now0-ageH*HOUR,n,vt,loc,sug,pol:pol||"-"});
+const detected=[
+ D("54.245.198.114",1,"1000101","high",0.5,14,6,"Boardman, US","BLOCK"),
+ D("54.213.203.214",1,"1000101","high",0.6,11,5,"Boardman, US","BLOCK"),
+ D("52.88.145.123",1,"1000101","high",0.7,9,2,"Boardman, US","REVIEW"),
+ D("223.181.15.230",4,"-","medium",20,3,9,"Mumbai, IN","BLOCK"),
+ D("211.24.84.19",2,"1000102","medium",30,4,3,"Kuala Lumpur, MY","BLOCK"),
+ D("57.141.0.36",3,"-","medium",50,2,0,"Paris, FR","MONITOR"),
+ D("185.220.101.47",0,"1000103","high",75,21,14,"Frankfurt, DE","ALREADY_BLOCKED","BLOCK in 1000001 Block DDoS policy"),
+ D("20.20.20.20",0,"-","low",100,5,0,"Singapore, SG","DO_NOT_BLOCK","ALLOW in 1000002 Allow partner DC"),
+ D("103.152.18.90",0,"1000104","medium",140,6,1,"Ho Chi Minh City, VN","REVIEW"),
+ D("198.51.100.77",3,"1000105","medium",5,3,0,"Bangkok, TH","REVIEW"),
+ D("35.240.10.8",4,"1000106","medium",8,2,3,"Singapore, SG","BLOCK"),
+ D("45.95.147.236",0,"1000060","high",10*24,18,11,"Amsterdam, NL","BLOCK"),
+ D("194.26.29.102",2,"1000058","medium",13*24,7,6,"Moscow, RU","BLOCK"),
+ D("118.193.33.60",4,"-","medium",19*24,4,2,"Hong Kong, HK","REVIEW"),
+ D("5.188.206.14",3,"-","low",26*24,2,1,"St Petersburg, RU","MONITOR"),
+ D("89.248.165.52",0,"1000031","high",45*24,25,12,"Amsterdam, NL","BLOCK"),
+ D("162.142.125.9",0,"-","low",70*24,3,4,"Ann Arbor, US","REVIEW"),
+];
+// dur: undefined = default period (cloud / shared 7 d / others 60 d), number = days set for this IP, "keep" = no expiry
+// hits = requests the WAF blocked from the IP (ACL) in the look-back window
+const blocked=[
+ {ip:"193.42.33.7",t:now0-3*DAY,tk:"1000090",desc:"Credential stuffing on /login",by:"analyst01",rule:RULES[0]},
+ {ip:"141.98.10.60",t:now0-9*DAY,tk:"1000071",desc:"Scanner, VT 9/94",by:"analyst02",rule:RULES[4],hits:412,seen:now0-2*HOUR},
+ {ip:"91.240.118.172",t:now0-14*DAY,tk:"1000055",desc:"SQLi burst on partner site",by:"analyst03",rule:RULES[1]},
+ {ip:"13.229.88.40",t:now0-2*DAY-3*HOUR,tk:"1000129",desc:"Credential stuffing from AWS",by:"analyst01",rule:RULES[0]},
+ {ip:"34.120.45.17",t:now0-6*DAY-5*HOUR,tk:"1000112",desc:"Scanner on Google Cloud",by:"analyst01",rule:RULES[4]},
+ {ip:"3.120.33.9",t:now0-8*DAY,tk:"1000108",desc:"Bot on AWS, 2k req / h",by:"analyst02",rule:RULES[2],hits:310,seen:now0-1*DAY-4*HOUR},
+ {ip:"104.248.50.3",t:now0-20*DAY,tk:"1000096",desc:"Exploit attempts /vendor/phpunit",by:"analyst03",rule:RULES[4],dur:30},
+ {ip:"45.142.120.11",t:now0-61*DAY,tk:"1000077",desc:"Path traversal",by:"analyst01",rule:RULES[1]},
+ {ip:"80.82.77.33",t:now0-88*DAY,tk:"1000061",desc:"Mass scanner",by:"analyst02",rule:RULES[4],hits:57,seen:now0-6*DAY},
+ {ip:"193.163.125.9",t:now0-93*DAY,tk:"1000052",desc:"Brute force on /api/v1/login",by:"analyst03",rule:RULES[0]},
+ {ip:"152.32.180.2",t:now0-96*DAY,tk:"1000047",desc:"SQLi, still active",by:"analyst01",rule:RULES[1],hits:140,seen:now0-5*HOUR},
+ {ip:"185.156.73.54",t:now0-130*DAY,tk:"1000020",desc:"Known C2 infrastructure (TI)",by:"analyst02",rule:RULES[4],dur:"keep"},
+];
+// IPs blocked by the OTHER WAF policies (IP rules read from every enabled policy - no block date:
+// "listed" = first time Splunk saw the rule in the policy); seen = last request the WAF blocked from the IP
+const POLICY={2169031:"BlockIOCsFromSplunk",1000001:"Block DDoS policy",1000003:"Block IOC attack"};
+const otherBlocked=[
+ {ip:"185.220.101.47",pol:1000001,listed:now0-200*DAY,seen:now0-3*HOUR,hits:880,desc:"Tor exit"},
+ {ip:"35.165.106.69",pol:1000003,listed:now0-40*DAY,seen:now0-9*DAY,hits:0,desc:"-"},
+ {ip:"52.14.90.3",pol:1000003,listed:now0-20*DAY,seen:now0-2*DAY,hits:44,desc:"-"},
+ {ip:"61.177.172.13",pol:1000001,listed:now0-300*DAY,seen:now0-120*DAY,hits:0,desc:"SSH / login brute force"},
+ {ip:"218.92.0.112",pol:1000001,listed:now0-150*DAY,seen:now0-60*DAY,hits:0,desc:"-"},
+ {ip:"45.9.20.18",pol:1000003,listed:now0-95*DAY,seen:null,hits:0,desc:"-"},
+];
+// Auto unblock rules (fixed values since v3.14; shown in the strip on the Blocked IPs page)
+// def / cloud = days WITHOUT an attack before the IP is unblocked; scope = which policies are changed
+const AU=Object.freeze({mode:"auto", def:60, cloud:7, remind:7, batch:10, scope:"all"});   // fixed values (v3.14): no settings, no report-only
+const auLog=[
+ {t:now0-1*DAY-3*HOUR, ip:"80.94.95.115", act:"auto_unblock", st:"unblocked · verified", tk:"1000012", det:"no attack for 60 days (last seen 2026-09-12)"},
+ {t:now0-1*DAY-3*HOUR, ip:"35.198.44.21", act:"auto_unblock", st:"unblocked · verified", tk:"1000118", det:"cloud provider IP (Google Cloud) – no attack for 7 days"},
+ {t:now0-4*DAY-3*HOUR, ip:"92.118.39.120", act:"auto_unblock", st:"unblocked · verified", tk:"1000008", det:"no attack for 60 days (never seen after the block)"},
+];
+const audit=blocked.map((b,i)=>({t:b.t,user:b.by,action:"block",ip:b.ip,tk:b.tk,desc:b.desc,status:"blocked",ver:"yes",cont:4700+i*13}));
+const rules=[
+ {id:1,pat:"*WAF*",mode:"include",on:true,note:"all WAF correlation searches",by:"admin",t:now0-30*DAY},
+ {id:2,pat:"*WAF Monitor Error code 404*",mode:"exclude",on:true,note:"monitoring only, not an attack",by:"admin",t:now0-30*DAY},
+];
+let ruleSeq=3;
+const esSearches=[
+ {name:RULES[0],n:31},{name:RULES[1],n:34},{name:RULES[2],n:4},{name:RULES[3],n:2},{name:RULES[4],n:3},
+ {name:"WAF Monitor Error code 404",n:412},{name:"Bot - Credential Stuffing on Login API",n:7},{name:"Endpoint - Malware Detected",n:12},
+];
+const wild=(pat,str)=>new RegExp("^"+pat.split("*").map(x=>x.replace(/[.+?^${}()|[\]\\]/g,"\\$&")).join(".*")+"$","i").test(str);
+const ruleUsed=name=>{const inc=rules.find(r=>r.on&&r.mode==="include"&&wild(r.pat,name)); const exc=rules.find(r=>r.on&&r.mode==="exclude"&&wild(r.pat,name)); return {use:!!inc&&!exc,inc,exc};};
+let seed=11; const rnd=()=>(seed=(seed*9301+49297)%233280)/233280;
+const daily=[]; const t0=new Date(); t0.setHours(0,0,0,0);
+for(let i=29;i>=0;i--){ daily.push({day:new Date(t0.getTime()-i*DAY), b:i===0?0:Math.floor(rnd()*7)+(rnd()>.85?6:0), u:rnd()>.75?Math.floor(rnd()*3):0}); }
+
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const pad=n=>String(n).padStart(2,"0");
+const fmt=t=>{const d=new Date(t);return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;};
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function toast(m){const t=$("toast");t.textContent=m;t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>t.hidden=true,4200);}
+window.toast=toast;
+const sugPill={BLOCK:"p-block",REVIEW:"p-review",MONITOR:"p-monitor",ALREADY_BLOCKED:"p-done",DO_NOT_BLOCK:"p-safe"};
+const onWaf=ip=>blocked.some(b=>b.ip===ip);
+const has=(q,...xs)=>!q||xs.join(" ").toLowerCase().includes(q);
+const age=d=>now0-d.last;
+// simulated WAF activity of the last 24 h per IP (Imperva logs: act=REQ_BLOCKED_* / REQ_PASSED)
+// simulated top URL paths per IP and WAF result (real: field request of the Imperva CEF logs, top 3 + "more")
+const SITES=["www.example.com","api.example.com","partner.example.com"];
+const BAD=["/wp-login.php","/.env","/admin/config.php","/api/v1/login","/cgi-bin/luci","/phpmyadmin/","/vendor/phpunit/eval-stdin.php","/login","/.git/config","/api/v1/transfer"];
+const GOOD=["/","/login","/api/v1/login","/static/app.js","/search","/api/v1/rates"];
+function paths(ip, total, list, sites){ if(!total) return [];
+  let h=0; for(const c of ip+list.length) h=(h*33+c.charCodeAt(0))%7919;
+  const k=Math.min(sites, 2+h%4), out=[]; let left=total;
+  for(let i=0;i<k&&left>0;i++){ const n=i===k-1?left:Math.max(1,Math.round(left*(0.45+((h>>i)%3)*0.1))); left-=n;
+    out.push({p:SITES[(h+i)%SITES.length]+list[(h+i*3)%list.length], n}); }
+  return out.sort((a,b)=>b.n-a.n); }
+// v3.8: EVERY path of the IP (simulated long tail), merged by host + path, highest count first
+function fullPaths(ip, total, list, salt){ if(!total) return [];
+  const h=hh(ip, salt), n=Math.min(total, 4+h%9), m={}; let left=total;
+  for(let i=0;i<n&&left>0;i++){ const share=i===n-1?left:Math.max(1,Math.round(left*(0.34+((h>>i)%4)*0.07))); left-=share;
+    const k=SITES[(h+i)%SITES.length]+list[(h+i*7)%list.length]; m[k]=(m[k]||0)+share; }
+  return Object.entries(m).map(([p,n])=>({p,n})).sort((a,b)=>b.n-a.n); }
+// one cell: up to 3 blocked paths (red count) + up to 2 allowed paths (green count)
+function pathCell(blk, alw){ if(!blk.length && !alw.length) return '<span class="note">-</span>';
+  const line=(x,cls)=>`<div><span class="${cls}">${x.n.toLocaleString()}</span> ${esc(x.p)}</div>`;
+  const more=Math.max(0,blk.length-3)+Math.max(0,alw.length-2);
+  return `<div class="paths">${blk.slice(0,3).map(x=>line(x,"bk")).join("")}${alw.slice(0,2).map(x=>line(x,"al")).join("")}${more?`<div class="note">+${more} more</div>`:""}<a href="#" class="note" onclick="event.preventDefault();event.stopPropagation();toast('Real dashboard: opens a Splunk search with every URL of this IP (incl. query strings) in a new tab')">🔍 all paths</a></div>`; }
+const act=(ip,win,det)=>{let h=0; for(const c of ip) h=(h*31+c.charCodeAt(0))%9973;
+  if(win==="30d"){ // older detections: most stopped attacking, some still active / allowed through
+    const none=h%5===0, b=none?0:(h%4200)+35, a=none?0:(h%3===0?(h%260)+1:0);
+    const from=Math.max(det||0, now0-30*DAY), last=none?null:from+((now0-from)*((h%97)/97));   // never before the detection
+    return {b, a, wb: b?1+h%9:0, wa: a?1+h%4:0, last};}
+  const b=h%7===0?0:(h%1900)+12, a=h%3===0?(h%140)+1:0; return {b, a, wb: b?1+h%6:0, wa: a?1+h%3:0};};
+// ---------- NEW (v3.8): decision aid – all simulated. Real sources: ES risk index, VT ASN / AS owner +
+// ES asset lookup + Imperva client classification, Imperva CEF (cef_name, response code, user agent), audit CSV
+const hh=(ip,salt)=>{let h=salt||7; for(const c of ip) h=(h*31+c.charCodeAt(0))%100003; return h;};
+const OWN={"35.165.106.69":["cloud","AS16509 Amazon AWS"],"52.14.90.3":["cloud","AS16509 Amazon AWS"],"61.177.172.13":["isp","AS4134 Chinanet"],"218.92.0.112":["isp","AS4134 Chinanet"],"45.9.20.18":["host","AS49870 Alsycon"],"13.229.88.40":["cloud","AS16509 Amazon AWS"],"34.120.45.17":["cloud","AS396982 Google Cloud"],"3.120.33.9":["cloud","AS16509 Amazon AWS"],"104.248.50.3":["host","AS14061 DigitalOcean"],"54.245.198.114":["cloud","AS16509 Amazon AWS"],"54.213.203.214":["cloud","AS16509 Amazon AWS"],"52.88.145.123":["cloud","AS16509 Amazon AWS"],"35.240.10.8":["cloud","AS396982 Google Cloud"],
+ "223.181.15.230":["mob","AS45609 Bharti Airtel"],"211.24.84.19":["isp","AS4788 TM Net"],"57.141.0.36":["bot","AS32934 Meta · facebookexternalhit"],
+ "103.152.18.90":["isp","AS45899 VNPT"],"45.95.147.236":["host","AS49870 Alsycon"],"194.26.29.102":["host","AS206728 Media Land"],
+ "118.193.33.60":["host","AS135377 UCloud"],"5.188.206.14":["host","AS49453 Global Layer"],"89.248.165.52":["host","AS202425 IP Volume"],
+ "162.142.125.9":["host","AS398324 Censys (research scanner)"],"198.51.100.77":["thmob","AS131445 AIS mobile"],
+ "185.220.101.47":["host","AS60729 Tor exit"],"20.20.20.20":["asset","partner DC (ES asset)"]};
+const OWN_LABEL={cloud:"Cloud provider · shared IP",host:"Hosting / VPS",isp:"ISP",mob:"Mobile ISP · shared IP",thmob:"TH mobile · shared IP",bot:"Crawler (verified)",asset:"Asset / partner"};
+const RISK_RULES=["Risk - Web Attack from External IP","Risk - Threat Intel Match (IP)","Risk - Brute Force Login","Risk - Scanner Activity","Risk - Abnormal Request Rate"];
+const ATK=["SQL Injection","Cross Site Scripting","Illegal Resource Access","Bot Access Control","Remote File Inclusion","Blocked IP"];
+const CLIENT={cloud:[["Bad Bot","python-requests","python-requests/2.31.0"],["Vulnerability Scanner","Nuclei","Mozilla/5.0 (Windows NT 10.0; Win64; x64) Nuclei - Open-source project"]],host:[["Vulnerability Scanner","Nuclei","Mozilla/5.0 (Windows NT 10.0; Win64; x64) Nuclei - Open-source project"],["Bad Bot","python-requests","python-requests/2.31.0"],["Vulnerability Scanner","sqlmap","sqlmap/1.7.2#stable (https://sqlmap.org)"]],
+ isp:[["Bad Bot","curl","curl/8.4.0"]],mob:[["Browser","Chrome Mobile","Mozilla/5.0 (Linux; Android 13) Chrome/124.0 Mobile Safari/537.36"]],
+ thmob:[["Browser","Chrome Mobile","Mozilla/5.0 (Linux; Android 14; SM-A546E) Chrome/125.0 Mobile Safari/537.36"]],
+ bot:[["Search Bot","facebookexternalhit","facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)"]],asset:[["Browser","Chrome","Mozilla/5.0 Chrome/124.0"]]};
+const HIST={"45.95.147.236":{un:[now0-40*DAY,"analyst02","false positive – partner test"]},"89.248.165.52":{nb:[now0-70*DAY,"analyst01","quiet 0 / 0"]}};
+function ctx(d, win){
+  const ip=d.ip, h=hh(ip,win==="30d"?13:7), o=OWN[ip]||["isp","AS0 unknown"], w=act(ip, win, d.last);
+  const quiet=!w.b&&!w.a, sev={high:3,medium:2,low:1}[d.sev]||1;
+  let score=o[0]==="bot"||o[0]==="asset"?0:o[0]==="thmob"?30:Math.round((sev*40+d.vt*9+(h%60))*(win==="30d"&&quiet?0.3:1));
+  const nr=score?1+h%3:0, rules=[]; let left=score;
+  for(let i=0;i<nr;i++){ const v=i===nr-1?left:Math.round(left*0.55); left-=v; rules.push([RISK_RULES[(h+i*2)%RISK_RULES.length],v,1+(h>>i)%6]); }
+  const atk=[]; if(w.b){ let left2=w.b; const k=Math.min(3,1+h%3); for(let i=0;i<k;i++){ const v=i===k-1?left2:Math.round(left2*0.6); left2-=v; atk.push([ATK[(h+i)%ATK.length],v]); } }
+  const codes={}; if(w.a){ const ok=o[0]==="thmob"||o[0]==="mob"?Math.round(w.a*0.8):(h%4===0?Math.max(1,Math.round(w.a*0.3)):0); if(ok) codes["200"]=ok; const r=w.a-ok; if(r){ codes[h%2?"404":"403"]=Math.ceil(r*0.7); if(r>1) codes["302"]=Math.floor(r*0.3);} }
+  const cl=(CLIENT[o[0]]||CLIENT.isp)[h%(CLIENT[o[0]]||CLIENT.isp).length];
+  const trend=Array.from({length:24},(_,i)=>quiet?0:((h>>(i%9))%5===0?0:((h*(i+3))%37)+(i>18&&h%3?20:0)));
+  const last1h=quiet?0:trend[23];
+  const asn=o[1].split(" ")[0], nbr=detected.filter(x=>x.ip!==ip&&(OWN[x.ip]||[])[1]&&OWN[x.ip][1].split(" ")[0]===asn).map(x=>x.ip);
+  const c24=detected.filter(x=>x.ip!==ip&&x.ip.split(".").slice(0,3).join(".")===ip.split(".").slice(0,3).join(".")).map(x=>x.ip);
+  const hist=HIST[ip]||{}, days=1+h%6+(d.n>15?6:0), first=d.last-(h%25)*DAY;
+  const sig=[];
+  if(o[0]==="cloud") sig.push(["c",`☁ cloud provider – unblock after ${AU.cloud} quiet days`]);
+  if(atk.length&&codes["200"]&&o[0]!=="thmob") sig.push(["w",`⚠ attacks + allowed 200 ×${codes["200"]}`]);
+  if(o[0]==="thmob"||o[0]==="mob") sig.push(["c","⚠ shared IP – may hit customers"]);
+  if(o[0]==="bot") sig.push(["i","✔ crawler verified by Imperva"]);
+  if(last1h) sig.push(["c",`● active now · 1h: ${last1h}`]);
+  if(hist.un) sig.push(["c","↺ unblocked before"]);
+  if(hist.nb) sig.push(["i","✖ not blocked before"]);
+  if(nbr.length) sig.push(["i",`${asn}: ${nbr.length} more detected`]);
+  if(c24.length) sig.push(["i",`/24: ${c24.length} more detected`]);
+  if(days>=7) sig.push(["i",`seen on ${days} days / 90d`]);
+  return {w,o,score,rules,atk,codes,cl,trend,last1h,nbr,c24,hist,days,first,sig,win};
+}
+const rcls=v=>v>=150?"r-hi":v>=60?"r-mid":"r-lo";
+// cloud provider IPs (AWS, Google Cloud, Azure, ...) are shared / re-assigned: never suggest BLOCK
+const cloudOf=ip=>{const o=OWN[ip]; return o&&o[0]==="cloud"?o[1].replace(/^AS\d+ /,""):null;};
+// cloud provider OR shared IP (mobile carrier NAT): both get the short quiet period (AU.cloud days)
+const shortOf=ip=>{const o=OWN[ip]; return o&&(o[0]==="cloud"||o[0]==="mob"||o[0]==="thmob")?o[1].replace(/^AS\d+ /,""):null;};
+const sharedOf=ip=>{const o=OWN[ip]; return o&&(o[0]==="mob"||o[0]==="thmob")?o[1].replace(/^AS\d+ /,""):null;};
+// requests the WAF still blocked from a blocked IP in the last 24 h
+const attacks24=b=>b.seen&&Date.now()-b.seen<DAY?(b.hits||0):0;
+// AbuseIPDB + GreyNoise (V2): looked up through SOAR like VirusTotal, 24 h cache, warm-up search every hour.
+// a = AbuseIPDB confidence %, r = reports (90 days), u = distinct reporters, g = GreyNoise class, n = GreyNoise name
+const INTEL_FIX={"185.220.101.47":{a:100,r:1520,u:310,g:"malicious"},"45.95.147.236":{a:96,r:412,u:120,g:"malicious"},"89.248.165.52":{a:100,r:2904,u:640,g:"malicious"},
+ "194.26.29.102":{a:88,r:201,u:77,g:"malicious"},"57.141.0.36":{a:0,r:0,u:0,g:"riot",n:"Meta crawler"},"162.142.125.9":{a:18,r:96,u:40,g:"benign",n:"Censys"},
+ "5.188.206.14":{a:41,r:35,u:12,g:"unknown"},"198.51.100.77":{a:0,r:0,u:0,g:"none"},"20.20.20.20":{a:0,r:0,u:0,g:"riot",n:"Microsoft"},
+ "223.181.15.230":{a:79,r:64,u:31,g:"malicious"},"52.88.145.123":{a:9,r:4,u:3,g:"none"}};
+function intelOf(ip){ const d=detected.find(x=>x.ip===ip)||{vt:0}; return INTEL_FIX[ip]||{a:Math.min(100,d.vt*9),r:d.vt*23,u:d.vt*6,g:d.vt>=6?"malicious":d.vt>=1?"unknown":"none"}; }
+const abCls=a=>a>=75?"ab-h":a>=25?"ab-m":"ab-l";
+function abCell(ip){ const i=intelOf(ip); return `<a class="ab ${abCls(i.a)}" href="https://www.abuseipdb.com/check/${ip}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="AbuseIPDB: ${i.r} reports from ${i.u} users in 90 days">${i.a}%</a> <span class="note">${i.r}</span>`; }
+const GN_LABEL={malicious:["gn-m","malicious"],benign:["gn-b","benign"],riot:["gn-b","RIOT"],unknown:["gn-u","unknown"],none:["gn-n","not observed"]};
+function gnCell(ip){ const i=intelOf(ip), g=GN_LABEL[i.g]; return `<a class="gn ${g[0]}" href="https://viz.greynoise.io/ip/${ip}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="GreyNoise${i.n?": "+esc(i.n):""}">${g[1]}${i.n?" · "+esc(i.n):""}</a>`; }
+// same rules as intel_lib.intel_adjust: AbuseIPDB ≥ 75 % -> BLOCK, ≥ 25 % -> at least REVIEW, GreyNoise malicious ->
+// at least REVIEW, GreyNoise RIOT / benign -> at most REVIEW (known service: the analyst decides)
+function intelAdj(s, ip){ const rank={BLOCK:1,REVIEW:2,MONITOR:3}, notes=[]; if(!rank[s]) return {s,notes};
+  const i=intelOf(ip);
+  if(i.a>=75){ s="BLOCK"; notes.push(`AbuseIPDB ${i.a}% (${i.r} reports)`); } else if(i.a>=25){ if(rank[s]>2) s="REVIEW"; notes.push(`AbuseIPDB ${i.a}% (${i.r} reports)`); }
+  if(i.g==="malicious"){ if(rank[s]>2) s="REVIEW"; notes.push("GreyNoise malicious scanner"); }
+  if(i.g==="riot"||i.g==="benign"){ if(s==="BLOCK") s="REVIEW"; notes.push(`GreyNoise ${i.g==="riot"?"RIOT known service":"benign"} (${i.n}) – check before blocking`); }
+  return {s,notes}; }
+function effSug(d){ const o=OWN[d.ip]||[]; let b;
+  if(o[0]==="cloud"&&d.sug!=="ALREADY_BLOCKED"&&d.sug!=="DO_NOT_BLOCK") b={sug:d.sug,reason:`cloud provider IP (${o[1].replace(/^AS\d+ /,"")}) – auto unblock after ${AU.cloud} days without an attack`,was:null};
+  else if((o[0]==="mob"||o[0]==="thmob")&&d.sug!=="ALREADY_BLOCKED"&&d.sug!=="DO_NOT_BLOCK") b={sug:d.sug,reason:`shared IP (${o[1].replace(/^AS\d+ /,"")}) – auto unblock after ${AU.cloud} days without an attack`,was:null};
+  else b={sug:d.sug,reason:"",was:null};
+  const x=intelAdj(b.sug,d.ip);
+  return {sug:x.s, reason:[b.reason].concat(x.notes).filter(Boolean).join(" · "), was:x.s!==b.sug?b.sug:null}; }
+function aidCell(d, win){ const c=ctx(d,win);
+  return `<td class="aid" data-detail="${d.ip}" title="click: IP detail"><div class="row"><span class="own o-${c.o[0]}">${OWN_LABEL[c.o[0]]}</span></div>
+    ${c.sig.slice(0,3).map(x=>`<div><span class="sig ${x[0]}">${esc(x[1])}</span></div>`).join("")}${c.sig.length>3?`<div class="note">+${c.sig.length-3} more</div>`:""}
+    <div class="note">🔎 detail</div></td>`; }
+function spark(v){ const mx=Math.max(1,...v), W=240, H=46, bw=W/v.length;
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="requests per hour, last 24 h">${v.map((x,i)=>`<rect ${x?"":'class="z"'} x="${(i*bw+1).toFixed(1)}" y="${x?(H-2-(H-6)*x/mx).toFixed(1):H-2}" width="${(bw-2).toFixed(1)}" height="${x?((H-6)*x/mx+2).toFixed(1):2}"><title>${23-i}h ago: ${x}</title></rect>`).join("")}</svg>`; }
+const li=(a,b)=>`<li><span>${a}</span><span>${b}</span></li>`;
+function renderDetail(page){
+  const pg=P[page], el=$(pg.p+"_detail"); if(!el) return;
+  const d=pg.detail&&pendingDetected().find(x=>x.ip===pg.detail);
+  if(!d){ el.hidden=true; el.innerHTML=""; return; }
+  const win=page==="history"?"30d":"24h", c=ctx(d,win), W=win==="30d"?"30d":"24h", R=win==="30d"?"30d":"7d";
+  const merged={}; fullPaths(d.ip,c.w.b,BAD,3).forEach(x=>{(merged[x.p]=merged[x.p]||{p:x.p,b:0,a:0}).b+=x.n;});
+  fullPaths(d.ip,c.w.a,GOOD,5).forEach(x=>{(merged[x.p]=merged[x.p]||{p:x.p,b:0,a:0}).a+=x.n;});
+  const all=Object.values(merged).sort((x,y)=>(y.b+y.a)-(x.b+x.a)||y.b-x.b);
+  const ptable=all.length?`<div class="ptbl-wrap"><table class="ptbl"><thead><tr><th>#</th><th>Host + path</th><th style="text-align:right">Blocked</th><th style="text-align:right">Let through</th><th style="text-align:right">Total ▼</th></tr></thead><tbody>${all.map((x,i)=>`<tr class="${x.b&&x.a?"both":""}"><td class="n note">${i+1}</td><td class="p">${esc(x.p)}</td><td class="n">${x.b?`<b class="bk">${x.b.toLocaleString()}</b>`:'<span class="note">0</span>'}</td><td class="n">${x.a?`<b class="al">${x.a.toLocaleString()}</b>`:'<span class="note">0</span>'}</td><td class="n"><b>${(x.b+x.a).toLocaleString()}</b></td></tr>`).join("")}</tbody></table></div>`:'<div class="note">no requests</div>';
+  const sel=pg.sel.has(d.ip);
+  el.hidden=false;
+  el.innerHTML=`<div class="panel-head"><div class="dhead"><h2>IP detail – <span class="mono">${d.ip}</span><span class="new">NEW</span></h2><span class="own o-${c.o[0]}">${OWN_LABEL[c.o[0]]}</span><span class="note">${esc(c.o[1])} · ${esc(d.loc)}</span><span class="pill ${sugPill[effSug(d).sug]}" title="${esc(effSug(d).reason||"suggestion")}">${effSug(d).sug}</span>${effSug(d).reason?`<span class="note">${esc(effSug(d).reason)}</span>`:""}</div>
+    <div class="dact">${cloudOf(d.ip)?`<span class="pill p-review">☁ unblock after ${AU.cloud} quiet days</span>`:""}<button type="button" data-dsel="${d.ip}">${sel?"✓ selected – unselect":"☐ select this IP"}</button><a class="vt" href="https://www.virustotal.com/gui/ip-address/${d.ip}" target="_blank" rel="noopener">🔗 VT ${d.vt}/94</a><a class="ab ${abCls(intelOf(d.ip).a)}" href="https://www.abuseipdb.com/check/${d.ip}" target="_blank" rel="noopener">🔗 AbuseIPDB ${intelOf(d.ip).a}%</a><a class="gn ${GN_LABEL[intelOf(d.ip).g][0]}" href="https://viz.greynoise.io/ip/${d.ip}" target="_blank" rel="noopener">🔗 GreyNoise</a><button type="button" onclick="toast('Real dashboard: opens a Splunk search with every WAF event of this IP in a new tab')">🔍 all events</button><button type="button" data-dclose="1" aria-label="close IP detail">✖ close</button></div></div>
+  <div class="dgrid">
+    <div class="dbox"><span class="label">WAF attack types (${W})</span>${c.atk.length?`<ul>${c.atk.map(a=>li(esc(a[0]),`<b class="bk">${a[1].toLocaleString()}</b>`)).join("")}</ul>`:'<span class="note">no blocked requests</span>'}</div>
+    <div class="dbox"><span class="label">Allowed responses (${W})</span>${Object.keys(c.codes).length?`<ul>${Object.entries(c.codes).map(([k,v])=>li(`HTTP ${k}${k==="200"&&c.atk.length&&c.o[0]!=="thmob"?' <span class="sig w">⚠ after attacks</span>':""}`,`<b class="al">${v}</b>`)).join("")}</ul>`:'<span class="note">nothing let through</span>'}</div>
+    <div class="dbox"><span class="label">Activity – requests per hour (24h)</span>${spark(c.trend)}<div class="note">last 1h: <b>${c.last1h}</b> · ${c.last1h?"● still active":"quiet in the last hour"}</div></div>
+    <div class="dbox"><span class="label">Threat intel (via SOAR · 24 h cache)</span><ul>${li("VirusTotal",`${d.vt} / 94`)}${li("AbuseIPDB",`<b class="${intelOf(d.ip).a>=75?"bk":""}">${intelOf(d.ip).a}%</b> · ${intelOf(d.ip).r} reports`)}${li("GreyNoise",esc(GN_LABEL[intelOf(d.ip).g][1]+(intelOf(d.ip).n?" · "+intelOf(d.ip).n:"")))}</ul>${(x=>x.notes.length?`<div class="note">${esc(x.notes.join(" · "))}</div>`:"")(intelAdj(d.sug,d.ip))}</div>
+    <div class="dbox"><span class="label">Client (Imperva) / User-Agent</span><div><b>${esc(c.cl[0])}</b> · ${esc(c.cl[1])}</div><div class="ua">${esc(c.cl[2])}</div></div>
+    <div class="dbox"><span class="label">History</span><ul>${li("detected on",`${c.days} days / 90d`)}${li("first detected",fmt(c.first).slice(0,10))}${c.hist.un?li(`↺ unblocked by ${esc(c.hist.un[1])}`,fmt(c.hist.un[0]).slice(0,10)):""}${c.hist.un?`<li><span class="note">“${esc(c.hist.un[2])}”</span><span></span></li>`:""}${c.hist.nb?li(`✖ not blocked by ${esc(c.hist.nb[1])}`,fmt(c.hist.nb[0]).slice(0,10)):""}${!c.hist.un&&!c.hist.nb?li("block / unblock / not block","none"):""}</ul></div>
+    <div class="dbox"><span class="label">Neighbours detected</span><ul>${li("same /24",c.c24.length?c.c24.join(", "):"none")}${li(esc(c.o[1].split(" ")[0])+" (same ASN)",c.nbr.length?c.nbr.length+" IPs":"none")}</ul>${c.nbr.length?`<div class="note mono">${c.nbr.join(", ")}</div>`:""}</div>
+    <div class="dbox wide"><span class="label">All paths (${W}) – ${all.length} path${all.length===1?"":"s"}, highest count first</span>${ptable}<div class="note" style="margin-top:5px">host + path without query string · click a column header in Splunk to sort by Blocked / Let through · 🔍 all events = every request incl. query string</div></div>
+  </div>`;
+}
+// only IPs that no ENABLED WAF policy blocks or allows yet (disabled policies are ignored)
+// "Not block": hidden until the IP is detected again after the decision
+const notBlocked=[{ip:"118.193.33.60",t:now0-2*DAY,by:"analyst02",tk:"-",desc:"quiet for 2 weeks (0 / 0)"}];
+const isHidden=d=>notBlocked.some(x=>x.ip===d.ip && x.t>=d.last);
+const pendingDetected=()=>detected.filter(d=>!onWaf(d.ip)&&!isHidden(d)&&ruleUsed(d.rule).use&&d.sug!=="ALREADY_BLOCKED"&&d.sug!=="DO_NOT_BLOCK");
+const WAF_POLICY={"185.220.101.47":"BLOCK in 1000001 Block DDoS policy","35.165.106.69":"BLOCK in 1000003 Block IOC attack","20.20.20.20":"ALLOW in 1000002 Allow partner DC"};
+function wafCheck(ip){ if(!isIP(ip)) return ip+" is not an IP / CIDR"; if(onWaf(ip)) return ip+" already blocked from Splunk";
+  const cp=cloudOf(ip); if(cp&&!WAF_POLICY[ip]) return ip+" is a CLOUD PROVIDER IP ("+cp+") – auto unblock after "+AU.cloud+" days without an attack";
+  const p=WAF_POLICY[ip]; if(!p) return null; return p.startsWith("ALLOW")? ip+" is ALLOWED: "+p : ip+" already BLOCKED: "+p; }
+const win={dash:d=>age(d)<=7*DAY,
+  history:d=>{const r=$("h_rng").value,a=age(d); return r==="30"?a>7*DAY&&a<=30*DAY : r==="90"?a>30*DAY&&a<=90*DAY : a>7*DAY;}};
+
+const P={dash:{p:"d",act:"block",sel:new Set(),busy:false,detail:null},history:{p:"h",act:"block",sel:new Set(),busy:false,detail:null},blocked:{p:"b",act:"unblock",sel:new Set(),busy:false}};
+let soarSeq=4813;
+
+const normQ=v=>v.trim().toLowerCase().replace(/^ithm[\s:#-]*/,"");   // "ITHM 1000101" = "1000101"
+// the search box takes text (ticket, rule ...) or one or more IPs: "203.0.113.10, 198.51.100.7"
+const qTokens=page=>normQ($(P[page].p+"_q").value).split(/[\s,;]+/).filter(Boolean);
+const ipLike=t=>/^[0-9a-f.:\/]+$/i.test(t)&&/[.:]/.test(t);
+function qMatch(page,...xs){ const q=normQ($(P[page].p+"_q").value), toks=qTokens(page);
+  if(toks.length&&toks.every(ipLike)) return toks.some(t=>has(t,...xs));   // IPs: any of them
+  return has(q,...xs); }                                                   // text: as one phrase
+function detRows(page){
+  return pendingDetected().filter(win[page]).filter(d=>qMatch(page,d.ip,d.inc,d.rule)).sort((a,b)=>b.last-a.last);}
+// where is this IP? every page + every WAF policy (real app: registry, policy cache of all policies, detections 90 d, Not block list)
+const PAGE_NAME={dash:"Block – last 7 days",history:"Older detections"};
+function findIP(ip, page){
+  const out=[], d=pendingDetected().find(x=>x.ip===ip), b=blocked.find(x=>x.ip===ip), o=otherBlocked.find(x=>x.ip===ip);
+  const pol=WAF_POLICY[ip]||"", nb=notBlocked.find(x=>x.ip===ip);
+  if(b) out.push({cls:"no",txt:`already BLOCKED in policy 2169031 ${POLICY[2169031]} · blocked ${fmt(b.t)} by ${b.by} · ticket ${b.tk}`,stop:true});
+  if(o) out.push({cls:"no",txt:`already BLOCKED in policy ${o.pol} ${POLICY[o.pol]} · on the policy since ${fmt(o.listed).slice(0,10)} (block date not kept by Imperva)`,stop:true});
+  if(pol.startsWith("ALLOW")) out.push({cls:"al",txt:`ALLOWED by ${pol.replace(/^ALLOW in /,"policy ")} → cannot be blocked`,stop:true});
+  if(d){ const here=win[page](d), pg=here?page:(win.dash(d)?"dash":"history");
+    out.push({cls:"pg",txt:`${here?"on this page":"on the "+PAGE_NAME[pg]+" page"} · last detected ${fmt(d.last)} · ${d.rule}${d.inc!=="-"?" · ticket "+d.inc:""}`}); }
+  if(nb) out.push({cls:"pg",txt:`hidden by Not block (${nb.by}, ${fmt(nb.t).slice(0,10)}) – can still be blocked`});
+  if(!out.length) out.push({cls:"ok",txt:"not found anywhere – can be blocked"});
+  const stop=out.some(x=>x.stop);
+  if(!stop&&cloudOf(ip)) out.push({cls:"pg",txt:`☁ cloud provider (${cloudOf(ip)}) – auto unblock after ${AU.cloud} days without an attack`});
+  // a blocked IP can only be unblocked (from the policy that holds it), an IP that is not blocked can only be blocked
+  const allowed=pol.startsWith("ALLOW"), unPol=allowed?null:b?(b.pol||2169031):o?o.pol:null;
+  return {lines:out, blockable:!stop, unblockable:!!unPol, unPol};
+}
+function renderDet(page){
+  const pg=P[page], rows=detRows(page), q=$(pg.p+"_q").value.trim();
+  $(pg.p+"_tbl").innerHTML=rows.map(d=>{
+    const ok=d.sug!=="DO_NOT_BLOCK"&&d.sug!=="ALREADY_BLOCKED", w=act(d.ip, page==="history"?"30d":"24h", d.last);
+    return `<tr data-ip="${d.ip}" class="${pg.sel.has(d.ip)?"selected":""}" ${cloudOf(d.ip)?`title="cloud provider IP – auto unblock after ${AU.cloud} days without an attack"`:""}>
+    <td>${ok?'<span class="box"></span>':''}</td><td class="ip">${d.ip}</td><td class="nw"><a class="vt" href="https://www.virustotal.com/gui/ip-address/${d.ip}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="open the IP on VirusTotal">${d.vt}/94</a></td><td class="nw">${abCell(d.ip)}</td><td class="nw">${gnCell(d.ip)}</td><td class="small">${esc(d.rule)}</td>
+    <td class="mono nw">${esc(d.inc)}</td><td><span class="pill sev-${d.sev}">${d.sev}</span></td><td class="mono nw">${fmt(d.last)}</td>
+    <td class="num">${d.n}</td><td class="num nw"><b class="bk">${w.b.toLocaleString()}</b> / <b class="al">${w.a.toLocaleString()}</b></td><td class="num nw"><b class="bk">${w.wb}</b> / <b class="al">${w.wa}</b></td><td>${pathCell(fullPaths(d.ip,w.b,BAD,3), fullPaths(d.ip,w.a,GOOD,5))}</td>${page==="history"?`<td class="mono nw">${w.last?fmt(w.last):"-"}</td>`:""}<td>${(e=>`<span class="pill ${sugPill[e.sug]}">${e.sug}</span>${e.reason?`<div class="note" style="min-width:150px">${esc(e.reason)}</div>`:""}`)(effSug(d))}</td>
+    <td class="nw">${esc(d.loc)}</td>${aidCell(d, page==="history"?"30d":"24h")}</tr>`;}).join("")
+    ||`<tr><td colspan="${page==="history"?17:16}" class="note">${q?`ไม่พบ IP ที่ตรงกับ “${esc(q)}”`:"ไม่มี IP ที่รอ block ในช่วงเวลานี้"}</td></tr>`;
+}
+// unblock when the IP sent no request for N days: cloud provider / shared 7, others 60 (or set per IP / Keep)
+function expInfo(b){
+  const cl=!!shortOf(b.ip), pol=b.pol||2169031, managed=pol===2169031||AU.scope==="all", since=b.t||b.listed;
+  if(b.dur==="keep") return {st:"keep", cl, pol, managed, keep:true, since};
+  const days=b.dur??(cl?AU.cloud:AU.def), base=Math.max(b.seen||0, since||0), unb=base+days*DAY, n=Date.now();
+  const left=(unb-n)/DAY, quiet=(n-base)/DAY, attacking=!!b.seen&&n-b.seen<DAY;
+  const st=left<=0?(managed?"due":"other"):attacking?"attacking":left<=Math.min(AU.remind,days*0.3)?"soon":"quiet";
+  return {st, cl, pol, managed, days, base, unb, left, quiet, attacking, since, custom:b.dur!=null};
+}
+const EST={attacking:["p-due","Attacking · seen today"], quiet:["p-active","Quiet"], soon:["p-soon","Unblock soon"], due:["p-extend","Due · unblock"], other:["p-done","Due · other policy (shown only)"], keep:["p-keep","Kept"]};
+function stLabel(i){ return i.st==="quiet"?`Quiet ${Math.floor(i.quiet)} d`:EST[i.st][1]; }
+function durBadge(b,i){ if(i.st==="keep") return '<span class="dur keep">Keep</span>';
+  if(b.dur) return `<span class="dur custom">${b.dur} d quiet</span>`;
+  return i.cl?`<span class="dur cloud">${sharedOf(b.ip)?"📱 shared":"☁ cloud"} ${AU.cloud} d quiet</span>`:`<span class="dur">${AU.def} d quiet</span>`; }
+function leftCell(i){ if(i.left==null) return '<span class="note">never</span>';
+  const pct=Math.max(0,Math.min(100,i.left/(i.days||1)*100)), cls=i.st==="due"||i.st==="other"?"due":i.st==="soon"?"soon":"";
+  const txt=i.left<=0?"now":i.left<1?`${Math.ceil(i.left*24)} h`:`${Math.floor(i.left)} d`;
+  return `<div class="left"><span class="mono">${txt}</span><div class="bar ${cls}"><i style="width:${pct.toFixed(0)}%"></i></div></div>`; }
+const seenCell=b=>b.seen?`<span class="mono nw">${fmt(b.seen)}</span>${Date.now()-b.seen<DAY?' <b class="bk">●</b>':""}`:`<span class="note">not seen since ${b.t?"block":"listed"}</span>`;
+function bMatchQ(b,i,q){ const o=OWN[b.ip]; return has(q,b.ip,b.tk,b.desc,b.by,b.rule,String(i.pol),POLICY[i.pol],o?o[1]:""); }
+function renderBlocked(){
+  const pg=P.blocked, q=normQ($("b_q").value), items=allBlocked().map(b=>({b,i:expInfo(b)})), cnt={};
+  AUF.forEach(([k])=>cnt[k]=items.filter(x=>auMatch(x,k)).length);
+  $("b_filters").innerHTML=AUF.map(([k,l])=>`<button type="button" data-f="${k}" aria-pressed="${auFilter===k}">${l}<span class="n">${cnt[k]}</span></button>`).join("");
+  const rows=items.filter(x=>bMatchQ(x.b,x.i,q)).filter(x=>auMatch(x,auFilter)).sort((a,c)=>(a.i.unb??Infinity)-(c.i.unb??Infinity));
+  $("b_tbl").innerHTML=rows.map(({b,i})=>{ const o=OWN[b.ip];
+    return `<tr data-ip="${b.ip}" class="${pg.sel.has(b.ip)?"selected":""}"><td><span class="box"></span></td><td class="ip">${b.ip}</td>
+    <td class="nw"><span class="pill ${EST[i.st][0]}">${stLabel(i)}</span></td>
+    <td>${seenCell(b)}</td><td class="num">${attacks24(b)?`<b class="bk">${attacks24(b).toLocaleString()}</b>`:'<span class="note">0</span>'}</td>
+    <td>${durBadge(b,i)}</td><td class="mono nw">${i.unb?fmt(i.unb).slice(0,10):"-"}</td><td>${leftCell(i)}</td>
+    <td class="nw">${o?`<span class="own o-${o[0]}">${OWN_LABEL[o[0]]}</span>`:'<span class="note">ISP / other</span>'}</td>
+    <td class="nw"><span class="mono">${i.pol}</span> <span class="note">${esc(POLICY[i.pol]||"")}</span></td>
+    <td class="mono nw">${i.since?fmt(i.since).slice(0,16):"-"}${b.t?"":' <span class="note">(listed)</span>'}</td><td class="mono nw">${esc(b.tk||"-")}</td><td class="small">${esc(b.desc||"-")}</td>
+    <td>${esc(b.by||"-")}</td><td class="small">${esc(b.rule||"-")}</td></tr>`;}).join("")
+    ||`<tr><td colspan="15" class="note">${q?`ไม่พบ IP ที่ตรงกับ “${esc(q)}”`:"ไม่มี IP ในตัวกรองนี้"}</td></tr>`;
+  const dueM=cnt.due, atk=items.map(x=>attacks24(x.b));
+  $("bWaf").textContent=items.length; $("bWafSub").textContent=`policy 2169031: ${cnt.splunk} · other policies: ${cnt.other} · cloud / shared ${cnt.cloud}`;
+  $("bAtt").textContent=cnt.attacking; $("bAtk").textContent=atk.reduce((a,c)=>a+c,0).toLocaleString(); $("bAtkSub").textContent=`from ${atk.filter(x=>x>0).length} of ${items.length} blocked IPs`;
+  $("bDue").textContent=dueM; $("bKeep").textContent=cnt.keep;
+  const man7=daily.slice(-7).reduce((a,d)=>a+d.u,0), auto7=auLog.filter(l=>l.act==="auto_unblock"&&Date.now()-l.t<=7*DAY).length;
+  $("bUn7").textContent=man7+auto7; $("bUn7Sub").textContent=`manual ${man7} · auto ${auto7}`;
+  $("bRead").textContent=`read ${fmt(Date.now()).slice(11)} · auto refresh every 5 min · sorted by unblock date`;
+  $("au_plan").innerHTML=`Next auto unblock (02:17): <b>${dueM}</b> to unblock${dueM?` in ${Math.ceil(dueM/AU.batch)} round${Math.ceil(dueM/AU.batch)===1?"":"s"} of ${AU.batch} (each round confirmed on the WAF before the next)`:""} · <b>${cnt.attacking}</b> still attacking · <b>${cnt.keep}</b> kept`;
+  const A={auto_unblock:["a-unblock","auto unblock"],set_period:["a-set","set unblock rule"],unblock:["a-unblock","unblock (manual)"]};
+  $("au_log").innerHTML=auLog.slice().sort((a,c)=>c.t-a.t).map(l=>`<tr><td class="mono nw">${fmt(l.t)}</td><td class="ip">${esc(l.ip)}</td><td><span class="${(A[l.act]||A.unblock)[0]}">${(A[l.act]||A.unblock)[1]}</span></td><td class="nw">${esc(l.st)}</td><td class="mono nw">${esc(l.tk)}</td><td class="small">${esc(l.desc||l.det)}</td></tr>`).join("");
+  auChart();
+}
+const isIP=x=>/^(\d{1,3})(\.\d{1,3}){3}(\/\d{1,2})?$/.test(x)&&x.split("/")[0].split(".").every(o=>+o<=255) || /^[0-9a-f:]+:[0-9a-f:]*(\/\d{1,3})?$/i.test(x);
+// full IPs typed in the search box (the old "Add IPs manually" field)
+function manual(page){ if(page==="blocked") return []; return [...new Set(qTokens(page).filter(isIP))]; }
+// IPs the Block button sends: selected rows + typed IPs that are not blocked / allowed anywhere
+function allIPs(page){ const m=manual(page).filter(ip=>findIP(ip,page).blockable); return [...new Set([...P[page].sel, ...m])]; }
+// IPs the 🔓 Unblock button of a detection page sends: typed IPs that are already blocked
+function unIPs(page){ return manual(page).filter(ip=>!P[page].sel.has(ip)&&findIP(ip,page).unblockable); }
+const shownIPs=page=>detRows(page).slice(0,50).map(d=>d.ip);   // what "Select all" takes: rows matching the search (top 50)
+const incOf=q=>{const m=/^\s*(?:ithm[\s:#-]*)?(\d{5,})\s*$/i.exec(q); return m?m[1]:null;};   // "ITHM 1000101" / "1000101" -> 1000101
+function renderCtl(page){
+  const pg=P[page], all=allIPs(page), n=all.length, man=manual(page);
+  if(page!=="blocked"){ const k=shownIPs(page).length; $(pg.p+"_all").textContent=`☑ Select all ${k} shown`; $(pg.p+"_all").hidden=!k; }
+  $(pg.p+"_clr").hidden=!pg.sel.size&&!man.length;
+  $(pg.p+"_run").textContent=`${pg.act==="block"?"⛔ Block":"🔓 Unblock"} ${n} IP${n===1?"":"s"}`;
+  $(pg.p+"_run").disabled=!n||pg.busy;
+  if(page==="blocked") $("b_apply").disabled=!pg.sel.size||pg.busy;
+  if(page!=="blocked"){ const k=pg.sel.size; $(pg.p+"_nb").textContent=`✖ Not block ${k} IP${k===1?"":"s"}`; $(pg.p+"_nb").disabled=!k||pg.busy;
+    const u=unIPs(page).length, ub=$(pg.p+"_un"); ub.textContent=`🔓 Unblock ${u} IP${u===1?"":"s"}`; ub.hidden=!u; ub.disabled=!u||pg.busy; }
+  if(page!=="blocked"){ const msgs=[...pg.sel].map(wafCheck).filter(Boolean), c=$(pg.p+"_chk");
+    c.hidden=!pg.sel.size; c.className="result "+(msgs.length?"running":"ok");
+    c.textContent=msgs.length?"⚠ WAF check: "+msgs.join(" | "):"✔ WAF check: none of the selected IPs is blocked / allowed on the WAF";
+    renderFind(page); }
+  $(pg.p+"_sel").innerHTML=([...pg.sel].map(ip=>cloudOf(ip)?`<span class="tag cloud" title="cloud provider IP – auto unblock after ${AU.cloud} days without an attack">☁ ${ip} · unblock after ${AU.cloud} quiet days<button type="button" data-rm="${ip}" aria-label="remove ${ip}">×</button></span>`:`<span class="tag">${ip}<button type="button" data-rm="${ip}" aria-label="remove ${ip}">×</button></span>`)
+    .concat(man.filter(x=>!pg.sel.has(x)&&findIP(x,page).unblockable).map(x=>`<span class="tag un" title="typed in the search box – already blocked (policy ${findIP(x,page).unPol}): only Unblock">🔓 ${esc(x)}</span>`))
+    .concat(man.filter(x=>!pg.sel.has(x)&&findIP(x,page).blockable).map(x=>cloudOf(x)?`<span class="tag man cloud" title="typed in the search box – cloud provider IP">✍ ☁ ${esc(x)} · unblock after ${AU.cloud} quiet days</span>`:`<span class="tag man" title="typed in the search box">✍ ${esc(x)}</span>`))).join("")||'<span class="note">ยังไม่ได้เลือก IP – คลิกแถว หรือพิมพ์ IP ในช่องค้นหา</span>';
+}
+// "Found" box under the search field: IPs -> where they are; text -> matches on every page
+function renderFind(page){
+  const pg=P[page], box=$(pg.p+"_find"), toks=qTokens(page), ips=manual(page);
+  if(!toks.length){ box.hidden=true; return; }
+  let h='<span class="hd">Found – every page and every WAF policy</span>';
+  if(ips.length){
+    h+=ips.map(ip=>{ const f=findIP(ip,page);
+      return `<div class="fl"><b class="mono">${esc(ip)}</b>${f.lines.map(l=>`<span class="${l.cls}">${l.cls==="no"?"⛔ ":l.cls==="al"?"✅ ":l.cls==="ok"?"✔ ":"• "}${esc(l.txt)}</span>`).join("")}<span class="note">${f.unblockable?`→ included in Unblock (policy ${f.unPol})`:f.blockable?"→ included in Block":"→ not blocked again"}</span></div>`; }).join("");
+  } else {
+    const q=normQ($(pg.p+"_q").value), here=detRows(page).length, other=pendingDetected().filter(d=>!win[page](d)&&has(q,d.ip,d.inc,d.rule)).length;
+    const blk=blocked.filter(b=>has(q,b.ip,b.tk,b.desc,b.rule)).length, oth=otherBlocked.filter(o=>has(q,o.ip,o.desc,POLICY[o.pol])).length;
+    h+=`<div class="fl"><b class="mono">“${esc(q)}”</b><span class="pg">${here} IP on this page</span><span class="pg">${other} on the ${PAGE_NAME[page==="dash"?"history":"dash"]} page</span><span class="no">${blk} blocked from Splunk (Blocked IPs page)</span><span class="no">${oth} in other WAF policies</span></div>`;
+  }
+  box.innerHTML=h; box.hidden=false;
+}
+function chart(el,days){
+  const data=daily.slice(-days), n=data.length, W=days>7?1300:1000, H=days>7?230:200, L=34,R=8,T=28,B=34, cw=(W-L-R)/n, bw=days>7?.6:.4;
+  const mx=Math.max(4,...data.map(d=>d.b+d.u)), step=mx>12?5:2, top=Math.ceil(mx/step)*step, y=v=>T+(H-T-B)*(1-v/top);
+  const wd=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  let g="";
+  for(let v=0;v<=top;v+=step) g+=`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/><text x="${L-6}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="var(--muted)">${v}</text>`;
+  data.forEach((d,i)=>{const x0=L+i*cw, w=cw*bw, x=x0+(cw-w)/2, cx=x+w/2, today=i===n-1;
+    let s=`<g class="day"><rect class="hit" x="${x0}" y="${T-24}" width="${cw}" height="${H-T-B+24}"/><title>${fmt(d.day).slice(0,10)} (${wd[d.day.getDay()]}): ${d.b} blocked, ${d.u} unblocked</title>`;
+    if(d.b) s+=`<rect x="${x}" y="${y(d.b)}" width="${w}" height="${y(0)-y(d.b)}" fill="var(--crit)" rx="2"/>`;
+    if(d.u) s+=`<rect x="${x}" y="${y(d.b+d.u)}" width="${w}" height="${y(d.b)-y(d.b+d.u)}" fill="var(--ok)" rx="2"/>`;
+    const ty=y(d.b+d.u);
+    s+=`<text x="${cx}" y="${ty-4}" text-anchor="middle" font-size="11.5" font-weight="600" font-family="var(--font-data)" fill="var(--crit)">${d.b}</text>`;
+    if(d.u) s+=`<text x="${cx}" y="${ty-17}" text-anchor="middle" font-size="10.5" font-weight="600" font-family="var(--font-data)" fill="var(--ok)">+${d.u}</text>`;
+    s+=`<text x="${cx}" y="${H-B+15}" text-anchor="middle" font-size="11" font-weight="${today?700:400}" fill="${today?"var(--fg)":"var(--muted)"}">${pad(d.day.getDate())}/${pad(d.day.getMonth()+1)}</text>`;
+    s+=`<text x="${cx}" y="${H-B+28}" text-anchor="middle" font-size="10" fill="var(--muted)">${today?"today":wd[d.day.getDay()]}</text></g>`;
+    g+=s;});
+  $(el).innerHTML=`<svg viewBox="0 0 ${W} ${H}" style="min-width:${days>7?900:420}px" role="img" aria-label="Blocked and unblocked IPs per day, last ${days} days">${g}</svg>`;
+}
+function renderKPIs(){
+  const v=pendingDetected().filter(win.dash);
+  $("kDet").textContent=v.length; $("kDetSub").textContent=`last 7 days · ${esSearches.filter(e=>ruleUsed(e.name).use).length} WAF rules in use`;
+  $("kWaf").textContent=blocked.length;
+  const td=daily[daily.length-1], yd=daily[daily.length-2], w=daily.slice(-7);
+  $("kToday").textContent=td.b; $("kTodaySub").textContent=`yesterday ${yd.b}`;
+  const b7=w.reduce((s,d)=>s+d.b,0); $("k7").textContent=b7; $("k7Sub").textContent=`avg ${(b7/7).toFixed(1)} / day`;
+  const u7=w.reduce((s,d)=>s+d.u,0); $("kUn7").textContent=u7;
+  $("nDash").textContent=v.length; $("nHist").textContent=pendingDetected().filter(d=>age(d)>7*DAY).length; $("nBlk").textContent=allBlocked().length;
+  chart("chart7",7); chart("chart30",30);
+}
+const hTitle={"30":"8 to 30 days ago","90":"31 to 90 days ago","all":"older than 7 days"};
+function renderAll(){renderKPIs(); renderDet("dash"); renderDet("history"); renderDetail("dash"); renderDetail("history"); renderBlocked(); ["dash","history","blocked"].forEach(renderCtl); $("h_title").textContent="IPs detected by WAF rules – "+hTitle[$("h_rng").value];}
+
+function pick(page,ip){
+  const pg=P[page]; if(pg.busy) return; const tk=$(pg.p+"_tk");
+  if(page==="blocked"){ if(pg.sel.has(ip)) pg.sel.delete(ip); else {pg.sel.add(ip); const b=allBlocked().find(x=>x.ip===ip); if(b&&b.tk&&!tk.value) tk.value=b.tk;} }
+  else { const d=detected.find(x=>x.ip===ip);
+    if(d.sug==="DO_NOT_BLOCK"){toast(`${ip} ถูก allow อยู่ใน WAF policy (${d.pol}) — block ไม่ได้`);return;}
+    if(d.sug==="ALREADY_BLOCKED"){toast(`${ip} ถูก block อยู่แล้วใน policy อื่น (${d.pol})`);return;}
+    if(pg.sel.has(ip)) pg.sel.delete(ip); else {pg.sel.add(ip); if(!tk.value&&d.inc!=="-") tk.value=d.inc;} }
+  if(page==="blocked") renderBlocked(); else {renderDet(page); renderDetail(page);} renderCtl(page);
+}
+Object.keys(P).forEach(page=>{const p=P[page].p;
+  $(p+"_tbl").addEventListener("click",e=>{const dd=e.target.closest("[data-detail]");
+    if(dd){ P[page].detail=P[page].detail===dd.dataset.detail?null:dd.dataset.detail; renderDetail(page); if(P[page].detail) $(p+"_detail").scrollIntoView({block:"nearest"}); return; }   // NEW: Decision aid cell = IP detail
+    const tr=e.target.closest("tr[data-ip]"); if(tr) pick(page,tr.dataset.ip);});
+  if($(p+"_detail")) $(p+"_detail").addEventListener("click",e=>{
+    if(e.target.closest("[data-dclose]")){ P[page].detail=null; renderDetail(page); }
+    const b=e.target.closest("[data-dsel]"); if(b) pick(page,b.dataset.dsel);});
+  $(p+"_sel").addEventListener("click",e=>{const b=e.target.closest("[data-rm]"); if(b){P[page].sel.delete(b.dataset.rm); renderAll();}});
+  $(p+"_q").addEventListener("input",()=>{page==="blocked"?renderBlocked():renderDet(page); renderCtl(page);});
+  if(page!=="blocked") $(p+"_all").addEventListener("click",()=>{   // replaces the selection with every IP that matches the search
+    P[page].sel=new Set(shownIPs(page)); const tk=$(p+"_tk"), inc=incOf($(p+"_q").value); if(!tk.value&&inc) tk.value=inc;
+    renderDet(page); renderDetail(page); renderCtl(page); });
+  $(p+"_clr").addEventListener("click",()=>{ P[page].sel.clear(); if(page!=="blocked") $(p+"_q").value=""; renderAll(); });
+  $(p+"_run").addEventListener("click",()=>run(page));
+  if(page!=="blocked") $(p+"_nb").addEventListener("click",()=>notBlock(page));
+  if(page!=="blocked") $(p+"_un").addEventListener("click",()=>unblockTyped(page));
+});
+$("h_rng").addEventListener("change",()=>{P.history.sel.clear(); renderAll();});
+
+function notBlock(page){
+  const pg=P[page]; const ips=[...pg.sel]; if(!ips.length||pg.busy) return;   // rows of the table only (not manual IPs)
+  const tk=$(pg.p+"_tk").value.trim()||"-", desc=$(pg.p+"_desc").value.trim()||"-", t=Date.now(), r=$(pg.p+"_res");
+  ips.forEach(ip=>{ const i=notBlocked.findIndex(x=>x.ip===ip); if(i>=0) notBlocked.splice(i,1);
+    notBlocked.push({ip,t,by:USER,tk,desc}); audit.push({t,user:USER,action:"not_block",ip,tk,desc,status:"dismissed",ver:"-",cont:"-"}); });
+  r.hidden=false; r.className="result ok";
+  r.textContent=`✔ Not block ${ips.length} IP — ซ่อนจากหน้า Block / Older detections จนกว่าจะถูก detect ใหม่ (ไม่ได้ส่งอะไรไป WAF) · บันทึกลง imperva_audit.csv`;
+  pg.sel.clear(); $(pg.p+"_tk").value=""; $(pg.p+"_desc").value=""; renderAll();
+}
+// 🔓 Unblock on a detection page: typed IPs that are already blocked, from the policy that holds each one
+async function unblockTyped(page){
+  const pg=P[page], ips=unIPs(page); if(!ips.length||pg.busy) return;
+  const tk=$(pg.p+"_tk").value.trim()||"-", desc=$(pg.p+"_desc").value.trim()||"-", cont=soarSeq++, r=$(pg.p+"_res");
+  pg.busy=true; renderCtl(page);
+  r.hidden=false; r.className="result running";
+  r.textContent=`ส่ง ${ips.length} IP ไป SOAR (container ${cont}) → Imperva policy ของแต่ละ IP → อ่านกลับเพื่อ verify…`;
+  await sleep(1600);
+  const t=Date.now(), td=daily[daily.length-1], pols=new Set();
+  ips.forEach(ip=>{const list=blocked.some(b=>b.ip===ip)?blocked:otherBlocked, i=list.findIndex(b=>b.ip===ip); if(i<0) return; const b=list.splice(i,1)[0]; td.u++; pols.add(b.pol||2169031);
+    auLog.push({t,ip,act:"unblock",st:"unblocked · verified",tk,desc:`unblocked from the search box, policy ${b.pol||2169031} · ${desc}`});
+    audit.push({t,user:USER,action:"unblock",ip,tk,desc,status:"unblocked",ver:"removed",cont});});
+  r.className="result ok"; r.textContent=`✔ Unblock ${ips.length} IP แล้ว (policy ${[...pols].join(", ")}) — verify บน WAF แล้ว · บันทึกลง imperva_audit.csv`;
+  $(pg.p+"_tk").value=""; $(pg.p+"_desc").value=""; $(pg.p+"_q").value=""; pg.busy=false;
+  renderAll();
+}
+async function run(page){
+  const pg=P[page]; const ips=allIPs(page); if(!ips.length||pg.busy) return;
+  const tk=$(pg.p+"_tk").value.trim()||"-", desc=$(pg.p+"_desc").value.trim()||"-", cont=soarSeq++, r=$(pg.p+"_res");
+  pg.busy=true; renderCtl(page);
+  r.hidden=false; r.className="result running";
+  r.textContent=`ส่ง ${ips.length} IP ไป SOAR (container ${cont}) → Imperva ${pg.act==="block"?"policy 2169031":"policy ของแต่ละ IP"} → อ่านกลับเพื่อ verify…`;
+  await sleep(1600);
+  const t=Date.now(), td=daily[daily.length-1];
+  if(pg.act==="block"){
+    const why=ip=>(WAF_POLICY[ip]||"").startsWith("ALLOW")?"allowed by WAF policy: "+WAF_POLICY[ip]:/^(10\.|127\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(ip)?"private IP":/^18\.143\.202\./.test(ip)?"overlaps protected network 18.143.202.0/24":blocked.some(b=>b.ip===ip)?"already blocked":null;
+    const ok=[], rej=[];
+    ips.forEach(ip=>{const w=why(ip); if(w){rej.push(ip+" ("+w+")"); audit.push({t,user:USER,action:"block",ip,tk,desc,status:"rejected",ver:"-",cont:"-"}); return;}
+      const d=detected.find(x=>x.ip===ip); ok.push(ip); blocked.push({ip,t,tk,desc,by:USER,rule:d?d.rule:"manual entry"}); td.b++;
+      audit.push({t,user:USER,action:"block",ip,tk,desc,status:"blocked",ver:"yes",cont});});
+    r.className=ok.length?"result ok":"result running";
+    const nc=ok.filter(cloudOf).length;
+    r.textContent=`${ok.length?`✔ Block ${ok.length} IP บน policy 2169031 และ verify บน WAF แล้ว · ${tk} · unblock อัตโนมัติเมื่อไม่โจมตี: ${nc?`cloud ${nc} IP ครบ ${AU.cloud} วัน, `:""}${ok.length-nc?`อื่น ๆ ${ok.length-nc} IP ครบ ${AU.def} วัน`:""} · ย้ายไปหน้า Blocked IPs`:"ไม่มี IP ที่ block ได้"}${rej.length?` · ✖ rejected: ${rej.join(", ")}`:""} · บันทึกลง imperva_audit.csv`;
+  } else {
+    const pols=new Set();
+    ips.forEach(ip=>{const list=blocked.some(b=>b.ip===ip)?blocked:otherBlocked, i=list.findIndex(b=>b.ip===ip); if(i<0) return; const b=list.splice(i,1)[0]; td.u++; pols.add(b.pol||2169031);
+      auLog.push({t,ip,act:"unblock",st:"unblocked · verified",tk,desc:`unblocked now from policy ${b.pol||2169031} · ${desc}`});
+      audit.push({t,user:USER,action:"unblock",ip,tk,desc,status:"unblocked",ver:"removed",cont});});
+    r.className="result ok"; r.textContent=`✔ Unblock ${ips.length} IP แล้ว (policy ${[...pols].join(", ")}) — หายจากตารางและ verify บน WAF แล้ว · บันทึกลง imperva_audit.csv`;
+  }
+  pg.sel.clear(); $(pg.p+"_tk").value=""; $(pg.p+"_desc").value=""; if(page!=="blocked") $(pg.p+"_q").value=""; pg.busy=false;
+  renderAll();
+  document.querySelectorAll(`#v-${page} .kpi`).forEach(el=>{el.classList.remove("flash");void el.offsetWidth;el.classList.add("flash");});
+}
+
+function renderRules(){
+  const cnt=r=>esSearches.filter(e=>wild(r.pat,e.name)).reduce((s,e)=>s+e.n,0);
+  $("rules").innerHTML=rules.map(r=>`<tr class="${r.on?"":"off"}"><td><button class="sw" role="switch" aria-checked="${r.on}" data-tg="${r.id}" aria-label="enable ${esc(r.pat)}"></button></td>
+   <td class="mono">${esc(r.pat)}</td><td><span class="pill ${r.mode==="include"?"p-safe":"p-block"}">${r.mode}</span></td><td class="num">${cnt(r)}</td>
+   <td class="small">${esc(r.note)}</td><td>${esc(r.by)}</td><td class="mono nw">${fmt(r.t)}</td>
+   <td><button class="del" type="button" data-del="${r.id}">🗑 Remove</button></td></tr>`).join("")||'<tr><td colspan="8" class="note">No rules – the Block page will be empty.</td></tr>';
+  $("esPrev").innerHTML=esSearches.slice().sort((a,b)=>b.n-a.n).map(e=>{const u=ruleUsed(e.name);
+   return `<tr><td>${u.use?'<span class="pill p-safe">✔ used</span>':'<span class="pill p-done">– not used</span>'}</td><td>${esc(e.name)}</td><td class="num">${e.n}</td>
+   <td class="small">${u.exc?"excluded by "+esc(u.exc.pat):u.inc?"included by "+esc(u.inc.pat):"no include rule"}</td></tr>`;}).join("");
+  $("esRules").innerHTML=esSearches.map(e=>`<option value="${esc(e.name)}">`).join("");
+}
+function ruleAudit(act,r){audit.push({t:Date.now(),user:USER,action:act,ip:"-",tk:"-",desc:`${r.mode} ${r.pat}`,status:"rule",ver:"-",cont:"-"});}
+$("rAdd").addEventListener("click",()=>{const pat=$("rName").value.trim(); if(!pat){toast("ใส่ชื่อ rule หรือ pattern ก่อน");return;}
+  if(rules.some(r=>r.pat.toLowerCase()===pat.toLowerCase()&&r.mode===$("rMode").value)){toast("มี rule นี้อยู่แล้ว");return;}
+  const r={id:ruleSeq++,pat,mode:$("rMode").value,on:true,note:$("rNote").value.trim()||"-",by:USER,t:Date.now()}; rules.push(r); ruleAudit("rule_add",r);
+  $("rName").value="";$("rNote").value=""; renderRules(); renderAll(); toast(`เพิ่ม ${r.mode} rule “${pat}” แล้ว — มีผลทันที`);});
+$("rules").addEventListener("click",e=>{const tg=e.target.closest("[data-tg]"), del=e.target.closest("[data-del]");
+  if(tg){const r=rules.find(x=>x.id==tg.dataset.tg); r.on=!r.on; r.by=USER; r.t=Date.now(); ruleAudit(r.on?"rule_enable":"rule_disable",r);}
+  if(del){const i=rules.findIndex(x=>x.id==del.dataset.del); ruleAudit("rule_remove",rules[i]); rules.splice(i,1);}
+  if(tg||del){renderRules(); renderAll();}});
+
+function renderAudit(){
+  const aq=$("aq").value.trim().toLowerCase(), act=$("aact").value, cls={blocked:"p-block",unblocked:"p-safe",rule:"p-monitor",rejected:"p-review",dismissed:"p-done",restored:"p-monitor"};
+  $("audit").innerHTML=audit.slice().sort((a,b)=>b.t-a.t).filter(e=>(!act||e.action===act)&&has(aq,e.ip,e.tk,e.user,e.desc))
+   .map(e=>`<tr><td class="mono nw">${fmt(e.t)}</td><td>${esc(e.user)}</td><td>${e.action}</td><td class="ip">${e.ip}</td><td class="mono nw">${esc(e.tk)}</td><td class="small">${esc(e.desc)}</td>
+   <td><span class="pill ${cls[e.status]||"p-done"}">${e.status}</span></td><td>${e.ver}</td><td class="mono">${e.cont}</td></tr>`).join("")||'<tr><td colspan="9" class="note">No audit rows.</td></tr>';
+}
+$("aq").addEventListener("input",renderAudit); $("aact").addEventListener("change",renderAudit);
+
+// ---------- Auto unblock (part of the Blocked IPs page since v3.15)
+let auFilter="all";
+const AUF=[["all","All"],["splunk","Policy 2169031"],["other","Other policies"],["cloud","Cloud / shared IP"],["attacking","Attacking now"],["soon","Unblock soon"],["due","Due"],["keep","Kept"]];
+const allBlocked=()=>blocked.concat(otherBlocked);
+function auMatch(x,f){ return f==="all"||(f==="splunk"?x.i.pol===2169031:f==="other"?x.i.pol!==2169031:f==="cloud"?x.i.cl:f==="due"?x.i.st==="due"||x.i.st==="other":x.i.st===f); }
+function auChart(){ const W=560,H=150,L=26,Rr=6,T=10,B=24,days=30, bk=Array(days).fill(0);
+  allBlocked().forEach(b=>{const i=expInfo(b); if(i.unb&&i.left>0&&i.left<=days) bk[Math.floor(i.left)]++;});
+  const mx=Math.max(2,...bk), cw=(W-L-Rr)/days, y=v=>T+(H-T-B)*(1-v/mx);
+  let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="IPs expiring per day in the next 30 days">`;
+  for(let v=0;v<=mx;v++) s+=`<line class="gl" x1="${L}" x2="${W-Rr}" y1="${y(v)}" y2="${y(v)}"/><text x="${L-6}" y="${y(v)+3}" text-anchor="end">${v}</text>`;
+  bk.forEach((v,d)=>{ if(v){ const h=(H-T-B)*v/mx; s+=`<rect class="b ${d<AU.remind?"soon":""}" x="${(L+d*cw+cw*.18).toFixed(1)}" y="${(H-B-h).toFixed(1)}" width="${(cw*.64).toFixed(1)}" height="${h.toFixed(1)}"><title>in ${d}–${d+1} days: ${v} IP</title></rect>`; } });
+  [0,7,14,21,29].forEach(d=>{ s+=`<text x="${(L+d*cw+cw/2).toFixed(1)}" y="${H-8}" text-anchor="middle">${d===0?"today":"+"+d+"d"}</text>`; });
+  $("au_chart").innerHTML=s+"</svg>"; $("au_chartNote").textContent=`${bk.reduce((a,c)=>a+c,0)} IP · สีส้ม = ภายใน ${AU.remind} วัน`; }
+$("b_filters").addEventListener("click",e=>{const b=e.target.closest("[data-f]"); if(!b) return; auFilter=b.dataset.f; renderBlocked();});
+$("b_howBtn").addEventListener("click",()=>{const h=$("b_how"); h.hidden=!h.hidden; $("b_howBtn").setAttribute("aria-expanded",!h.hidden); $("b_howBtn").textContent=h.hidden?"How it works ▾":"How it works ▴";});
+$("b_apply").addEventListener("click",()=>{ const pg=P.blocked, v=$("b_setDur").value, why=$("b_desc").value.trim()||"-", n=pg.sel.size; if(!n) return;
+  pg.sel.forEach(ip=>{ const b=allBlocked().find(x=>x.ip===ip); if(!b) return; b.dur=v==="default"?undefined:v==="keep"?"keep":+v;
+    const label=v==="default"?"default":v==="keep"?"Keep (never unblock)":v+" days without an attack";
+    auLog.push({t:Date.now(),ip,act:"set_period",st:"saved",tk:b.tk||"-",det:`unblock after → ${label} · ${why}`});
+    audit.push({t:Date.now(),user:USER,action:"auto_unblock_rule",ip,tk:b.tk||"-",desc:`unblock after → ${label} · ${why}`,status:"saved",ver:"-",cont:"-"}); });
+  const r=$("b_res"); r.hidden=false; r.className="result ok"; r.textContent=`✔ Auto unblock rule set for ${n} IP (${$("b_setDur").selectedOptions[0].textContent}) · ไม่ได้ส่งอะไรไป WAF · บันทึกลง audit log`;
+  pg.sel.clear(); $("b_tk").value=""; $("b_desc").value=""; renderAll(); });
+$("au_run").addEventListener("click",async()=>{ const btn=$("au_run"), res=$("au_res"); btn.disabled=true; res.hidden=false; res.className="result info";
+  res.textContent=`กำลังปลดทีละ ${AU.batch} IP → SOAR → Imperva → อ่านกลับตรวจว่าลบแล้ว → รอบถัดไป…`; await sleep(1300);
+  const t=Date.now(), items=allBlocked().map(b=>({b,i:expInfo(b)})), due=items.filter(x=>x.i.st==="due");
+  const why=({b,i})=>`${i.cl?`cloud provider IP (${cloudOf(b.ip)}) – `:""}no attack for ${i.days} days (${b.seen?"last seen "+fmt(b.seen).slice(0,10):"not seen since the block"})${i.pol!==2169031?` · policy ${i.pol}`:""}`;
+  due.forEach(x=>{ const list=x.b.pol?otherBlocked:blocked; list.splice(list.indexOf(x.b),1);
+    auLog.push({t,ip:x.b.ip,act:"auto_unblock",st:"unblocked · verified",tk:x.b.tk||"-",det:why(x)});
+    audit.push({t,user:"auto-unblock",action:"unblock",ip:x.b.ip,tk:x.b.tk||"-",desc:"auto unblock: "+why(x),status:"unblocked",ver:"removed",cont:soarSeq++}); });
+  res.className="result ok"; res.textContent=`✔ Unblocked ${due.length} IP in ${Math.ceil(due.length/AU.batch)} round${Math.ceil(due.length/AU.batch)===1?"":"s"} of ${AU.batch} · each round confirmed on the WAF before the next · written to the audit log`;
+  btn.disabled=false; P.blocked.sel.clear(); renderAll(); });
+
+const TITLES={dash:"Imperva WAF – IOC Block",history:"Imperva IOC Block – Older detections",blocked:"Imperva IOC Block – Blocked IPs / Unblock / Auto unblock",rules:"Imperva IOC Block – Detection rules",audit:"Imperva IOC Block – Audit log"};
+function route(){
+  const h0=(location.hash||"#").slice(1), h=h0==="auto"?"blocked":h0, cur=TITLES[h]?h:"dash";   // #auto = old Auto unblock page
+  Object.keys(TITLES).forEach(k=>$("v-"+k).hidden=k!==cur);
+  document.querySelectorAll(".tabs a").forEach(a=>{ if(a.dataset.page===cur) a.setAttribute("aria-current","page"); else a.removeAttribute("aria-current"); });
+  $("pageTitle").textContent=TITLES[cur];
+  if(cur==="rules") renderRules(); if(cur==="audit") renderAudit(); if(cur==="blocked") renderBlocked();
+  window.scrollTo(0,0);
+}
+window.addEventListener("hashchange",route);
+renderAll(); route();
+})();
+</script>

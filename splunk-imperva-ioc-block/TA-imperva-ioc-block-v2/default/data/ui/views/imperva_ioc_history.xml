@@ -1,0 +1,545 @@
+<form version="1.1" theme="dark" hideFilters="true" script="imperva_cells.js,imperva_form.js">
+  <label>Imperva IOC Block V2 – older detections</label>
+  <description>IPs whose last detection is older than 7 days and that are not blocked yet. Same as the Block page: click rows to select, fill Ticket / Incident no. and Description, click ⛔ BLOCK.</description>
+  <init>
+    <set token="h_sel">,</set>
+    <set token="h_refresh">init</set>
+    <set token="h_earliest">-30d@d</set>
+    <set token="h_cut">-7d</set>
+  </init>
+
+
+  <search id="det">
+    <query>`imperva_ioc_detections`
+| where last_seen &lt; relative_time(now(), $h_cut|s$)
+| eval _r=$h_refresh|s$</query>
+    <earliest>$h_earliest$</earliest>
+    <latest>now</latest>
+  </search>
+  <search id="audit30">
+    <query>| `imperva_audit_daily(30)`
+| eval _r=$h_refresh|s$</query>
+    <earliest>-1m</earliest>
+    <latest>now</latest>
+    <refresh>300s</refresh>
+    <refreshType>delay</refreshType>
+  </search>
+
+  <row>
+    <panel>
+      <title>Blocked / unblocked IPs per day – last 30 days</title>
+      <chart>
+        <search base="audit30">
+          <query>| fields _time "Blocked IPs" "Unblocked IPs"</query>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.chart.showDataLabels">all</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">IPs</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.fieldColors">{"Blocked IPs":0xDC4E41,"Unblocked IPs":0x53A051}</option>
+        <option name="charting.legend.placement">top</option>
+        <option name="height">280</option>
+      </chart>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <input type="dropdown" token="h_range" searchWhenChanged="true">
+        <label>Last detected</label>
+        <choice value="30">8 – 30 days ago</choice>
+        <choice value="90">31 – 90 days ago</choice>
+        <choice value="all">8 – 90 days ago</choice>
+        <default>30</default>
+        <change>
+          <condition value="30">
+            <set token="h_earliest">-30d@d</set>
+            <set token="h_cut">-7d</set>
+          </condition>
+          <condition value="90">
+            <set token="h_earliest">-90d@d</set>
+            <set token="h_cut">-30d</set>
+          </condition>
+          <condition value="all">
+            <set token="h_earliest">-90d@d</set>
+            <set token="h_cut">-7d</set>
+          </condition>
+        </change>
+      </input>
+      <html>
+        <div style="color:#c3cbd4">IPs detected again in the last 7 days are on the <a href="imperva_ioc_block">Block – last 7 days</a> page.</div>
+      </html>
+    </panel>
+  </row>
+
+  <search id="h_find">
+    <query>| makeresults
+| eval _q=replace(lower(trim(replace($h_q|s$, "[*]", ""))), "^ithm[\s:#-]*", "")
+| eval ip=split(replace(_q, "[\s,;]+", ","), ",")
+| mvexpand ip
+| where ip!=""
+| eval _isip=if(match(ip, "^\d{1,3}(\.\d{1,3}){3}(/\d{1,2})?\z") OR (match(ip, ":") AND match(ip, "^[0-9a-f:.]+(/\d{1,3})?\z")), 1, 0)
+| eventstats sum(_isip) AS _nip
+| where _isip=1 OR _nip=0
+| eval _text=if(_nip=0, _q, null()), ip=if(_nip=0, null(), ip), _k=coalesce(ip, "text")
+| dedup _k
+| impervafind field=ip text_field=_text
+| eval ip=coalesce(ip, "-")
+| join type=left ip [search `imperva_ioc_notables` earliest=-90d@d [| makeresults | eval _q=replace(lower(trim(replace($h_q|s$, "[*]", ""))), "^ithm[\s:#-]*", ""), t=split(replace(_q, "[\s,;]+", ","), ",") | mvexpand t | where match(t, "^[0-9a-f.:]+\z") AND match(t, "[.:]") | stats count AS n values(t) AS t | eval search=if(n>0, "(".mvjoin(mvmap(t, "\"".t."\""), " OR ").")", "\"imperva_no_ip_typed\"") | fields search]
+  | `imperva_ioc_ip`
+  | mvexpand ioc_ip
+  | `imperva_ioc_fields`
+  | stats max(_time) AS _det_last values(ioc_rule) AS _det_rule values(ioc_incident) AS _det_inc BY ioc_ip
+  | rename ioc_ip AS ip]
+| eval _det_inc=mvdedup(mvmap(_det_inc, replace(_det_inc, "(?i)ITHM\s*-?\s*", "")))
+| eval found=find_lines.if(isnotnull(_det_last), " ‖ pg¦detected ".strftime(_det_last, "%Y-%m-%d %H:%M")." · ".mvjoin(_det_rule, "; ").if(isnotnull(_det_inc), " · ticket ".mvjoin(_det_inc, ", "), "")." · on the ".if(_det_last>=relative_time(now(), "-7d@d"), "Block – last 7 days", "Older detections")." page", "")
+| table ip found find_blockable find_cloud find_unblockable find_unblock_policy</query>
+    <earliest>-1m</earliest>
+    <latest>now</latest>
+  </search>
+  <row>
+    <panel id="h_actpanel">
+      <title>Search and Block older detections</title>
+      <input type="text" token="h_q" searchWhenChanged="true">
+        <label>🔎 Search or add IPs – IP / Ticket / Incident no. / Rule (* = all)</label>
+        <default>*</default>
+      </input>
+      <input type="text" token="h_add" searchWhenChanged="true">
+        <label>Add IPs manually – other sources, comma separated ("-" if none)</label>
+        <default>-</default>
+      </input>
+      <input type="text" token="h_tk" searchWhenChanged="true">
+        <label>Ticket / Incident no. ("-" if none)</label>
+        <default>-</default>
+      </input>
+      <input type="text" token="h_desc" searchWhenChanged="true">
+        <label>Description ("-" if none)</label>
+        <default>-</default>
+      </input>
+      <table id="h_acttable">
+        <search id="h_act" base="det">
+          <query>| eval _q=replace(lower(trim(replace($h_q|s$, "[*]", ""))), "^ithm[\s:#-]*", ""), _toks=split(replace(_q, "[\s,;]+", ","), ","), _hay=lower(src." ".incident_no." ".rule_name)
+| eval _ntok=mvcount(mvfilter(_toks!="")), _iptok=mvcount(mvfilter(match(_toks, "^[0-9a-f.:/]+\z") AND match(_toks, "[.:]")))
+| eval _hit=if(coalesce(_iptok, 0)>0 AND _iptok=_ntok, coalesce(mvcount(mvmap(_toks, if(_toks!="" AND like(_hay, "%"._toks."%"), 1, null()))), 0), 0)
+| where _q="" OR _hit>0 OR like(_hay, "%"._q."%")
+| sort - _sev_rank - count
+| head 50
+| stats count AS shown_n values(src) AS shown
+| eval SelectAll=if(shown_n>0, "☑ Select all ".shown_n." shown: ".mvjoin(shown, ","), "-")
+| eval ip=split("-,".replace(trim($h_sel|s$, ","), "☑ Select all \d+ shown: ", ""), ",")
+| mvexpand ip
+| eventstats count AS _c BY ip
+| eval ip=if(ip!="" AND ip!="-" AND _c%2=1, ip, null())
+| stats first(SelectAll) AS SelectAll values(ip) AS ip
+| eval ips=coalesce(mvjoin(ip, ","), ""), n=if(ips="", 0, coalesce(mvcount(split(ips, ",")), 0))
+| eval nb_ips=ips, nb_n=n
+| eval _add=trim(replace($h_add|s$, "[\s;]+", ","), ","), _add=if(_add="-", "", _add)
+| eval ips=trim(coalesce(ips, "").",".replace(_add, ",+", ","), ","), ips=coalesce(mvjoin(mvdedup(split(ips, ",")), ","), "")
+| eval ips=if(ips=",", "", ips), n=if(ips="", 0, coalesce(mvcount(split(ips, ",")), 0))
+| eval ip=if(n=0, "-", split(ips, ","))
+| mvexpand ip
+| impervapolicycheck field=ip
+| vtcheck field=ip check_waf=false cache_only=true
+| eval _cloud=if(ip!="-" AND (match(lower(coalesce(vt_as_owner, "")), `imperva_cloud_providers`) OR match(lower(coalesce(vt_as_owner, "")), `imperva_mobile_providers`)), ip, null())
+| lookup imperva_block_registry ip OUTPUT status AS _reg
+| eval chk=case(ip="-" OR ip="", null(),
+    isnotnull(_cloud), ip." is a CLOUD PROVIDER / SHARED IP (".vt_as_owner.") - short block: unblocked automatically after a few days without an attack",
+    NOT (match(ip, "^\d{1,3}(\.\d{1,3}){3}(/\d{1,2})?\z") OR (match(ip, ":") AND match(ip, "^[0-9A-Fa-f:.]+(/\d{1,3})?\z"))), ip." is not an IP / CIDR",
+    isnotnull(mvfind(_reg, "^blocked\z")), ip." already blocked from Splunk",
+    waf_policy_verdict="ALLOWLISTED", ip." is ALLOWED: ".waf_policies,
+    waf_policy_verdict="BLOCKED_ELSEWHERE" OR waf_policy_verdict="BLOCKED_HERE", ip." already BLOCKED: ".waf_policies,
+    waf_policy_verdict="UNKNOWN", ip." WAF check unavailable",
+    true(), null())
+| stats first(SelectAll) AS SelectAll first(ips) AS ips first(n) AS n first(nb_ips) AS nb_ips first(nb_n) AS nb_n values(chk) AS waf_check values(_cloud) AS cloud_ips
+| eval ips=coalesce(ips, ""), n=coalesce(n, 0), nb_ips=coalesce(nb_ips, ""), nb_n=coalesce(nb_n, 0), cloud_ips=coalesce(mvjoin(cloud_ips, ","), "")
+| eval waf_check=coalesce(mvjoin(waf_check, " | "), if(n=0, "-", "✔ none blocked / allowed on WAF"))
+| eval nb_n=coalesce(nb_n, 0), NotBlock=if(nb_n>0, "✖ NOT BLOCK ".nb_n." IP".if(nb_n=1, "", "s").": ".replace(nb_ips, ",", ", "), "-")
+| eval Action=if(n=0, "Click rows below or type IPs in the search box", "⛔ BLOCK ".n." IP".if(n=1, "", "s")), Clear=if(n=0, "-", "✖ Clear selection")
+| eval selected_ips=if(n=0, "-", replace(ips, ",", ", ")), ticket=$h_tk|s$, description=$h_desc|s$
+| eval ticket=if(ticket="-" AND match($h_q|s$, "(?i)^\s*(ITHM[\s:#-]*)?\d{6,}\s*\z"), replace(trim($h_q|s$), "(?i)^ITHM[\s:#-]*", ""), ticket)
+| table Action NotBlock Clear SelectAll selected_ips waf_check cloud_ips ticket description</query>
+        </search>
+        <option name="count">1</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">cell</option>
+        <format type="color" field="Action">
+          <colorPalette type="expression">if(like(value, "⛔%"), "#DC4E41", "#3C444D")</colorPalette>
+        </format>
+        <format type="color" field="NotBlock">
+          <colorPalette type="expression">if(like(value, "✖%"), "#5C6773", "#3C444D")</colorPalette>
+        </format>
+        <format type="color" field="SelectAll">
+          <colorPalette type="expression">if(like(value, "☑%"), "#1F6F8B", "#3C444D")</colorPalette>
+        </format>
+        <format type="color" field="waf_check">
+          <colorPalette type="expression">if(like(value, "✔%") OR value=="-", "#3C444D", "#B26B00")</colorPalette>
+        </format>
+        <drilldown>
+          <!-- one click = do it (no second confirm) -->
+          <condition field="Action">
+            <set token="h_exec_ips">$row.selected_ips$</set>
+            <set token="h_exec_tk">$row.ticket$</set>
+            <set token="h_exec_desc">$row.description$</set>
+            <set token="h_sel">,</set>
+            <set token="form.h_tk">-</set>
+            <set token="form.h_desc">-</set>
+            <set token="form.h_add">-</set>
+          </condition>
+          <condition field="NotBlock">
+            <set token="h_nb_exec">$click.value2$</set>
+            <set token="h_nb_tk">$row.ticket$</set>
+            <set token="h_nb_desc">$row.description$</set>
+            <set token="h_sel">,</set>
+            <set token="form.h_tk">-</set>
+            <set token="form.h_desc">-</set>
+          </condition>
+          <condition field="SelectAll">
+            <!-- replaces the selection with every IP that matches the search box -->
+            <set token="h_sel">,$click.value2$,</set>
+          </condition>
+          <condition field="Clear">
+            <set token="h_sel">,</set>
+            <set token="form.h_add">-</set>
+          </condition>
+          <condition></condition>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel depends="$h_exec_ips$">
+      <title>Block result – written to the audit log (click a row to close)</title>
+      <table>
+        <search>
+          <query>| makeresults
+| impervablock action=block ip=$h_exec_ips|s$ incident_no=$h_exec_tk|s$ description=$h_exec_desc|s$
+| `imperva_audit_write`
+| table time ip action status verified ticket description backend soar_container detail</query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+          <done>
+            <set token="h_refresh">$job.sid$</set>
+          </done>
+        </search>
+        <option name="count">50</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">cell</option>
+        <format type="color" field="status">
+          <colorPalette type="map">{"blocked":#DC4E41,"unblocked":#53A051,"no_change":#708794,"rejected":#AF575A,"error":#B6488E,"dismissed":#5C6773,"restored":#5A9BD5}</colorPalette>
+        </format>
+        <format type="color" field="verified">
+          <colorPalette type="map">{"yes":#53A051,"no":#DC4E41,"unknown":#F8BE34}</colorPalette>
+        </format>
+        <drilldown>
+          <unset token="h_exec_ips"></unset>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel depends="$h_unb_ips$">
+      <title>Unblock result – from the policy that holds each IP, written to the audit log (click a row to close)</title>
+      <table>
+        <search>
+          <query>| makeresults
+| impervaautounblock action=unblock ip=$h_unb_ips|s$ incident_no=$h_unb_tk|s$ description=$h_unb_desc|s$
+| `imperva_audit_write`
+| table time ip action status verified policy ticket description backend soar_container detail</query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+          <done>
+            <set token="h_refresh">$job.sid$</set>
+          </done>
+        </search>
+        <option name="count">50</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">cell</option>
+        <format type="color" field="status">
+          <colorPalette type="map">{"blocked":#DC4E41,"unblocked":#53A051,"no_change":#708794,"rejected":#AF575A,"error":#B6488E,"dismissed":#5C6773,"restored":#5A9BD5}</colorPalette>
+        </format>
+        <format type="color" field="verified">
+          <colorPalette type="map">{"yes":#53A051,"no":#DC4E41,"unknown":#F8BE34}</colorPalette>
+        </format>
+        <drilldown>
+          <unset token="h_unb_ips"></unset>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel depends="$h_nb_exec$">
+      <title>Not block result – hidden until detected again, nothing sent to the WAF (click a row to close)</title>
+      <table>
+        <search>
+          <query>| impervadismiss action=add ip=$h_nb_exec|s$ incident_no=$h_nb_tk|s$ description=$h_nb_desc|s$
+| `imperva_audit_write`
+| table time ip action status ticket description detail</query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+          <done>
+            <set token="h_refresh">$job.sid$</set>
+          </done>
+        </search>
+        <option name="count">50</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">cell</option>
+        <format type="color" field="status">
+          <colorPalette type="map">{"blocked":#DC4E41,"unblocked":#53A051,"no_change":#708794,"rejected":#AF575A,"error":#B6488E,"dismissed":#5C6773,"restored":#5A9BD5}</colorPalette>
+        </format>
+        <format type="color" field="verified">
+          <colorPalette type="map">{"yes":#53A051,"no":#DC4E41,"unknown":#F8BE34}</colorPalette>
+        </format>
+        <drilldown>
+          <unset token="h_nb_exec"></unset>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <!-- ============ IP detail (1.3.0): click the "Decision aid" cell of the table below ============ -->
+  <search id="h_dbase">
+    <query>`imperva_waf_events` src=$h_detail|s$
+| `imperva_waf_action_class`
+| `imperva_waf_request_fields`
+| bin _time span=1d
+| stats count BY _time waf_class waf_atk waf_code waf_path waf_client waf_ua</query>
+    <earliest>-30d@d</earliest>
+    <latest>now</latest>
+  </search>
+  <row>
+    <panel depends="$h_detail$">
+      <title>IP detail – $h_detail$ (30d) · ✖ Close = first column</title>
+      <table>
+        <search base="det">
+          <query>| where src=$h_detail|s$
+| `imperva_ioc_enrich_30d`
+| `imperva_ioc_decision_aid(30d)`
+| intelcheck field=src cache_only=true adjust=false
+| eval AbuseIPDB=if(abuse_status="ok", abuse_score."% · ".abuse_reports." reports · ".abuse_users." users · ".abuse_usage." · ".abuse_isp.if(abuse_tor="yes", " · Tor", "").if(abuse_last_reported!="-", " · last ".abuse_last_reported, ""), abuse_status)
+| eval GreyNoise=case(gn_status="ok" AND gn_riot="yes", "RIOT known service · ".gn_name, gn_status="ok", gn_classification." · ".gn_name." · last seen ".gn_last_seen, gn_status="not_found", "not observed scanning the internet", true(), gn_status)
+| eval Close="✖ Close", Events="🔍 all events"
+| table Close src suggestion suggestion_reason asn location VirusTotal AbuseIPDB GreyNoise "Decision aid (30d)" Events
+| rename src AS IP, asn AS owner</query>
+        </search>
+        <option name="count">1</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">cell</option>
+        <!-- VirusTotal = score (e.g. 9/92): click = the IP's page on VirusTotal -->
+        <format type="color" field="VirusTotal">
+          <colorPalette type="expression">"#2C62B3"</colorPalette>
+        </format>
+        <format type="color" field="AbuseIPDB %">
+          <colorPalette type="list">[#53A051,#F8BE34,#DC4E41]</colorPalette>
+          <scale type="threshold">25,75</scale>
+        </format>
+        <format type="color" field="GreyNoise">
+          <colorPalette type="expression">case(like(value, "RIOT%"), "#53A051", like(value, "benign%"), "#53A051", like(value, "malicious%"), "#DC4E41", like(value, "suspicious%"), "#F8BE34", true(), "#3C444D")</colorPalette>
+        </format>
+        <format type="color" field="suggestion">
+          <colorPalette type="map">{"BLOCK":#DC4E41,"REVIEW":#F8BE34,"MONITOR":#5A9BD5,"ALREADY_BLOCKED":#708794,"DO_NOT_BLOCK":#53A051}</colorPalette>
+        </format>
+        <format type="color" field="severity">
+          <colorPalette type="map">{"critical":#B6488E,"high":#DC4E41,"medium":#F8BE34,"low":#5A9BD5,"informational":#708794}</colorPalette>
+        </format>
+        <drilldown>
+          <condition field="Close">
+            <unset token="h_detail"></unset>
+          </condition>
+          <condition field="VirusTotal">
+            <link target="_blank">https://www.virustotal.com/gui/ip-address/$row.IP|n$</link>
+          </condition>
+          <condition field="AbuseIPDB">
+            <link target="_blank">https://www.abuseipdb.com/check/$row.IP|n$</link>
+          </condition>
+          <condition field="GreyNoise">
+            <link target="_blank">https://viz.greynoise.io/ip/$row.IP|n$</link>
+          </condition>
+          <condition field="Events">
+            <link target="_blank">search?q=search%20index%3Dimperva%20sourcetype%3D%22incapsula%3Acef%22%20src%3D$row.IP|u$&amp;earliest=-30d%40d&amp;latest=now</link>
+          </condition>
+          <condition></condition>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel depends="$h_detail$">
+      <title>WAF attack types (30d)</title>
+      <table>
+        <search base="h_dbase">
+          <query>| where waf_atk!="-" | stats sum(count) AS requests BY waf_atk | sort 0 - requests | rename waf_atk AS "attack type"</query>
+        </search>
+        <option name="count">10</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+    <panel depends="$h_detail$">
+      <title>Responses of requests let through (30d)</title>
+      <table>
+        <search base="h_dbase">
+          <query>| where waf_class="allowed" | stats sum(count) AS requests BY waf_code | sort 0 - requests | rename waf_code AS "HTTP code"</query>
+        </search>
+        <option name="count">10</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+    <panel depends="$h_detail$">
+      <title>Client (Imperva) / User-Agent (30d)</title>
+      <table>
+        <search base="h_dbase">
+          <query>| stats sum(count) AS requests BY waf_client waf_ua | sort 0 - requests | head 5 | rename waf_client AS client, waf_ua AS "User-Agent"</query>
+        </search>
+        <option name="count">5</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+    <panel depends="$h_detail$">
+      <title>Activity – requests per day (30d)</title>
+      <chart>
+        <search base="h_dbase">
+          <query>| where waf_class="blocked" OR waf_class="allowed" | timechart span=1d sum(count) BY waf_class</query>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.visibility">collapsed</option>
+        <option name="charting.fieldColors">{"blocked":0xDC4E41,"allowed":0x53A051}</option>
+        <option name="charting.legend.placement">top</option>
+        <option name="height">200</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel depends="$h_detail$">
+      <title>History – block / unblock / not block (audit log)</title>
+      <table>
+        <search>
+          <query>| inputlookup imperva_audit where ip=$h_detail|s$
+| eval _t=tonumber(time), time=strftime(_t, "%Y-%m-%d %H:%M"), ticket=replace(coalesce(ticket, "-"), "(?i)ITHM\s*-?\s*", "")
+| sort 0 - _t
+| table time action status user ticket description</query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+    <panel depends="$h_detail$">
+      <title>Detected by ES – last 90 days</title>
+      <table>
+        <search>
+          <query>`imperva_ioc_notables` $h_detail|s$
+| `imperva_ioc_ip`
+| mvexpand ioc_ip
+| where ioc_ip=$h_detail|s$
+| eval _day=strftime(_time, "%Y-%m-%d")
+| stats dc(_day) AS days count AS findings min(_time) AS first max(_time) AS last values(search_name) AS rules
+| eval first=strftime(first, "%Y-%m-%d %H:%M"), last=strftime(last, "%Y-%m-%d %H:%M"), rules=mvjoin(rules, "; ")
+| rename days AS "detected on (days)", findings AS findings, first AS "first detected", last AS "last detected", rules AS "correlation searches"</query>
+          <earliest>-90d@d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">1</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+    <panel depends="$h_detail$">
+      <title>Neighbours detected – same /24 or same ASN (detected IPs of this page)</title>
+      <table>
+        <search base="det">
+          <query>| `imperva_ioc_enrich_base`
+| eval _sel=$h_detail|s$, _c24=replace(src, "\.\d+\z", ".0/24")
+| eval _sel_asn1=if(src=_sel, vt_asn, null()), _sel_c241=if(src=_sel, _c24, null())
+| eventstats values(_sel_asn1) AS _sel_asn values(_sel_c241) AS _sel_c24
+| where src!=_sel AND (_c24=_sel_c24 OR (vt_asn=_sel_asn AND vt_asn!="-"))
+| eval same=if(_c24=_sel_c24, "same /24", "same ASN")
+| table src same asn suggestion last_detected</query>
+        </search>
+        <option name="count">10</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel depends="$h_detail$">
+      <title>All paths (30d) – highest count first · host + path without query string (🔍 all events = with query string)</title>
+      <table id="h_paths">
+        <search base="h_dbase">
+          <query>| stats sum(eval(if(waf_class="blocked", count, 0))) AS Blocked sum(eval(if(waf_class="allowed", count, 0))) AS "Let through" sum(count) AS Total BY waf_path | sort 0 - Total | rename waf_path AS "host + path"</query>
+        </search>
+        <option name="count">100</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>IPs detected by WAF rules – older than 7 days, not blocked yet · WAF activity of the last 30 days (click a row to select / unselect it)</title>
+      <table id="det_table">
+        <search base="det">
+          <query>| eval _q=replace(lower(trim(replace($h_q|s$, "[*]", ""))), "^ithm[\s:#-]*", ""), _toks=split(replace(_q, "[\s,;]+", ","), ","), _hay=lower(src." ".incident_no." ".rule_name)
+| eval _ntok=mvcount(mvfilter(_toks!="")), _iptok=mvcount(mvfilter(match(_toks, "^[0-9a-f.:/]+\z") AND match(_toks, "[.:]")))
+| eval _hit=if(coalesce(_iptok, 0)>0 AND _iptok=_ntok, coalesce(mvcount(mvmap(_toks, if(_toks!="" AND like(_hay, "%"._toks."%"), 1, null()))), 0), 0)
+| where _q="" OR _hit>0 OR like(_hay, "%"._q."%")
+| `imperva_ioc_enrich_30d`
+| `imperva_ioc_decision_aid(30d)`</query>
+        </search>
+        <option name="count">20</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">cell</option>
+        <!-- VirusTotal = score (e.g. 9/92): click = the IP's page on VirusTotal -->
+        <format type="color" field="VirusTotal">
+          <colorPalette type="expression">"#2C62B3"</colorPalette>
+        </format>
+        <format type="color" field="AbuseIPDB %">
+          <colorPalette type="list">[#53A051,#F8BE34,#DC4E41]</colorPalette>
+          <scale type="threshold">25,75</scale>
+        </format>
+        <format type="color" field="GreyNoise">
+          <colorPalette type="expression">case(like(value, "RIOT%"), "#53A051", like(value, "benign%"), "#53A051", like(value, "malicious%"), "#DC4E41", like(value, "suspicious%"), "#F8BE34", true(), "#3C444D")</colorPalette>
+        </format>
+        <format type="color" field="suggestion">
+          <colorPalette type="map">{"BLOCK":#DC4E41,"REVIEW":#F8BE34,"MONITOR":#5A9BD5,"ALREADY_BLOCKED":#708794,"DO_NOT_BLOCK":#53A051}</colorPalette>
+        </format>
+        <format type="color" field="severity">
+          <colorPalette type="map">{"critical":#B6488E,"high":#DC4E41,"medium":#F8BE34,"low":#5A9BD5,"informational":#708794}</colorPalette>
+        </format>
+        <drilldown>
+          <condition field="VirusTotal">
+            <link target="_blank">https://www.virustotal.com/gui/ip-address/$row.src|n$</link>
+          </condition>
+          <condition field="AbuseIPDB %">
+            <link target="_blank">https://www.abuseipdb.com/check/$row.src|n$</link>
+          </condition>
+          <condition field="GreyNoise">
+            <link target="_blank">https://viz.greynoise.io/ip/$row.src|n$</link>
+          </condition>
+          <condition field="Decision aid (30d)">
+            <!-- IP detail panels above the table -->
+            <set token="h_detail">$row.src$</set>
+          </condition>
+          <condition>
+            <!-- click = select / unselect this IP; Ticket is filled from the finding's ITHM note -->
+            <set token="h_sel">$h_sel$,$row.src$,</set>
+            <eval token="form.h_tk">if(isnull('form.h_tk') OR 'form.h_tk'=="-" OR 'form.h_tk'=="", 'row.incident_no', 'form.h_tk')</eval>
+          </condition>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+</form>
