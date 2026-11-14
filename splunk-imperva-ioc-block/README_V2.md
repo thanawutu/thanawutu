@@ -8,8 +8,8 @@ When V2 is tested and confirmed, V1 is removed (see *Cut-over*).
 | | V1 (1.3.x) | V2 (2.0.0) |
 |---|---|---|
 | Cloud provider IPs (AWS, Google Cloud, Azure, ...) | never blocked (Not block only) | **blocked**, tagged "short block" |
-| Auto unblock | - | IP rules of **every enabled WAF policy** are unblocked when the IP sent **no request for 7 days (cloud provider) / 90 days (others)** |
-| Pages | 5 | 6 (new **⏱ Auto unblock**; Blocked IPs page shows *Unblock after / Last attack / Unblock on / Auto unblock*) |
+| Auto unblock | - | IP rules of **every enabled WAF policy** are unblocked when the IP sent **no request for 7 days (cloud provider / shared IP) / 60 days (others)** |
+| Pages | 5 | 6 (new **⏱ Auto unblock**; Blocked IPs page shows *Attacks 24h / Last attack / Unblock after / Unblock on / Auto unblock*) |
 
 Everything else (Decision aid, IP detail, card, Select all, incident digits) is the same as V1.
 
@@ -17,7 +17,9 @@ Everything else (Decision aid, IP detail, card, Select all, incident digits) is 
 
 * **Last attack** = last Imperva event *Blocked IP* / `act=REQ_BLOCKED_ACL` from the IP (the IP is on a
   block list and still sends requests), collected every hour by
-  **"Imperva V2 - Last attack of blocked IPs (hourly)"** into KV `imperva_blocked_seen`.
+  **"Imperva V2 - Last attack of blocked IPs (hourly)"** into KV `imperva_blocked_seen`, together with
+  the number of requests the WAF still blocked from each IP in the last 24 hours (**Attacks 24h**, per IP
+  and as a total on the Blocked IPs and Auto unblock pages).
 * The countdown of a rule starts at the latest of: last attack, block date (registry), the day V2
   first saw the rule (= **the day V2 is installed** for rules already on the WAF), `[auto_unblock] start_time`.
 * **"Imperva V2 - Auto unblock (daily)"** (02:17) unblocks what is due through the normal backend
@@ -25,12 +27,13 @@ Everything else (Decision aid, IP detail, card, Select all, incident digits) is 
   registry entry of IPs blocked from Splunk. A rule added again later starts a new countdown.
 * Per rule (Auto unblock page): **📌 Keep** (never unblock), **↺ Default**, **🔓 Unblock now**.
 * Settings (Auto unblock page, KV `imperva_auto_unblock` document `settings`, defaults in
-  `imperva.conf [auto_unblock]`): on / off, days for IPs (90), days for cloud provider IPs (7),
+  `imperva.conf [auto_unblock]`): on / off, days for IPs (60), days for cloud provider / shared IPs (7),
   scope `all` (every enabled policy) or `own` (`policy_ids` only), rules per run (50).
 * Only `BLOCK` IP / CIDR rules of IP settings are handled; ALLOW rules, exceptions and range rules
   (`a-b`) are never touched. Disabled policies are ignored (except the own policy).
-* Cloud provider = VirusTotal AS owner matches `imperva.conf cloud_providers` (looked up when the IP is
-  blocked; for rules of other policies, only IPs VirusTotal already knows - others count as non-cloud).
+* Cloud provider / shared IP = VirusTotal AS owner matches `imperva.conf cloud_providers` (AWS, Google,
+  Azure ...) or `shared_ip_providers` (mobile carriers: many customers behind one IP). Looked up when the
+  IP is blocked; for rules of other policies, only IPs VirusTotal already knows - others count as normal.
 
 ### Living next to V1
 

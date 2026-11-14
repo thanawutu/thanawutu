@@ -86,6 +86,15 @@ class TestOwners(Base):
         self.assertIn(ip_owner.cache_key_ip("35.240.10.8"), self.kv)      # cached for Auto unblock
         self.assertEqual(ip_owner.cloud_notes("k", {"cloud_providers": ""}, {}, ["54.245.198.114"], self.log, 7), {})
 
+    def test_shared_ip_note(self):
+        self.cached("49.228.105.17", "Advanced Wireless Network Company Limited")
+        notes = ip_owner.cloud_notes("k", {"cloud_providers": WORDS, "shared_ip_providers": "mobile|wireless"}, {},
+                                     ["49.228.105.17"], self.log, 7)
+        self.assertEqual(notes["49.228.105.17"],
+                         "shared IP (Advanced Wireless Network Company Limited): unblocked automatically after 7 days without an attack")
+        self.assertEqual(ip_owner.short_class("Amazon.com", ip_owner.cloud_regex(WORDS), ip_owner.cloud_regex("mobile")), ("cloud", "Amazon.com"))
+        self.assertIsNone(ip_owner.short_class("OVH SAS", ip_owner.cloud_regex(WORDS), ip_owner.cloud_regex("mobile")))
+
 
 class FakeBackend(object):
     mode = "soar"

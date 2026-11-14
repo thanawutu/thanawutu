@@ -7,6 +7,7 @@ re-assigned to other customers, so Auto unblock removes them after a short quiet
 
     imperva.conf [settings]
     cloud_providers = amazon|aws|google|...   words matched in the AS owner (whole words, any case)
+    shared_ip_providers = mobile|wireless|... words of shared IPs (mobile carrier NAT): same short period
     cloud_check_max_lookups = 4               VirusTotal lookups per block for IPs not in the cache
 
 The same word list is in macros.conf [imperva_cloud_providers] for the dashboards.
@@ -27,6 +28,16 @@ from splunk_helpers import (CACHE, cache_key_ip, is_true, kv_query, kv_upsert,
                             load_credential, splunk_home)
 
 CLOUD_NOTE = "cloud provider IP (%s): unblocked automatically after %s days without an attack"
+SHARED_NOTE = "shared IP (%s): unblocked automatically after %s days without an attack"
+
+
+def short_class(owner, cloud_rx, shared_rx):
+    """("cloud", owner) | ("shared", owner) | None - IPs that get the short quiet period."""
+    if cloud_owner(owner, cloud_rx):
+        return ("cloud", owner)
+    if cloud_owner(owner, shared_rx):
+        return ("shared", owner)
+    return None
 
 
 def cloud_regex(words):
@@ -169,7 +180,8 @@ def cloud_notes(session_key, iconf, vconf, candidates, log, cloud_days):
     owner up now (cache, else up to cloud_check_max_lookups VirusTotal lookups) so Auto unblock
     knows it later. Empty cloud_providers -> {}."""
     rx = cloud_regex(iconf.get("cloud_providers"))
-    if not rx or not candidates:
+    srx = cloud_regex(iconf.get("shared_ip_providers"))
+    if not (rx or srx) or not candidates:
         return {}
     ask = dict((c, lookup_ip(c)) for c in candidates)
     try:
@@ -180,7 +192,7 @@ def cloud_notes(session_key, iconf, vconf, candidates, log, cloud_days):
                  max_lookups=max_lookups)
     out = {}
     for c in candidates:
-        cp = cloud_owner(own.get(ask[c]), rx)
-        if cp:
-            out[c] = CLOUD_NOTE % (cp, cloud_days)
+        k = short_class(own.get(ask[c]), rx, srx)
+        if k:
+            out[c] = (CLOUD_NOTE if k[0] == "cloud" else SHARED_NOTE) % (k[1], cloud_days)
     return out

@@ -2,8 +2,8 @@
 Splunk generating command: impervaautounblock (V2)
 
 Unblock IP rules of the WAF policies after a quiet period (see auto_unblock.py):
-cloud provider IPs after [auto_unblock] cloud_days (7) without an attack, other IPs after
-default_days (90). The countdown never starts before the day V2 first saw the rule.
+cloud provider and shared IPs after [auto_unblock] cloud_days (7) without an attack, other IPs
+after default_days (60). The countdown never starts before the day V2 first saw the rule.
 
 Usage:
     | makeresults | impervaautounblock                  (= action=list: every BLOCK IP rule + plan)
@@ -11,7 +11,7 @@ Usage:
     | makeresults | impervaautounblock action=set ip="1.2.3.4" rule=keep reason="C2" | `imperva_audit_write`
           rule = keep (never) | default | <days>; policy_id=<id> to change one policy only
     | makeresults | impervaautounblock action=settings  (show)
-    | makeresults | impervaautounblock action=settings enabled=on default_days=90 cloud_days=7 scope=all
+    | makeresults | impervaautounblock action=settings enabled=on default_days=60 cloud_days=7 scope=all
           max_per_run=50 | `imperva_audit_write`          (save, from the Auto unblock page)
     | makeresults | impervaautounblock action=policies  (policies holding BLOCK IP rules)
     ... | impervaautounblock action=annotate field=ip policy_field=site_id   (add plan columns)
@@ -70,11 +70,12 @@ def gather(session_key, conf, settings, log, now):
     for d in kv_list(session_key, au.STATE):
         if d.get("_key") != au.SETTINGS_KEY:
             states[d["_key"]] = d
-    seen = {}
+    seen, hits = {}, {}
     try:
         for d in kv_list(session_key, au.SEEN):
             if d.get("src"):
                 seen[d["src"]] = float(d.get("last_seen") or 0)
+                hits[d["src"]] = float(d.get("hits_24h") or 0)
     except Exception as e:  # noqa: BLE001 - no activity data yet
         log.error("auto unblock: cannot read %s: %s", au.SEEN, e)
     registry = {}
@@ -84,8 +85,9 @@ def gather(session_key, conf, settings, log, now):
     cands = au.candidate_entries(entries, own)
     owners = ip_owner.cached_owners(session_key, sorted(set(filter(None, (au.first_address(e["cidr"]) for e in cands)))), log)
     rx = ip_owner.cloud_regex(conf.get("cloud_providers"))
+    srx = ip_owner.cloud_regex(conf.get("shared_ip_providers"))
     items, new_states = au.plan(now, entries, own, settings, states, seen, registry, owners,
-                                lambda o: ip_owner.cloud_owner(o, rx))
+                                lambda o: ip_owner.short_class(o, rx, srx), hits)
     if new_states:
         try:
             kv_upsert(session_key, new_states, au.STATE)
@@ -104,13 +106,15 @@ def row_of(i, now):
     else:
         st = STATUS[i["status"]]
     rule = "Keep" if i["rule"] == "keep" else ("%s d quiet" % i["rule"] if isinstance(i["rule"], int) else
-                                               ("cloud %s d quiet" % i["days"] if i["cloud"] else "%s d quiet" % i["days"]))
+                                               ("%s %s d quiet" % (i["short"], i["days"]) if i["short"] else "%s d quiet" % i["days"]))
     return {"ip": i["cidr"], "policy_id": i["policy_id"], "policy_name": i["policy_name"],
             "own_policy": "yes" if i["own"] else "no", "managed": "yes" if i["managed"] else "no",
             "owner": i["owner"] or "-", "cloud_provider": i["cloud"] or "-",
+            "short_block": ("%s: %s" % (i["short"], i["owner"])) if i["short"] else "-",
             "blocked_at": fmt(i["blocked_at"]), "listed_since": fmt(i["first_listed"]),
             "ticket": i["ticket"], "description": i["description"], "blocked_by": i["blocked_by"],
             "last_attack": fmt(i["last_seen"]) if i["last_seen"] else "-",
+            "attacks_24h": i.get("attacks_24h", 0),
             "unblock_after": rule, "unblock_on": fmt(i["unblock_on"]),
             "days_left": "-" if i["left_days"] is None else ("%.1f" % i["left_days"] if i["left_days"] > 0 else "0"),
             "status": st, "status_code": i["status"], "rule_reason": i["rule_reason"] or "-"}
@@ -241,10 +245,12 @@ def do_policies(items, own):
         p = pol.setdefault(i["policy_id"], {"policy_id": i["policy_id"], "policy_name": i["policy_name"],
                                             "own_policy": "yes" if i["own"] else "no",
                                             "managed": "yes" if i["managed"] else "no", "block_ip_rules": 0,
-                                            "due": 0, "cloud": 0})
+                                            "due": 0, "cloud": 0, "shared": 0, "attacks_24h": 0})
         p["block_ip_rules"] += 1
         p["due"] += 1 if i["status"] in ("due", "due_not_managed") else 0
         p["cloud"] += 1 if i["cloud"] else 0
+        p["shared"] += 1 if i["shared"] else 0
+        p["attacks_24h"] += i.get("attacks_24h", 0)
     return sorted(pol.values(), key=lambda p: (p["own_policy"] != "yes", p["policy_id"]))
 
 
@@ -278,7 +284,7 @@ def main():
                 for r in results:
                     p = by.get((str(r.get(pfield, "")), (r.get(field) or "").strip()))
                     if p:
-                        for k in ("unblock_after", "last_attack", "unblock_on", "days_left", "status", "cloud_provider"):
+                        for k in ("unblock_after", "last_attack", "attacks_24h", "unblock_on", "days_left", "status", "cloud_provider", "short_block"):
                             r["auto_" + k] = p[k]
                 si.outputResults(results)
         else:

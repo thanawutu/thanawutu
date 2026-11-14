@@ -18,6 +18,7 @@ max_cidr_prefix_v4 = <integer>
 max_cidr_prefix_v6 = <integer>
 protected_networks = <comma separated list of IP/CIDR>
 cloud_providers = <regex alternation of AS owner words, e.g. amazon|aws|google>
+shared_ip_providers = <regex alternation of AS owner words of shared IPs, e.g. mobile|wireless>
 cloud_check_max_lookups = <integer>
 proxy = <url>
 verify_ssl = <boolean>

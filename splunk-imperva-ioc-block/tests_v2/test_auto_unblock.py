@@ -29,7 +29,7 @@ ENTRIES = [
     E("192.0.2.98", pid="1000001", kind="exception", action="EXCEPTION(BLOCK WAF)"),
     E("192.0.2.1-192.0.2.9", pid="1000001"),          # range -> not handled
 ]
-CLOUD = lambda o: o if o and "Amazon" in o else None  # noqa: E731
+CLOUD = lambda o: ("cloud", o) if o and "Amazon" in o else (("shared", o) if o and "Wireless" in o else None)  # noqa: E731
 S = au.normalize_settings({})
 
 
@@ -55,13 +55,13 @@ class TestPlan(unittest.TestCase):
         items, _ = plan()
         self.assertEqual(set(i["status"] for i in items.values()), {"quiet"})
         self.assertEqual(items["54.245.198.114"]["days"], 7)                 # cloud
-        self.assertEqual(items["192.0.2.77"]["days"], 90)
+        self.assertEqual(items["192.0.2.77"]["days"], 60)
 
     def test_due_after_quiet_period_counted_from_install(self):
         states = {}
         states.update(st("54.245.198.114", first=T - 8 * DAY))
         states.update(st("192.0.2.77", "1000001", first=T - 91 * DAY))
-        states.update(st("203.0.113.10", first=T - 60 * DAY))
+        states.update(st("203.0.113.10", first=T - 50 * DAY))
         items, new = plan(states)
         self.assertEqual(items["54.245.198.114"]["status"], "due")
         self.assertEqual(items["192.0.2.77"]["status"], "due")
@@ -72,10 +72,10 @@ class TestPlan(unittest.TestCase):
         states = st("192.0.2.77", "1000001", first=T - 200 * DAY)
         items, _ = plan(states, seen={"192.0.2.77": T - 2 * 3600})
         self.assertEqual(items["192.0.2.77"]["status"], "attacking")
-        self.assertAlmostEqual(items["192.0.2.77"]["unblock_on"], T - 2 * 3600 + 90 * DAY)
-        items, _ = plan(states, seen={"192.0.2.77": T - 85 * DAY})
+        self.assertAlmostEqual(items["192.0.2.77"]["unblock_on"], T - 2 * 3600 + 60 * DAY)
+        items, _ = plan(states, seen={"192.0.2.77": T - 55 * DAY})
         self.assertEqual(items["192.0.2.77"]["status"], "soon")               # 5 days left
-        items, _ = plan(states, seen={"192.0.2.77": T - 95 * DAY})
+        items, _ = plan(states, seen={"192.0.2.77": T - 65 * DAY})
         self.assertEqual(items["192.0.2.77"]["status"], "due")
 
     def test_cidr_uses_requests_from_any_ip_inside(self):
@@ -90,7 +90,7 @@ class TestPlan(unittest.TestCase):
         items, _ = plan(states, registry=reg)
         i = items["203.0.113.10"]
         self.assertEqual((i["status"], i["ticket"], i["description"]), ("quiet", "1000101", "scanner"))
-        self.assertAlmostEqual(i["unblock_on"], T + 60 * DAY)
+        self.assertAlmostEqual(i["unblock_on"], T + 30 * DAY)
 
     def test_rules_keep_and_days(self):
         states = st("192.0.2.77", "1000001", first=T - 500 * DAY, rule="keep")
@@ -119,6 +119,33 @@ class TestPlan(unittest.TestCase):
         due = au.due_items(sorted(items.values(), key=lambda i: i["unblock_on"]), 2)
         self.assertEqual([i["cidr"] for i in due], ["54.245.198.114", "203.0.113.10"])
 
+    def test_attacks_in_the_last_24h(self):
+        items, _ = au.plan(T, ENTRIES, OWN, S, {}, {}, {}, {}, CLOUD,
+                           {"192.0.2.77": 412, "198.51.100.7": 30, "198.51.100.9": 12, "8.8.8.8": 5})
+        by = dict((i["cidr"], i["attacks_24h"]) for i in items)
+        self.assertEqual((by["192.0.2.77"], by["198.51.100.0/24"], by["203.0.113.10"]), (412, 42, 0))
+        items, _ = au.plan(T, ENTRIES, OWN, S, {}, {}, {}, {}, CLOUD)       # no hits data yet
+        self.assertEqual(set(i["attacks_24h"] for i in items), {0})
+
+    def test_shared_ip_gets_the_short_period(self):
+        entries = [E("49.228.105.17", pid="1000001"), E("49.228.105.18", pid="1000001")]
+        states = {}
+        states.update(st("49.228.105.17", "1000001", first=T - 8 * DAY))
+        states.update(st("49.228.105.18", "1000001", first=T - 8 * DAY))
+        owners = {"49.228.105.17": "Advanced Wireless Network Company Limited", "49.228.105.18": "TOT Public Company Limited"}
+        items, _ = plan(states, owners=owners, entries=entries)
+        i = items["49.228.105.17"]
+        self.assertEqual((i["short"], i["shared"], i["days"], i["status"]), ("shared", owners["49.228.105.17"], 7, "due"))
+        self.assertEqual((items["49.228.105.18"]["short"], items["49.228.105.18"]["days"], items["49.228.105.18"]["status"]), ("", 60, "quiet"))
+        self.assertIn("shared IP (Advanced Wireless Network Company Limited), no attack for 7 days", au.reason_text(i))
+
+    def test_conf_shared_words_match_macro(self):
+        root = os.path.join(HERE, "..", "TA-imperva-ioc-block-v2", "default")
+        conf = open(os.path.join(root, "imperva.conf"), encoding="utf-8").read()
+        macros = open(os.path.join(root, "macros.conf"), encoding="utf-8").read()
+        words = [l.split("=", 1)[1].strip() for l in conf.splitlines() if l.startswith("shared_ip_providers")][0]
+        self.assertIn('definition = "\\b(%s)\\b"' % words, macros)
+
     def test_reason_text(self):
         self.assertEqual(au.reason_text({"days": 90, "last_seen": 0, "blocked_at": 1, "cloud": ""}),
                          "auto unblock: no attack for 90 days (no attack seen since the block)")
@@ -138,7 +165,7 @@ class TestPlan(unittest.TestCase):
     def test_conf_defaults_match(self):
         conf = open(os.path.join(HERE, "..", "TA-imperva-ioc-block-v2", "default", "imperva.conf")).read()
         part = conf.split("\n[auto_unblock]\n")[1]
-        for k, v in (("enabled", "on"), ("default_days", "90"), ("cloud_days", "7"), ("scope", "all"), ("max_per_run", "50")):
+        for k, v in (("enabled", "on"), ("default_days", "60"), ("cloud_days", "7"), ("scope", "all"), ("max_per_run", "50")):
             self.assertIn("\n%s = %s\n" % (k, v), part)
 
 
@@ -257,12 +284,21 @@ class TestCommand(unittest.TestCase):
         self.assertEqual(self.run_("action=set", "ip=8.8.8.8", "rule=keep")[0]["status"], "not_found")
 
     def test_settings_show_and_save(self):
-        self.assertEqual(self.run_("action=settings")[0]["default_days"], 90)
+        self.assertEqual(self.run_("action=settings")[0]["default_days"], 60)
         rows = self.run_("action=settings", "default_days=60", "cloud_days=3", "scope=own", "enabled=on", "max_per_run=25")
         self.assertEqual((rows[0]["action"], rows[0]["status"]), ("auto_unblock_settings", "saved"))
         doc = self.kv[au.STATE][au.SETTINGS_KEY]
         self.assertEqual((doc["default_days"], doc["cloud_days"], doc["scope"], doc["max_per_run"], doc["updated_by"]),
                          (60, 3, "own", 25, "alice"))
+
+    def test_list_and_annotate_show_attacks_24h(self):
+        self.kv[au.SEEN]["192.0.2.77"] = {"_key": "192.0.2.77", "src": "192.0.2.77", "last_seen": 1, "hits_24h": 412}
+        rows = dict((r["ip"], r) for r in self.run_("action=list"))
+        self.assertEqual((rows["192.0.2.77"]["attacks_24h"], rows["54.245.198.114"]["attacks_24h"]), (412, 0))
+        self.input = [{"ip": "192.0.2.77", "site_id": "1000001"}]
+        self.assertEqual(self.run_("action=annotate", "field=ip", "policy_field=site_id")[0]["auto_attacks_24h"], 412)
+        pol = dict((p["policy_id"], p) for p in self.run_("action=policies"))
+        self.assertEqual(pol["1000001"]["attacks_24h"], 412)
 
     def test_policies_and_annotate(self):
         pol = self.run_("action=policies")

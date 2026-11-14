@@ -3,8 +3,9 @@ Auto unblock (V2): which IP rules of the WAF policies to unblock, and when.
 
 An IP rule (IP or CIDR with action BLOCK in an IP setting of a WAF policy) is unblocked when the
 IP has sent no request for N days:
-    cloud provider IP (imperva.conf cloud_providers)   cloud_days    (default 7)
-    any other IP                                       default_days  (default 90)
+    cloud provider IP (imperva.conf cloud_providers)       cloud_days    (default 7)
+    shared IP, e.g. mobile carrier NAT (shared_ip_providers) cloud_days   (default 7)
+    any other IP                                           default_days  (default 60)
 "Request" = an Imperva event "Blocked IP" / act REQ_BLOCKED_ACL from the IP, collected every hour
 by the saved search "Imperva V2 - Last attack of blocked IPs (hourly)" into KV imperva_blocked_seen.
 
@@ -25,12 +26,12 @@ Pure functions (no Splunk imports) so the decisions can be unit-tested.
 import ipaddress
 
 STATE = "imperva_auto_unblock"       # per rule: first_listed, rule; document "settings"
-SEEN = "imperva_blocked_seen"        # per source IP: last_seen
+SEEN = "imperva_blocked_seen"        # per source IP: last_seen, hits_24h
 SETTINGS_KEY = "settings"
 DAY = 86400
 ATTACKING_SECONDS = DAY              # a request in the last 24 h = "attacking now"
 
-DEFAULTS = {"enabled": "on", "default_days": 90, "cloud_days": 7, "scope": "all",
+DEFAULTS = {"enabled": "on", "default_days": 60, "cloud_days": 7, "scope": "all",
             "max_per_run": 50, "start_time": 0}
 
 
@@ -139,7 +140,26 @@ def last_seen_for(cidr, seen):
     return best
 
 
-def plan(now, entries, own_ids, settings, states, seen, registry, owners, is_cloud):
+def hits_for(cidr, hits):
+    """Requests blocked in the last 24 h from the IP, or from all IPs inside the CIDR. hits = {src: n}."""
+    n = nets(cidr)
+    if not n or not hits:
+        return 0
+    net = n[0]
+    if net.num_addresses == 1:
+        return int(float(hits.get(str(net.network_address), 0) or 0))
+    total = 0
+    for src, c in hits.items():
+        try:
+            a = ipaddress.ip_address(src)
+        except ValueError:
+            continue
+        if a.version == net.version and a in net:
+            total += int(float(c or 0))
+    return total
+
+
+def plan(now, entries, own_ids, settings, states, seen, registry, owners, short_of, hits=None):
     """
     -> (items, new_states)
       entries   policy IP entries (imperva_lib.policy_ip_entries)
@@ -147,7 +167,8 @@ def plan(now, entries, own_ids, settings, states, seen, registry, owners, is_clo
       seen      {src_ip: last_seen epoch}
       registry  {(site_id, ip): registry doc with status blocked}
       owners    {first address: AS owner or None}
-      is_cloud  function(owner) -> provider name or None
+      short_of  function(owner) -> ("cloud" | "shared", owner) or None (= cloud_days applies)
+      hits      {src_ip: requests blocked in the last 24 h} (optional)
     item status: kept | due | attacking | soon | quiet | due_not_managed
     """
     s = settings
@@ -169,19 +190,23 @@ def plan(now, entries, own_ids, settings, states, seen, registry, owners, is_clo
         blocked_at = float(reg.get("blocked_at") or 0)
         last = last_seen_for(cidr, seen)
         owner = owners.get(first_address(cidr))
-        cloud = is_cloud(owner) if owner else None
+        short = short_of(owner) if owner else None
+        cloud = short[1] if short and short[0] == "cloud" else None
+        shared = short[1] if short and short[0] == "shared" else None
         managed = e["own"] or s["scope"] == "all"
         item = {"policy_id": pid, "policy_name": e.get("policy_name") or "-", "cidr": cidr,
                 "own": e["own"], "managed": managed, "owner": owner or "", "cloud": cloud or "",
+                "shared": shared or "", "short": short[0] if short else "",
                 "blocked_at": blocked_at, "ticket": reg.get("incident_no") or "-",
                 "description": reg.get("comment") or "-", "blocked_by": reg.get("blocked_by") or "-",
                 "first_listed": first, "last_seen": last, "rule": rule,
+                "attacks_24h": hits_for(cidr, hits or {}),
                 "rule_reason": st.get("rule_reason") or "", "key": key}
         if rule == "keep":
             item.update(days=None, base=None, unblock_on=None, left_days=None, status="kept")
             items.append(item)
             continue
-        days = rule if isinstance(rule, int) else (s["cloud_days"] if cloud else s["default_days"])
+        days = rule if isinstance(rule, int) else (s["cloud_days"] if short else s["default_days"])
         base = max(last, blocked_at, first, float(s.get("start_time") or 0))
         unblock_on = base + days * DAY
         left = (unblock_on - now) / DAY
@@ -214,7 +239,8 @@ def reason_text(item, now=None):
         seen = "no attack seen since the block"
     else:
         seen = "no attack seen since Auto unblock started watching this rule"
-    who = "cloud provider IP (%s), " % item["cloud"] if item.get("cloud") else ""
+    who = ("cloud provider IP (%s), " % item["cloud"] if item.get("cloud") else
+           "shared IP (%s), " % item["shared"] if item.get("shared") else "")
     return "auto unblock: %sno attack for %s days (%s)" % (who, item.get("days"), seen)
 
 

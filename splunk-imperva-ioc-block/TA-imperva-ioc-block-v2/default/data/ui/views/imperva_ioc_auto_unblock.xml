@@ -1,6 +1,6 @@
 <form version="1.1" theme="dark" hideFilters="true">
   <label>Imperva IOC Block V2 – Auto unblock</label>
-  <description>IP rules of every WAF policy are unblocked when the IP sent no request for a while: cloud provider IPs (AWS, Google Cloud, Azure ...) after the cloud period, other IPs after the default period (see Settings). The countdown starts at the latest of the last attack (Imperva "Blocked IP" log), the block date and the day V2 first saw the rule. Runs every day at 02:17 ("Imperva V2 - Auto unblock (daily)"). Every action is written to the audit log.</description>
+  <description>IP rules of every WAF policy are unblocked when the IP sent no request for a while: cloud provider IPs (AWS, Google Cloud, Azure ...) and shared IPs (mobile carriers) after the short period (7 days), other IPs after the default period (60 days) (see Settings). The countdown starts at the latest of the last attack (Imperva "Blocked IP" log), the block date and the day V2 first saw the rule. Runs every day at 02:17 ("Imperva V2 - Auto unblock (daily)"). Every action is written to the audit log.</description>
   <init>
     <set token="a_refresh">init</set>
   </init>
@@ -36,7 +36,19 @@
         <option name="colorMode">block</option>
         <option name="rangeColors">["0xDC4E41","0xDC4E41"]</option>
         <option name="useColors">1</option>
-        <option name="underLabel">request in the last 24 h</option>
+        <option name="underLabel">blocked IPs with a request in the last 24 h</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Attacks in the last 24 h</title>
+        <search base="plan">
+          <query>| stats sum(attacks_24h) AS attacks</query>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0xDC4E41","0xDC4E41"]</option>
+        <option name="useColors">1</option>
+        <option name="underLabel">requests the WAF blocked from blocked IPs</option>
       </single>
     </panel>
     <panel>
@@ -65,14 +77,14 @@
     </panel>
     <panel>
       <single>
-        <title>Cloud provider IPs</title>
+        <title>Cloud / shared IPs</title>
         <search base="plan">
-          <query>| where cloud_provider!="-" | stats count</query>
+          <query>| where short_block!="-" | stats count</query>
         </search>
         <option name="colorMode">block</option>
         <option name="rangeColors">["0xF8BE34","0xF8BE34"]</option>
         <option name="useColors">1</option>
-        <option name="underLabel">short block</option>
+        <option name="underLabel">short block (7 days quiet)</option>
       </single>
     </panel>
   </row>
@@ -107,7 +119,7 @@
         </search>
       </input>
       <input type="dropdown" token="a_cloud" searchWhenChanged="true">
-        <label>Unblock cloud provider IPs after no attack for</label>
+        <label>Unblock cloud provider / shared IPs after no attack for</label>
         <fieldForLabel>label</fieldForLabel>
         <fieldForValue>v</fieldForValue>
         <selectFirstChoice>true</selectFirstChoice>
@@ -255,7 +267,7 @@
         <choice value="attacking">Attacking now</choice>
         <choice value="soon">Unblock soon</choice>
         <choice value="kept">Kept</choice>
-        <choice value="cloud">Cloud provider IPs</choice>
+        <choice value="cloud">Cloud / shared IPs</choice>
         <choice value="own">Own policy</choice>
         <choice value="other">Other policies</choice>
         <default>all</default>
@@ -271,11 +283,11 @@
       <table>
         <search base="plan">
           <query>| eval _f=$a_f|s$, _q=lower(trim(replace($a_q|s$, "[*]", "")))
-| where _f="all" OR status_code=_f OR (_f="due" AND status_code="due_not_managed") OR (_f="cloud" AND cloud_provider!="-") OR (_f="own" AND own_policy="yes") OR (_f="other" AND own_policy="no")
+| where _f="all" OR status_code=_f OR (_f="due" AND status_code="due_not_managed") OR (_f="cloud" AND short_block!="-") OR (_f="own" AND own_policy="yes") OR (_f="other" AND own_policy="no")
 | where _q="" OR like(lower(ip." ".policy_id." ".policy_name." ".ticket." ".description." ".owner), "%"._q."%")
 | eval Keep=if(status_code="kept", "-", "📌 Keep"), Default=if(rule_reason!="-" OR status_code="kept", "↺ Default", "-"), Unblock="🔓 Unblock now"
-| table Keep Default Unblock ip status last_attack unblock_after unblock_on days_left cloud_provider owner policy_id policy_name blocked_at listed_since ticket description rule_reason
-| rename last_attack AS "Last attack", unblock_after AS "Unblock after", unblock_on AS "Unblock on", days_left AS "Days left", cloud_provider AS "Cloud provider", policy_id AS policy, listed_since AS "Watched since", rule_reason AS "Rule reason"</query>
+| table Keep Default Unblock ip status last_attack attacks_24h unblock_after unblock_on days_left short_block owner policy_id policy_name blocked_at listed_since ticket description rule_reason
+| rename last_attack AS "Last attack", attacks_24h AS "Attacks 24h", unblock_after AS "Unblock after", unblock_on AS "Unblock on", days_left AS "Days left", short_block AS "Cloud / shared", policy_id AS policy, listed_since AS "Watched since", rule_reason AS "Rule reason"</query>
         </search>
         <option name="count">25</option>
         <option name="wrap">true</option>
@@ -377,7 +389,7 @@
         <search>
           <query>| makeresults | impervaautounblock action=policies
 | eval _r=$a_refresh|s$
-| table policy_id policy_name own_policy managed block_ip_rules cloud due</query>
+| table policy_id policy_name own_policy managed block_ip_rules cloud shared due attacks_24h</query>
           <earliest>-1m</earliest>
           <latest>now</latest>
         </search>

@@ -55,6 +55,18 @@
     </panel>
     <panel>
       <single>
+        <title>Attacks in the last 24 h</title>
+        <search base="waf_list">
+          <query>| where in_waf="yes" | stats sum(auto_attacks_24h) AS attacks</query>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0xDC4E41","0xDC4E41"]</option>
+        <option name="useColors">1</option>
+        <option name="underLabel">requests the WAF still blocked from these IPs</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
         <title>Unblocked 7 days</title>
         <search base="audit7">
           <query>| stats sum("Unblocked IPs") AS unblocked</query>
@@ -198,12 +210,15 @@
           <query><![CDATA[| eval _q=replace(lower(trim(replace($b_q|s$, "[*]", ""))), "^ithm[\s:#-]*", "")
 | where _q="" OR like(lower(ip." ".ticket." ".description." ".blocked_by), "%"._q."%")
 | eval Events="🔍 Search"
-| table blocked_time ip ticket description blocked_by verification auto_unblock_after auto_last_attack auto_unblock_on auto_status site_id site_name last_checked_on_waf Events
-| rename auto_unblock_after AS "Unblock after", auto_last_attack AS "Last attack", auto_unblock_on AS "Unblock on", auto_status AS "Auto unblock"]]></query>
+| table blocked_time ip ticket description blocked_by verification auto_attacks_24h auto_last_attack auto_unblock_after auto_unblock_on auto_status site_id site_name last_checked_on_waf Events
+| rename auto_attacks_24h AS "Attacks 24h", auto_unblock_after AS "Unblock after", auto_last_attack AS "Last attack", auto_unblock_on AS "Unblock on", auto_status AS "Auto unblock"]]></query>
         </search>
         <option name="count">20</option>
         <option name="wrap">true</option>
         <option name="drilldown">cell</option>
+        <format type="color" field="Attacks 24h">
+          <colorPalette type="expression">if(tonumber(value)&gt;0, "#DC4E41", "#3C444D")</colorPalette>
+        </format>
         <format type="color" field="Auto unblock">
           <colorPalette type="expression">case(like(value,"Due%"),"#5A9BD5", like(value,"Attacking%"),"#DC4E41", like(value,"Unblock soon%"),"#F8BE34", like(value,"Kept%"),"#53A051", true(),"#708794")</colorPalette>
         </format>
