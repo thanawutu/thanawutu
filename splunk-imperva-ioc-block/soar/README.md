@@ -13,7 +13,9 @@ The dashboard, buttons, verification, KV store registry and audit log all work a
 registry, the audit log and the dashboard, because the WAF has no field for them. SOAR receives just
 the action, the IPs, the policy IDs, dry-run and the requesting user.
 **VirusTotal lookups also go through SOAR** (`vt_via = auto`), so the Search Head needs no internet
-access at all. SOAR checks VirusTotal for the `vtcheck` command and returns the verdicts.
+access at all. V2 adds **AbuseIPDB and GreyNoise** the same way (actions `abusecheck` / `gncheck`,
+Splunk command `intelcheck`). V2 uses its own playbook `imperva_ioc_block_v2` (label
+`imperva_ioc_block_v2`) with the same generated code, so the V1 playbook stays unchanged. SOAR checks VirusTotal for the `vtcheck` command and returns the verdicts.
 Splunk caches them for 24h, so the next dashboard load costs no VirusTotal quota.
 Each block/unblock leaves a **closed container on SOAR** as an extra audit trail. The short-lived
 containers created by the live list are deleted after they are read (`soar_delete_list_containers`).
@@ -21,7 +23,8 @@ containers created by the live list are deleted after they are read (`soar_delet
 ## A. Splunk SOAR
 
 1. **Network**
-   - SOAR → `api.imperva.com:443` and `www.virustotal.com:443`. If they go through a proxy, set
+   - SOAR → `api.imperva.com:443` and `www.virustotal.com:443` (V2 also `api.abuseipdb.com:443` and
+     `api.greynoise.io:443`). If they go through a proxy, set
      `IMPERVA_PROXY`. **Do not** set a global `HTTPS_PROXY` just for this: every other SOAR app would then
      use the proxy too.
    - Search Head → SOAR REST port (443, or 8443 for unprivileged on-prem installs).
@@ -46,7 +49,9 @@ containers created by the live list are deleted after they are read (`soar_delet
    | `VT_API_KEY` | VirusTotal API key (secret). SOAR does the VirusTotal lookups too |
    | `VT_REQUESTS_PER_MINUTE` | `4` for the public API; raise it for a premium key |
    | `VT_MAX_LOOKUPS` | `10` new lookups per request |
-   | `IMPERVA_PROXY` | e.g. `http://10.12.30.100:8080`. A proxy used **only by this playbook** for Imperva and VirusTotal |
+   | `IMPERVA_PROXY` | e.g. `http://10.12.30.100:8080`. A proxy used **only by this playbook** for Imperva, VirusTotal, AbuseIPDB and GreyNoise |
+   | `ABUSEIPDB_API_KEY` | V2: AbuseIPDB API key (secret). Optional `ABUSEIPDB_REQUESTS_PER_MINUTE` (30), `ABUSEIPDB_MAX_AGE_DAYS` (90) |
+   | `GREYNOISE_API_KEY` | V2: GreyNoise API key (secret; the Community API also works without one, lower limit). Optional `GREYNOISE_REQUESTS_PER_MINUTE` (10) |
 
 5. **Playbook**: Playbooks → **+ Playbook** → Automation.
    1. Name it `imperva_ioc_block`. Set *Operates on* to label `imperva_ioc_block`, and use Python 3.
@@ -123,3 +128,6 @@ These blocks appear in the dashboard's live list as *"On WAF (blocked outside Sp
 | `HTTP 401 ... /policies/v2` | Imperva key in the SOAR environment variables is wrong |
 | `vt_status=error`, `VT_API_KEY is not set on SOAR` | Add `VT_API_KEY` to the SOAR environment variables |
 | `vt_status=rate_limited` | VirusTotal quota used up. Lower `max_lookups_per_run` or use a premium key |
+| `abuse_status=error`, `ABUSEIPDB_API_KEY is not set on SOAR` | Add `ABUSEIPDB_API_KEY` to `IMPERVA_CONFIG` of the V2 playbook |
+| `abuse_status` / `gn_status` = `rate_limited` | Daily quota used up: retried at the next hourly warm-up. Lower `[abuseipdb]` / `[greynoise]` `max_lookups_per_run` |
+| `AbuseIPDB HTTP 401` / `GreyNoise HTTP 401` | Wrong key in `IMPERVA_CONFIG` |

@@ -173,8 +173,8 @@ class SoarBridge(object):
         try:
             rows = self.wait_result(cid, req["request_id"], wait_seconds)
         finally:
-            # list / vtcheck are read-only and frequent: do not keep their containers
-            if action in ("list", "vtcheck", "policy_entries") and self.delete_list_containers:
+            # list / vtcheck / intel lookups are read-only and frequent: do not keep their containers
+            if action in ("list", "vtcheck", "policy_entries", "abusecheck", "gncheck") and self.delete_list_containers:
                 self.delete_container(cid)
         for r in rows:
             r.setdefault("soar_container", cid)
@@ -196,3 +196,10 @@ class SoarBridge(object):
         extra = dict((k, v) for k, v in (("vt_max_lookups", max_lookups), ("vt_max_wait", max_wait),
                                          ("vt_retry_wait", retry_wait)) if v is not None)
         return self.call("vtcheck", ips, wait_seconds=wait_seconds, extra=extra)
+
+    def intel_lookup(self, action, ips, wait_seconds=None, max_lookups=None, max_wait=None, retry_wait=None):
+        """AbuseIPDB (action abusecheck) / GreyNoise (gncheck) lookups done by SOAR (V2).
+        Returns rows {ip, abuse_* | gn_*}; max_lookups / max_wait / retry_wait override SOAR's settings."""
+        extra = dict((k, v) for k, v in (("intel_max_lookups", max_lookups), ("intel_max_wait", max_wait),
+                                         ("intel_retry_wait", retry_wait)) if v is not None)
+        return self.call(action, ips, wait_seconds=wait_seconds, extra=extra)

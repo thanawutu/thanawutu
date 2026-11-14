@@ -40,3 +40,31 @@ review_malicious = <integer>
 review_suspicious = <integer>
 high_volume_count = <integer>
 
+[abuseipdb]
+enabled = <boolean>
+via = auto|direct|soar
+api_base_url = <string>
+max_age_days = <integer 1-365>
+requests_per_minute = <integer>
+max_lookups_per_run = <integer, 0 = no limit>
+rate_limit_retry_seconds = <integer>
+rate_limit_max_wait_seconds = <integer>
+cache_ttl_hours = <number>
+timeout = <integer>
+verify_ssl = <boolean>
+proxy = <url>
+block_score = <integer 0-100>
+review_score = <integer 0-100>
+
+[greynoise]
+enabled = <boolean>
+via = auto|direct|soar
+api_base_url = <string>
+requests_per_minute = <integer>
+max_lookups_per_run = <integer, 0 = no limit>
+rate_limit_retry_seconds = <integer>
+rate_limit_max_wait_seconds = <integer>
+cache_ttl_hours = <number>
+timeout = <integer>
+verify_ssl = <boolean>
+proxy = <url>

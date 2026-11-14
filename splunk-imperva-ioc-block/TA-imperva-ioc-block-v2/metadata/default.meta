@@ -21,6 +21,10 @@ access = read : [ admin, imperva_blocker ], write : [ admin ]
 access = read : [ admin, imperva_blocker ], write : [ admin ]
 export = none
 
+[commands/intelcheck]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = none
+
 [commands/impervalist]
 access = read : [ admin, imperva_blocker ], write : [ admin ]
 export = none

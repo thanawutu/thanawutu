@@ -261,8 +261,11 @@
           <query>| where src=$h_detail|s$
 | `imperva_ioc_enrich_30d`
 | `imperva_ioc_decision_aid(30d)`
+| intelcheck field=src cache_only=true adjust=false
+| eval AbuseIPDB=if(abuse_status="ok", abuse_score."% · ".abuse_reports." reports · ".abuse_users." users · ".abuse_usage." · ".abuse_isp.if(abuse_tor="yes", " · Tor", "").if(abuse_last_reported!="-", " · last ".abuse_last_reported, ""), abuse_status)
+| eval GreyNoise=case(gn_status="ok" AND gn_riot="yes", "RIOT known service · ".gn_name, gn_status="ok", gn_classification." · ".gn_name." · last seen ".gn_last_seen, gn_status="not_found", "not observed scanning the internet", true(), gn_status)
 | eval Close="✖ Close", Events="🔍 all events"
-| table Close src suggestion suggestion_reason asn location vt_score VirusTotal "Decision aid (30d)" Events
+| table Close src suggestion suggestion_reason asn location vt_score VirusTotal AbuseIPDB GreyNoise "Decision aid (30d)" Events
 | rename src AS IP, asn AS owner, vt_score AS VT</query>
         </search>
         <option name="count">1</option>
@@ -270,6 +273,13 @@
         <option name="drilldown">cell</option>
         <format type="color" field="VirusTotal">
           <colorPalette type="expression">"#2C62B3"</colorPalette>
+        </format>
+        <format type="color" field="AbuseIPDB %">
+          <colorPalette type="list">[#53A051,#F8BE34,#DC4E41]</colorPalette>
+          <scale type="threshold">25,75</scale>
+        </format>
+        <format type="color" field="GreyNoise">
+          <colorPalette type="expression">case(like(value, "RIOT%"), "#53A051", like(value, "benign%"), "#53A051", like(value, "malicious%"), "#DC4E41", true(), "#3C444D")</colorPalette>
         </format>
         <format type="color" field="suggestion">
           <colorPalette type="map">{"BLOCK":#DC4E41,"REVIEW":#F8BE34,"MONITOR":#5A9BD5,"ALREADY_BLOCKED":#708794,"DO_NOT_BLOCK":#53A051}</colorPalette>
@@ -283,6 +293,12 @@
           </condition>
           <condition field="VirusTotal">
             <link target="_blank">https://www.virustotal.com/gui/ip-address/$row.IP|n$</link>
+          </condition>
+          <condition field="AbuseIPDB">
+            <link target="_blank">https://www.abuseipdb.com/check/$row.IP|n$</link>
+          </condition>
+          <condition field="GreyNoise">
+            <link target="_blank">https://viz.greynoise.io/ip/$row.IP|n$</link>
           </condition>
           <condition field="Events">
             <link target="_blank">search?q=search%20index%3Dimperva%20sourcetype%3D%22incapsula%3Acef%22%20src%3D$row.IP|u$&amp;earliest=-30d%40d&amp;latest=now</link>
@@ -427,6 +443,13 @@
         <format type="color" field="VirusTotal">
           <colorPalette type="expression">"#2C62B3"</colorPalette>
         </format>
+        <format type="color" field="AbuseIPDB %">
+          <colorPalette type="list">[#53A051,#F8BE34,#DC4E41]</colorPalette>
+          <scale type="threshold">25,75</scale>
+        </format>
+        <format type="color" field="GreyNoise">
+          <colorPalette type="expression">case(like(value, "RIOT%"), "#53A051", like(value, "benign%"), "#53A051", like(value, "malicious%"), "#DC4E41", true(), "#3C444D")</colorPalette>
+        </format>
         <format type="color" field="suggestion">
           <colorPalette type="map">{"BLOCK":#DC4E41,"REVIEW":#F8BE34,"MONITOR":#5A9BD5,"ALREADY_BLOCKED":#708794,"DO_NOT_BLOCK":#53A051}</colorPalette>
         </format>
@@ -436,6 +459,12 @@
         <drilldown>
           <condition field="VirusTotal">
             <link target="_blank">https://www.virustotal.com/gui/ip-address/$row.src|n$</link>
+          </condition>
+          <condition field="AbuseIPDB %">
+            <link target="_blank">https://www.abuseipdb.com/check/$row.src|n$</link>
+          </condition>
+          <condition field="GreyNoise">
+            <link target="_blank">https://viz.greynoise.io/ip/$row.src|n$</link>
           </condition>
           <condition field="Decision aid (30d)">
             <!-- IP detail panels above the table -->

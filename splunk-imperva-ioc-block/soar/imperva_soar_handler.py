@@ -31,9 +31,20 @@ SOAR environment variables of the same names:
   VT_PROXY                               optional, VirusTotal-only proxy (default: IMPERVA_PROXY)
   IMPERVA_CHECK_ALL_POLICIES             optional, default true: before blocking, read every policy of
                                          the account and refuse IPs that an enabled policy ALLOWs
+  ABUSEIPDB_API_KEY                      required for AbuseIPDB lookups (action abusecheck, V2)
+  ABUSEIPDB_REQUESTS_PER_MINUTE          optional, default 30
+  ABUSEIPDB_MAX_LOOKUPS                  optional, default 10 per request (Splunk sends its own value)
+  ABUSEIPDB_MAX_AGE_DAYS                 optional, default 90: reports of the last N days (1-365)
+  ABUSEIPDB_API_BASE / ABUSEIPDB_PROXY   optional (default https://api.abuseipdb.com/api/v2 / IMPERVA_PROXY)
+  GREYNOISE_API_KEY                      GreyNoise key (action gncheck, V2); the Community API also
+                                         answers without a key, with a lower limit
+  GREYNOISE_REQUESTS_PER_MINUTE          optional, default 10
+  GREYNOISE_MAX_LOOKUPS                  optional, default 10 per request (Splunk sends its own value)
+  GREYNOISE_API_BASE / GREYNOISE_PROXY   optional (default https://api.greynoise.io/v3 / IMPERVA_PROXY)
 
 Do not edit soar/imperva_ioc_block_global_code.py by hand - it is generated
-by soar/build_global_code.py from this file + TA-imperva-ioc-block/bin/imperva_lib.py + vt_lib.py
+by soar/build_global_code.py from this file + TA-imperva-ioc-block-v2/bin/imperva_lib.py + vt_lib.py
++ intel_lib.py
 """
 # --- BEGIN LIB IMPORT (removed in the generated SOAR file, where the library is inlined) ---
 import json
@@ -43,6 +54,7 @@ from imperva_lib import (DEFAULT_V2_BASE_URL, ImpervaError, ImpervaPolicyClient,
                          allowlist_conflicts, list_targets, parse_ip_list, policy_ip_entries,
                          run_action, validate_ips)
 from vt_lib import VT_BASE, VTClient, lookup_many  # noqa: F401
+from intel_lib import intel_client, intel_lookup_many  # noqa: F401
 # --- END LIB IMPORT ---
 
 REQUEST_NAME = "imperva_request"
@@ -72,7 +84,36 @@ def process_vtcheck(cef, env, vt_client_factory=None):
     return [dict(info, ip=ip) for ip, info in res.items()]
 
 
-def process_request(cef, env=None, client_factory=None, vt_client_factory=None):
+# AbuseIPDB / GreyNoise (V2): action -> (source, prefix of the settings, default requests per minute)
+INTEL_ACTIONS = {"abusecheck": ("abuseipdb", "ABUSEIPDB", 30), "gncheck": ("greynoise", "GREYNOISE", 10)}
+
+
+def process_intel(cef, env, action, intel_client_factory=None):
+    """AbuseIPDB / GreyNoise lookups for Splunk's intelcheck command. Rows {ip, abuse_* | gn_*}."""
+    source, pre, rpm = INTEL_ACTIONS[action]
+    if intel_client_factory is None:
+        key = env.get(pre + "_API_KEY")
+        if not key and source == "abuseipdb":
+            raise ImpervaError("ABUSEIPDB_API_KEY is not set on SOAR")
+        client = intel_client(source, key, base_url=env.get(pre + "_API_BASE") or None,
+                              proxy=env.get(pre + "_PROXY") or env.get("IMPERVA_PROXY") or None,
+                              max_age_days=env.get("ABUSEIPDB_MAX_AGE_DAYS") or 90)
+    else:
+        client = intel_client_factory(source)
+    ips = parse_ip_list(cef.get("ips", ""))
+
+    def num(cef_key, env_key, default):
+        v = cef.get(cef_key)
+        return int(v if v not in (None, "") else (env.get(env_key) or default))
+
+    res = intel_lookup_many(client, ips, rpm=int(env.get(pre + "_REQUESTS_PER_MINUTE") or rpm),
+                            max_lookups=num("intel_max_lookups", pre + "_MAX_LOOKUPS", 10),
+                            retry_wait=num("intel_retry_wait", pre + "_RETRY_WAIT_SECONDS", 60),
+                            max_wait=num("intel_max_wait", pre + "_MAX_WAIT_SECONDS", 0))
+    return [dict(info, ip=ip) for ip, info in res.items()]
+
+
+def process_request(cef, env=None, client_factory=None, vt_client_factory=None, intel_client_factory=None):
     """
     Pure function: request cef dict -> result cef dict
       {request_id, status: ok|error, error, result_json}
@@ -83,6 +124,9 @@ def process_request(cef, env=None, client_factory=None, vt_client_factory=None):
         action = (cef.get("action") or "").strip().lower()
         if action == "vtcheck":  # read-only, no Imperva policy involved
             rows = process_vtcheck(cef, env, vt_client_factory)
+            return {"request_id": rid, "status": "ok", "error": "", "result_json": json.dumps(rows)}
+        if action in INTEL_ACTIONS:  # AbuseIPDB / GreyNoise, read-only (V2)
+            rows = process_intel(cef, env, action, intel_client_factory)
             return {"request_id": rid, "status": "ok", "error": "", "result_json": json.dumps(rows)}
         if action not in ("block", "unblock", "list", "policy_entries"):
             raise ImpervaError("unknown action %r" % action)
@@ -146,7 +190,8 @@ def process_request(cef, env=None, client_factory=None, vt_client_factory=None):
 def request_from_artifact(a):
     """
     Turn an artifact into a request cef, or None if it is not a request.
-      * "imperva_request" artifacts created by the Splunk app (impervablock / impervalist / vtcheck)
+      * "imperva_request" artifacts created by the Splunk app (impervablock / impervalist / vtcheck /
+        intelcheck)
       * artifacts created by `| sendalert sendtophantom` or the "Send to SOAR" adaptive response
         of a detection rule: cef needs imperva_action (or action) = block|unblock and
         ips / ip / src / src_ip with the address(es)

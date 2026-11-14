@@ -10,6 +10,8 @@ When V2 is tested and confirmed, V1 is removed (see *Cut-over*).
 | Cloud provider IPs (AWS, Google Cloud, Azure, ...) | never blocked (Not block only) | **blocked**, tagged "short block" |
 | Auto unblock | - | always on: IP rules of **every enabled WAF policy** are unblocked when the IP sent **no request for 7 days (cloud provider / shared IP) / 60 days (others)**, at most 50 per run (fixed values) |
 | Pages | 5 | 6 (new **⏱ Auto unblock**; Blocked IPs page shows *Attacks 24h / Last attack / Unblock after / Unblock on / Auto unblock*) |
+| IP reputation | VirusTotal | VirusTotal + **AbuseIPDB** + **GreyNoise**, all through SOAR, 24 h cache; they adjust the Block suggestion |
+| SOAR playbook | `imperva_ioc_block` | its own playbook **`imperva_ioc_block_v2`** (label `imperva_ioc_block_v2`): same code + AbuseIPDB / GreyNoise; the V1 playbook is not touched |
 
 Everything else (Decision aid, IP detail, card, Select all, incident digits) is the same as V1.
 
@@ -35,6 +37,24 @@ Everything else (Decision aid, IP detail, card, Select all, incident digits) is 
   Azure ...) or `shared_ip_providers` (mobile carriers: many customers behind one IP). Looked up when the
   IP is blocked; for rules of other policies, only IPs VirusTotal already knows - others count as normal.
 
+### AbuseIPDB and GreyNoise
+
+Same flow as VirusTotal: the saved search **"Imperva V2 - AbuseIPDB / GreyNoise cache warm-up"** (hourly,
+minute 25) looks the detected IPs up through SOAR (playbook actions `abusecheck` / `gncheck`) and keeps the
+answers 24 h in KV `imperva_cache`; the Block and Older detections pages only read that cache (`intelcheck
+cache_only=true`), so they never wait for the APIs. New IPs show `pending` until the next warm-up run.
+
+* Columns **AbuseIPDB %** (confidence of abuse, red ≥ 75, yellow ≥ 25) and **GreyNoise** (malicious /
+  benign / RIOT = known service / not observed); click = the IP's page on AbuseIPDB / GreyNoise.
+  The IP detail shows reports, users, usage type, ISP, Tor, last report, GreyNoise name and last seen.
+* Suggestion (after VirusTotal): AbuseIPDB ≥ `block_score` (75) → BLOCK, ≥ `review_score` (25) → at least
+  REVIEW, GreyNoise malicious → at least REVIEW, GreyNoise RIOT / benign or AbuseIPDB whitelisted → at most
+  REVIEW (a known service: the analyst decides). DO_NOT_BLOCK / ALREADY_BLOCKED never change.
+* Quotas: at most `max_lookups_per_run` new lookups per hourly run (AbuseIPDB 40 = 960 / day, inside the free
+  1,000 / day; GreyNoise 10). HTTP 429 → `rate_limited`, retried at the next run. Settings: `imperva.conf
+  [abuseipdb]` / `[greynoise]` (`enabled = false` turns one off).
+* Without SOAR (`via = direct`): keys in storage/passwords realm `abuseipdb` / `greynoise`.
+
 ### Living next to V1
 
 * All V2 objects are app-local (`export = none`); V1 keeps `export = system`. Same names do not collide.
@@ -42,9 +62,12 @@ Everything else (Decision aid, IP detail, card, Select all, incident digits) is 
   own logs (`v2_imperva_ioc_block.log`, `v2_imperva_auto_unblock.log`, ...).
 * Credentials: V2 reads its own, then V1's, until they are copied with the import (below).
 * Both apps call SOAR / VirusTotal while both are installed (policy refresh, VT warm-up).
+* SOAR: V2 sends its requests with label `imperva_ioc_block_v2` to its own playbook, so the V1 playbook
+  `imperva_ioc_block` (and its `IMPERVA_POLICY_IDS`) stays exactly as it is until V1 is removed.
 
 ## Install (Deployer)
 
+0. First create the V2 playbook on SOAR (section *SOAR: the V2 playbook* below).
 1. Extract `TA-imperva-ioc-block-v2` to `$SPLUNK_HOME/etc/shcluster/apps/` and copy V1's `local/` and
    `certs/` into it (same `imperva.conf` settings and SOAR CA file).
 2. `splunk apply shcluster-bundle -preserve-lookups true ...` (new app, commands and KV collections:
@@ -54,25 +77,39 @@ Everything else (Decision aid, IP detail, card, Select all, incident digits) is 
      VirusTotal cache, credentials (copied server side, never shown)
    * **Imperva V2 - Import audit log from V1 (run once)**
    * optional **Imperva V2 - Last attack backfill 7 days (run once)**
+4. Optional, to fill AbuseIPDB / GreyNoise at once: Run **Imperva V2 - AbuseIPDB / GreyNoise cache warm-up**
+   (otherwise it runs by itself at minute 25 of every hour).
 
-## SOAR: allow the other policies
+## SOAR: the V2 playbook
 
-SOAR only writes to policies listed in `IMPERVA_POLICY_IDS` (`IMPERVA_CONFIG` at the top of code block
-`code_1` of playbook `imperva_ioc_block`). Splunk always sends the policy ID with each request, so adding
-IDs does not send blocks elsewhere; it lets Auto unblock (and *Unblock now*) remove rules from them.
+V2 has its own playbook so the V1 playbook keeps running unchanged. Do this **before** pushing V2.
 
-1. List the policies: Auto unblock page, panel *Policies with BLOCK IP rules*, or
-   `| makeresults | impervaautounblock action=policies`.
-2. SOAR > Playbooks > `imperva_ioc_block` > `code_1` > `IMPERVA_CONFIG`:
-   `"IMPERVA_POLICY_IDS": "2169031,<id>,<id>"` > Save (keep the playbook active).
-3. Without step 2 the daily run reports `error ... not allowed on SOAR (add the policy ID to
-   IMPERVA_POLICY_IDS on SOAR)` for those policies and retries the next day.
+1. **Network** (SOAR, through `IMPERVA_PROXY` if used): `api.abuseipdb.com:443` and `api.greynoise.io:443`,
+   besides `api.imperva.com` and `www.virustotal.com` that V1 already uses.
+2. **Label**: Administration > Event Settings > Label Settings > add `imperva_ioc_block_v2`.
+3. **Playbook**: Playbooks > + Playbook > Automation, name `imperva_ioc_block_v2`, *Operates on* label
+   `imperva_ioc_block_v2`, Python 3. In the Python editor select all and paste
+   **`soar/imperva_ioc_block_playbook.py`** (generated, includes AbuseIPDB / GreyNoise).
+4. **Settings** in `IMPERVA_CONFIG` at the top of `code_1`: copy the values from the V1 playbook
+   (`IMPERVA_API_ID`, `IMPERVA_API_KEY`, `IMPERVA_PROXY`, `IMPERVA_PROTECTED_NETWORKS`, `VT_API_KEY`, ...), then:
+   * `"IMPERVA_POLICY_IDS": "2169031,<id>,<id>"`: every policy Auto unblock may change. Splunk always sends
+     the policy ID with each request, so extra IDs do not send blocks elsewhere. List them on the Auto
+     unblock page (panel *Policies with BLOCK IP rules*) or with `| makeresults | impervaautounblock action=policies`.
+   * `"ABUSEIPDB_API_KEY"`: your AbuseIPDB key. `"GREYNOISE_API_KEY"`: your GreyNoise key (the Community API
+     also answers without one, with a lower limit).
+5. Save, set the playbook **Active**. The same automation user / token as V1 is used.
+6. If V1's `local/imperva.conf` (copied into V2) sets `soar_label`, remove that line from V2's copy.
+
+Without a policy ID in step 4 the daily run reports `error ... not allowed on SOAR (add the policy ID to
+IMPERVA_POLICY_IDS on SOAR)` for that policy and retries the next day. Without `ABUSEIPDB_API_KEY` the
+AbuseIPDB column shows `error` (detail: `ABUSEIPDB_API_KEY is not set on SOAR`).
 
 ## Cut-over (after V2 is confirmed)
 
 1. Make sure **Import data from V1** showed `credential ... copied` / `exists` for `splunk_soar`
    (and `imperva_waf` / `virustotal` if used).
 2. Remove `TA-imperva-ioc-block` from `etc/shcluster/apps` (keep a backup) and push.
+   On SOAR, deactivate (later delete) the V1 playbook `imperva_ioc_block`.
 3. Optional: set `export = system` in V2 `metadata/default.meta` so the macros / commands work from
    the Search app again.
 

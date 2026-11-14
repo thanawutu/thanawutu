@@ -151,6 +151,9 @@ tr.off td:not(:first-child){opacity:.45}
 b.bk{color:var(--crit)} b.al{color:var(--ok)}
 .paths{font-family:var(--font-data);font-size:11px;line-height:1.45;min-width:250px;white-space:nowrap}
 .paths .bk{color:var(--crit);font-weight:600} .paths .al{color:var(--ok);font-weight:600} .paths a{text-decoration:none}
+a.ab,a.gn{display:inline-block;border-radius:4px;padding:1px 7px;font-size:11.5px;font-weight:600;text-decoration:none;border:1px solid transparent}
+a.ab-h{background:var(--crit-bg);color:var(--crit);border-color:var(--crit)}a.ab-m{background:var(--warn-bg);color:var(--warn);border-color:var(--warn)}a.ab-l{background:var(--mute-bg);color:var(--muted)}
+a.gn-m{background:var(--crit-bg);color:var(--crit)}a.gn-b{background:var(--ok-bg);color:var(--ok)}a.gn-u{background:var(--info-bg);color:var(--info)}a.gn-n{background:var(--mute-bg);color:var(--muted)}
 a.vt{display:inline-block;background:var(--info);color:#fff;border-radius:4px;padding:1px 7px;font-size:11.5px;font-weight:600;text-decoration:none}
 .del{color:var(--crit);border-color:transparent;background:transparent}
 .new{display:inline-block;background:var(--accent);color:#fff;border-radius:3px;padding:0 5px;font-size:9.5px;font-weight:700;letter-spacing:.04em;vertical-align:1px;margin-left:4px}
@@ -188,7 +191,7 @@ td.aid:hover{background:var(--info-bg)!important}
   <div class="in">
     <div><span class="label">Apps › Imperva IOC Block</span><h1 id="pageTitle">Imperva WAF – IOC Block</h1></div>
     <div class="chips">
-      <span class="chip sim">Mockup v3.15 · simulated data</span>
+      <span class="chip sim">Mockup v3.16 · simulated data</span>
       <span class="chip">Policy 2169031 · via SOAR</span>
     </div>
   </div>
@@ -203,7 +206,7 @@ td.aid:hover{background:var(--info-bg)!important}
 
 <!-- ============ Page 1: dashboard (7 days, search + Block) ============ -->
 <main class="wrap" id="v-dash">
-  <div class="review"><b>Mockup v3.15:</b> รวมหน้า <b>Blocked IPs / Unblock</b> กับ <b>Auto unblock</b> เป็นหน้าเดียว: ตารางเดียวแสดง IP ที่ block จาก<b>ทุก policy</b> พร้อม Last attack / Attacks 24h / Unblock on / Status · เลือกแถวแล้วกด <b>🔓 Unblock</b> ทันที หรือ <b>Apply rule</b> (Keep / Default / จำนวนวัน) · แถบบนสุดบอกกฎ auto unblock (7 / 60 วัน · ทุก policy · 50 ต่อรอบ) · log ของ auto unblock อยู่ล่างสุด · <b>v3.14:</b> หน้า Auto unblock <b>ไม่มีหน้าตั้งค่าแล้ว</b> ใช้ค่าคงที่: unblock จริงทุกวัน (<b>ไม่มี Report only</b>) · cloud / shared IP <b>7 วัน</b> · IP อื่น <b>60 วัน</b> · <b>All enabled policies</b> · <b>max 50 IP ต่อรอบ</b> · <b>v3.13:</b> Auto unblock: IP <b>cloud และ shared IP</b> (เครือข่ายมือถือ) ไม่โจมตีครบ <b>7 วัน</b> → unblock · IP อื่นไม่โจมตีครบ <b>60 วัน</b> → unblock · หน้า Blocked IPs และ Auto unblock มีคอลัมน์ <b>Attacks 24h</b> (request ที่ WAF ยัง block จาก IP นั้นใน 24 ชม.) และยอดรวม · <b>v3.12:</b> ช่อง <b>Search</b> ใช้ทั้งค้นหาและ<b>เพิ่ม IP</b> (ตัดช่อง Add IPs manually ออก) · ค้นหาจาก<b>ทุกหน้าและทุก WAF policy</b>: กล่อง <b>Found</b> บอกว่า IP อยู่ที่ไหน – หน้านี้ / หน้าอื่น / <b>block แล้วใน policy ไหน วันไหน</b> / allow / Not block / <b>ไม่เจอ → นับเข้าปุ่ม Block ทันที</b> · ลองพิมพ์ <span class="mono">193.42.33.7, 185.220.101.47, 20.20.20.20, 45.95.147.236, 203.0.113.10</span> · <b>Auto unblock (V2):</b> หน้า <b>⏱ Auto unblock</b> แสดง IP ที่ถูก block จาก<b>ทุก rule / policy</b> ของ WAF · นับจาก<b>การโจมตีครั้งสุดท้าย</b> (log “Blocked IP” ของ Imperva = IP ยังส่ง request เข้ามา): IP ของ <b>cloud provider</b> ไม่โจมตีครบ <b>7 วัน</b> → unblock · IP อื่นไม่โจมตีครบ <b>60 วัน</b> → unblock · ถ้ายังโจมตีอยู่ นับใหม่อัตโนมัติ · IP ที่ไม่เคยเห็นโจมตีหลัง block นับจากวันที่ block (หรือวันที่ Splunk เห็นใน policy) · IP cloud block ได้ · Keep = ไม่ unblock · ส่วนอื่นเหมือน v3.8b</div>
+  <div class="review"><b>Mockup v3.16:</b> เพิ่มคอลัมน์ <b>AbuseIPDB</b> (คะแนน % + จำนวน report 90 วัน) และ <b>GreyNoise</b> (malicious / benign / RIOT / not observed) ในหน้า Block และ Older detections · ตรวจผ่าน <b>SOAR</b> เหมือน VirusTotal เก็บ cache 24 ชม. · Suggestion ปรับตาม: AbuseIPDB ≥ 75% → BLOCK, ≥ 25% → อย่างน้อย REVIEW, GreyNoise malicious → อย่างน้อย REVIEW, GreyNoise RIOT / benign → ไม่เกิน REVIEW · IP detail มีกล่อง Threat intel และลิงก์ไปทั้ง 3 เว็บ · <b>v3.15:</b> รวมหน้า <b>Blocked IPs / Unblock</b> กับ <b>Auto unblock</b> เป็นหน้าเดียว: ตารางเดียวแสดง IP ที่ block จาก<b>ทุก policy</b> พร้อม Last attack / Attacks 24h / Unblock on / Status · เลือกแถวแล้วกด <b>🔓 Unblock</b> ทันที หรือ <b>Apply rule</b> (Keep / Default / จำนวนวัน) · แถบบนสุดบอกกฎ auto unblock (7 / 60 วัน · ทุก policy · 50 ต่อรอบ) · log ของ auto unblock อยู่ล่างสุด · <b>v3.14:</b> หน้า Auto unblock <b>ไม่มีหน้าตั้งค่าแล้ว</b> ใช้ค่าคงที่: unblock จริงทุกวัน (<b>ไม่มี Report only</b>) · cloud / shared IP <b>7 วัน</b> · IP อื่น <b>60 วัน</b> · <b>All enabled policies</b> · <b>max 50 IP ต่อรอบ</b> · <b>v3.13:</b> Auto unblock: IP <b>cloud และ shared IP</b> (เครือข่ายมือถือ) ไม่โจมตีครบ <b>7 วัน</b> → unblock · IP อื่นไม่โจมตีครบ <b>60 วัน</b> → unblock · หน้า Blocked IPs และ Auto unblock มีคอลัมน์ <b>Attacks 24h</b> (request ที่ WAF ยัง block จาก IP นั้นใน 24 ชม.) และยอดรวม · <b>v3.12:</b> ช่อง <b>Search</b> ใช้ทั้งค้นหาและ<b>เพิ่ม IP</b> (ตัดช่อง Add IPs manually ออก) · ค้นหาจาก<b>ทุกหน้าและทุก WAF policy</b>: กล่อง <b>Found</b> บอกว่า IP อยู่ที่ไหน – หน้านี้ / หน้าอื่น / <b>block แล้วใน policy ไหน วันไหน</b> / allow / Not block / <b>ไม่เจอ → นับเข้าปุ่ม Block ทันที</b> · ลองพิมพ์ <span class="mono">193.42.33.7, 185.220.101.47, 20.20.20.20, 45.95.147.236, 203.0.113.10</span> · <b>Auto unblock (V2):</b> หน้า <b>⏱ Auto unblock</b> แสดง IP ที่ถูก block จาก<b>ทุก rule / policy</b> ของ WAF · นับจาก<b>การโจมตีครั้งสุดท้าย</b> (log “Blocked IP” ของ Imperva = IP ยังส่ง request เข้ามา): IP ของ <b>cloud provider</b> ไม่โจมตีครบ <b>7 วัน</b> → unblock · IP อื่นไม่โจมตีครบ <b>60 วัน</b> → unblock · ถ้ายังโจมตีอยู่ นับใหม่อัตโนมัติ · IP ที่ไม่เคยเห็นโจมตีหลัง block นับจากวันที่ block (หรือวันที่ Splunk เห็นใน policy) · IP cloud block ได้ · Keep = ไม่ unblock · ส่วนอื่นเหมือน v3.8b</div>
   <section class="kpis" aria-label="Summary">
     <div class="kpi k-warn"><span class="label">Detected WAF IPs</span><span class="v" id="kDet">0</span><span class="s" id="kDetSub">last 7 days</span></div>
     <div class="kpi k-info"><span class="label">Blocked on WAF now</span><span class="v" id="kWaf">0</span><span class="s">policy 2169031 (live)</span></div>
@@ -237,7 +240,7 @@ td.aid:hover{background:var(--info-bg)!important}
       <p>คลิกแถวเพื่อเลือก · Ticket/Incident no. เติมเลข incident จาก finding note (ตัดคำว่า ITHM ออก) · IP ที่ block แล้วจะย้ายไปหน้า Blocked IPs</p>
     </div>
     <div class="tbl-wrap"><table>
-      <thead><tr><th></th><th>IP</th><th>VirusTotal</th><th>Rule</th><th>Incident no.</th><th>Severity</th><th>Last detected</th><th style="text-align:right">Findings</th><th style="text-align:right" title="WAF requests in the last 24 h: blocked / allowed">Block / Allow (24h)</th><th style="text-align:right" title="websites the IP tried in the last 24 h: blocked on / allowed on">Web Block / Allow (24h)</th><th title="top URLs of this IP in the last 24 h: red = blocked by the WAF, green = let through">Top paths (24h)</th><th>Suggestion</th><th>Location</th><th title="new: owner of the IP and warning signals – click to open IP detail">Decision aid (24h)<span class="new">NEW</span></th></tr></thead>
+      <thead><tr><th></th><th>IP</th><th>VirusTotal</th><th title="AbuseIPDB: confidence of abuse 0-100 % (red ≥ 75, yellow ≥ 25) and number of reports in 90 days · click = AbuseIPDB page">AbuseIPDB</th><th title="GreyNoise: malicious / benign internet scanner, RIOT = known service (CDN, search engine, SaaS), not observed · click = GreyNoise page">GreyNoise</th><th>Rule</th><th>Incident no.</th><th>Severity</th><th>Last detected</th><th style="text-align:right">Findings</th><th style="text-align:right" title="WAF requests in the last 24 h: blocked / allowed">Block / Allow (24h)</th><th style="text-align:right" title="websites the IP tried in the last 24 h: blocked on / allowed on">Web Block / Allow (24h)</th><th title="top URLs of this IP in the last 24 h: red = blocked by the WAF, green = let through">Top paths (24h)</th><th>Suggestion</th><th>Location</th><th title="new: owner of the IP and warning signals – click to open IP detail">Decision aid (24h)<span class="new">NEW</span></th></tr></thead>
       <tbody id="d_tbl"></tbody></table></div>
   </section>
 </main>
@@ -268,7 +271,7 @@ td.aid:hover{background:var(--info-bg)!important}
   <section class="panel">
     <div class="panel-head"><h2 id="h_title">IPs detected by WAF rules – 8 to 30 days ago</h2><p>ยังไม่ได้ block · คลิกแถวเพื่อเลือก</p></div>
     <div class="tbl-wrap"><table>
-      <thead><tr><th></th><th>IP</th><th>VirusTotal</th><th>Rule</th><th>Incident no.</th><th>Severity</th><th>Last detected</th><th style="text-align:right">Findings</th><th style="text-align:right" title="WAF requests in the last 30 days: blocked / allowed">Block / Allow (30d)</th><th style="text-align:right" title="websites the IP tried in the last 30 days: blocked on / allowed on">Web Block / Allow (30d)</th><th title="top URLs of this IP in the last 30 days: red = blocked by the WAF, green = let through">Top paths (30d)</th><th title="last request of this IP seen on the WAF (30 days)">WAF last seen</th><th>Suggestion</th><th>Location</th><th title="new: owner of the IP and warning signals – click to open IP detail">Decision aid (30d)<span class="new">NEW</span></th></tr></thead>
+      <thead><tr><th></th><th>IP</th><th>VirusTotal</th><th title="AbuseIPDB: confidence of abuse 0-100 % (red ≥ 75, yellow ≥ 25) and number of reports in 90 days · click = AbuseIPDB page">AbuseIPDB</th><th title="GreyNoise: malicious / benign internet scanner, RIOT = known service (CDN, search engine, SaaS), not observed · click = GreyNoise page">GreyNoise</th><th>Rule</th><th>Incident no.</th><th>Severity</th><th>Last detected</th><th style="text-align:right">Findings</th><th style="text-align:right" title="WAF requests in the last 30 days: blocked / allowed">Block / Allow (30d)</th><th style="text-align:right" title="websites the IP tried in the last 30 days: blocked on / allowed on">Web Block / Allow (30d)</th><th title="top URLs of this IP in the last 30 days: red = blocked by the WAF, green = let through">Top paths (30d)</th><th title="last request of this IP seen on the WAF (30 days)">WAF last seen</th><th>Suggestion</th><th>Location</th><th title="new: owner of the IP and warning signals – click to open IP detail">Decision aid (30d)<span class="new">NEW</span></th></tr></thead>
       <tbody id="h_tbl"></tbody></table></div>
   </section>
   <section class="panel">
@@ -554,10 +557,31 @@ const shortOf=ip=>{const o=OWN[ip]; return o&&(o[0]==="cloud"||o[0]==="mob"||o[0
 const sharedOf=ip=>{const o=OWN[ip]; return o&&(o[0]==="mob"||o[0]==="thmob")?o[1].replace(/^AS\d+ /,""):null;};
 // requests the WAF still blocked from a blocked IP in the last 24 h
 const attacks24=b=>b.seen&&Date.now()-b.seen<DAY?(b.hits||0):0;
-function effSug(d){ const o=OWN[d.ip]||[];
-  if(o[0]==="cloud"&&d.sug!=="ALREADY_BLOCKED"&&d.sug!=="DO_NOT_BLOCK") return {sug:d.sug,reason:`cloud provider IP (${o[1].replace(/^AS\d+ /,"")}) – auto unblock after ${AU.cloud} days without an attack`,was:null};
-  if((o[0]==="mob"||o[0]==="thmob")&&d.sug!=="ALREADY_BLOCKED"&&d.sug!=="DO_NOT_BLOCK") return {sug:d.sug,reason:`shared IP (${o[1].replace(/^AS\d+ /,"")}) – auto unblock after ${AU.cloud} days without an attack`,was:null};
-  return {sug:d.sug,reason:"",was:null}; }
+// AbuseIPDB + GreyNoise (V2): looked up through SOAR like VirusTotal, 24 h cache, warm-up search every hour.
+// a = AbuseIPDB confidence %, r = reports (90 days), u = distinct reporters, g = GreyNoise class, n = GreyNoise name
+const INTEL_FIX={"185.220.101.47":{a:100,r:1520,u:310,g:"malicious"},"45.95.147.236":{a:96,r:412,u:120,g:"malicious"},"89.248.165.52":{a:100,r:2904,u:640,g:"malicious"},
+ "194.26.29.102":{a:88,r:201,u:77,g:"malicious"},"57.141.0.36":{a:0,r:0,u:0,g:"riot",n:"Meta crawler"},"162.142.125.9":{a:18,r:96,u:40,g:"benign",n:"Censys"},
+ "5.188.206.14":{a:41,r:35,u:12,g:"unknown"},"198.51.100.77":{a:0,r:0,u:0,g:"none"},"20.20.20.20":{a:0,r:0,u:0,g:"riot",n:"Microsoft"},
+ "223.181.15.230":{a:79,r:64,u:31,g:"malicious"},"52.88.145.123":{a:9,r:4,u:3,g:"none"}};
+function intelOf(ip){ const d=detected.find(x=>x.ip===ip)||{vt:0}; return INTEL_FIX[ip]||{a:Math.min(100,d.vt*9),r:d.vt*23,u:d.vt*6,g:d.vt>=6?"malicious":d.vt>=1?"unknown":"none"}; }
+const abCls=a=>a>=75?"ab-h":a>=25?"ab-m":"ab-l";
+function abCell(ip){ const i=intelOf(ip); return `<a class="ab ${abCls(i.a)}" href="https://www.abuseipdb.com/check/${ip}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="AbuseIPDB: ${i.r} reports from ${i.u} users in 90 days">${i.a}%</a> <span class="note">${i.r}</span>`; }
+const GN_LABEL={malicious:["gn-m","malicious"],benign:["gn-b","benign"],riot:["gn-b","RIOT"],unknown:["gn-u","unknown"],none:["gn-n","not observed"]};
+function gnCell(ip){ const i=intelOf(ip), g=GN_LABEL[i.g]; return `<a class="gn ${g[0]}" href="https://viz.greynoise.io/ip/${ip}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="GreyNoise${i.n?": "+esc(i.n):""}">${g[1]}${i.n?" · "+esc(i.n):""}</a>`; }
+// same rules as intel_lib.intel_adjust: AbuseIPDB ≥ 75 % -> BLOCK, ≥ 25 % -> at least REVIEW, GreyNoise malicious ->
+// at least REVIEW, GreyNoise RIOT / benign -> at most REVIEW (known service: the analyst decides)
+function intelAdj(s, ip){ const rank={BLOCK:1,REVIEW:2,MONITOR:3}, notes=[]; if(!rank[s]) return {s,notes};
+  const i=intelOf(ip);
+  if(i.a>=75){ s="BLOCK"; notes.push(`AbuseIPDB ${i.a}% (${i.r} reports)`); } else if(i.a>=25){ if(rank[s]>2) s="REVIEW"; notes.push(`AbuseIPDB ${i.a}% (${i.r} reports)`); }
+  if(i.g==="malicious"){ if(rank[s]>2) s="REVIEW"; notes.push("GreyNoise malicious scanner"); }
+  if(i.g==="riot"||i.g==="benign"){ if(s==="BLOCK") s="REVIEW"; notes.push(`GreyNoise ${i.g==="riot"?"RIOT known service":"benign"} (${i.n}) – check before blocking`); }
+  return {s,notes}; }
+function effSug(d){ const o=OWN[d.ip]||[]; let b;
+  if(o[0]==="cloud"&&d.sug!=="ALREADY_BLOCKED"&&d.sug!=="DO_NOT_BLOCK") b={sug:d.sug,reason:`cloud provider IP (${o[1].replace(/^AS\d+ /,"")}) – auto unblock after ${AU.cloud} days without an attack`,was:null};
+  else if((o[0]==="mob"||o[0]==="thmob")&&d.sug!=="ALREADY_BLOCKED"&&d.sug!=="DO_NOT_BLOCK") b={sug:d.sug,reason:`shared IP (${o[1].replace(/^AS\d+ /,"")}) – auto unblock after ${AU.cloud} days without an attack`,was:null};
+  else b={sug:d.sug,reason:"",was:null};
+  const x=intelAdj(b.sug,d.ip);
+  return {sug:x.s, reason:[b.reason].concat(x.notes).filter(Boolean).join(" · "), was:x.s!==b.sug?b.sug:null}; }
 function aidCell(d, win){ const c=ctx(d,win);
   return `<td class="aid" data-detail="${d.ip}" title="click: IP detail"><div class="row"><span class="own o-${c.o[0]}">${OWN_LABEL[c.o[0]]}</span></div>
     ${c.sig.slice(0,3).map(x=>`<div><span class="sig ${x[0]}">${esc(x[1])}</span></div>`).join("")}${c.sig.length>3?`<div class="note">+${c.sig.length-3} more</div>`:""}
@@ -577,11 +601,12 @@ function renderDetail(page){
   const sel=pg.sel.has(d.ip);
   el.hidden=false;
   el.innerHTML=`<div class="panel-head"><div class="dhead"><h2>IP detail – <span class="mono">${d.ip}</span><span class="new">NEW</span></h2><span class="own o-${c.o[0]}">${OWN_LABEL[c.o[0]]}</span><span class="note">${esc(c.o[1])} · ${esc(d.loc)}</span><span class="pill ${sugPill[effSug(d).sug]}" title="${esc(effSug(d).reason||"suggestion")}">${effSug(d).sug}</span>${effSug(d).reason?`<span class="note">${esc(effSug(d).reason)}</span>`:""}</div>
-    <div class="dact">${cloudOf(d.ip)?`<span class="pill p-review">☁ unblock after ${AU.cloud} quiet days</span>`:""}<button type="button" data-dsel="${d.ip}">${sel?"✓ selected – unselect":"☐ select this IP"}</button><a class="vt" href="https://www.virustotal.com/gui/ip-address/${d.ip}" target="_blank" rel="noopener">🔗 VT ${d.vt}/94</a><button type="button" onclick="toast('Real dashboard: opens a Splunk search with every WAF event of this IP in a new tab')">🔍 all events</button><button type="button" data-dclose="1" aria-label="close IP detail">✖ close</button></div></div>
+    <div class="dact">${cloudOf(d.ip)?`<span class="pill p-review">☁ unblock after ${AU.cloud} quiet days</span>`:""}<button type="button" data-dsel="${d.ip}">${sel?"✓ selected – unselect":"☐ select this IP"}</button><a class="vt" href="https://www.virustotal.com/gui/ip-address/${d.ip}" target="_blank" rel="noopener">🔗 VT ${d.vt}/94</a><a class="ab ${abCls(intelOf(d.ip).a)}" href="https://www.abuseipdb.com/check/${d.ip}" target="_blank" rel="noopener">🔗 AbuseIPDB ${intelOf(d.ip).a}%</a><a class="gn ${GN_LABEL[intelOf(d.ip).g][0]}" href="https://viz.greynoise.io/ip/${d.ip}" target="_blank" rel="noopener">🔗 GreyNoise</a><button type="button" onclick="toast('Real dashboard: opens a Splunk search with every WAF event of this IP in a new tab')">🔍 all events</button><button type="button" data-dclose="1" aria-label="close IP detail">✖ close</button></div></div>
   <div class="dgrid">
     <div class="dbox"><span class="label">WAF attack types (${W})</span>${c.atk.length?`<ul>${c.atk.map(a=>li(esc(a[0]),`<b class="bk">${a[1].toLocaleString()}</b>`)).join("")}</ul>`:'<span class="note">no blocked requests</span>'}</div>
     <div class="dbox"><span class="label">Allowed responses (${W})</span>${Object.keys(c.codes).length?`<ul>${Object.entries(c.codes).map(([k,v])=>li(`HTTP ${k}${k==="200"&&c.atk.length&&c.o[0]!=="thmob"?' <span class="sig w">⚠ after attacks</span>':""}`,`<b class="al">${v}</b>`)).join("")}</ul>`:'<span class="note">nothing let through</span>'}</div>
     <div class="dbox"><span class="label">Activity – requests per hour (24h)</span>${spark(c.trend)}<div class="note">last 1h: <b>${c.last1h}</b> · ${c.last1h?"● still active":"quiet in the last hour"}</div></div>
+    <div class="dbox"><span class="label">Threat intel (via SOAR · 24 h cache)</span><ul>${li("VirusTotal",`${d.vt} / 94`)}${li("AbuseIPDB",`<b class="${intelOf(d.ip).a>=75?"bk":""}">${intelOf(d.ip).a}%</b> · ${intelOf(d.ip).r} reports`)}${li("GreyNoise",esc(GN_LABEL[intelOf(d.ip).g][1]+(intelOf(d.ip).n?" · "+intelOf(d.ip).n:"")))}</ul>${(x=>x.notes.length?`<div class="note">${esc(x.notes.join(" · "))}</div>`:"")(intelAdj(d.sug,d.ip))}</div>
     <div class="dbox"><span class="label">Client (Imperva) / User-Agent</span><div><b>${esc(c.cl[0])}</b> · ${esc(c.cl[1])}</div><div class="ua">${esc(c.cl[2])}</div></div>
     <div class="dbox"><span class="label">History</span><ul>${li("detected on",`${c.days} days / 90d`)}${li("first detected",fmt(c.first).slice(0,10))}${c.hist.un?li(`↺ unblocked by ${esc(c.hist.un[1])}`,fmt(c.hist.un[0]).slice(0,10)):""}${c.hist.un?`<li><span class="note">“${esc(c.hist.un[2])}”</span><span></span></li>`:""}${c.hist.nb?li(`✖ not blocked by ${esc(c.hist.nb[1])}`,fmt(c.hist.nb[0]).slice(0,10)):""}${!c.hist.un&&!c.hist.nb?li("block / unblock / not block","none"):""}</ul></div>
     <div class="dbox"><span class="label">Neighbours detected</span><ul>${li("same /24",c.c24.length?c.c24.join(", "):"none")}${li(esc(c.o[1].split(" ")[0])+" (same ASN)",c.nbr.length?c.nbr.length+" IPs":"none")}</ul>${c.nbr.length?`<div class="note mono">${c.nbr.join(", ")}</div>`:""}</div>
@@ -633,11 +658,11 @@ function renderDet(page){
   $(pg.p+"_tbl").innerHTML=rows.map(d=>{
     const ok=d.sug!=="DO_NOT_BLOCK"&&d.sug!=="ALREADY_BLOCKED", w=act(d.ip, page==="history"?"30d":"24h", d.last);
     return `<tr data-ip="${d.ip}" class="${pg.sel.has(d.ip)?"selected":""}" ${cloudOf(d.ip)?`title="cloud provider IP – auto unblock after ${AU.cloud} days without an attack"`:""}>
-    <td>${ok?'<span class="box"></span>':''}</td><td class="ip">${d.ip}</td><td class="nw"><a class="vt" href="https://www.virustotal.com/gui/ip-address/${d.ip}" target="_blank" rel="noopener" onclick="event.stopPropagation()">🔗</a> <span class="mono">${d.vt}/94</span></td><td class="small">${esc(d.rule)}</td>
+    <td>${ok?'<span class="box"></span>':''}</td><td class="ip">${d.ip}</td><td class="nw"><a class="vt" href="https://www.virustotal.com/gui/ip-address/${d.ip}" target="_blank" rel="noopener" onclick="event.stopPropagation()">🔗</a> <span class="mono">${d.vt}/94</span></td><td class="nw">${abCell(d.ip)}</td><td class="nw">${gnCell(d.ip)}</td><td class="small">${esc(d.rule)}</td>
     <td class="mono nw">${esc(d.inc)}</td><td><span class="pill sev-${d.sev}">${d.sev}</span></td><td class="mono nw">${fmt(d.last)}</td>
     <td class="num">${d.n}</td><td class="num nw"><b class="bk">${w.b.toLocaleString()}</b> / <b class="al">${w.a.toLocaleString()}</b></td><td class="num nw"><b class="bk">${w.wb}</b> / <b class="al">${w.wa}</b></td><td>${pathCell(fullPaths(d.ip,w.b,BAD,3), fullPaths(d.ip,w.a,GOOD,5))}</td>${page==="history"?`<td class="mono nw">${w.last?fmt(w.last):"-"}</td>`:""}<td>${(e=>`<span class="pill ${sugPill[e.sug]}">${e.sug}</span>${e.reason?`<div class="note" style="min-width:150px">${esc(e.reason)}</div>`:""}`)(effSug(d))}</td>
     <td class="nw">${esc(d.loc)}</td>${aidCell(d, page==="history"?"30d":"24h")}</tr>`;}).join("")
-    ||`<tr><td colspan="${page==="history"?15:14}" class="note">${q?`ไม่พบ IP ที่ตรงกับ “${esc(q)}”`:"ไม่มี IP ที่รอ block ในช่วงเวลานี้"}</td></tr>`;
+    ||`<tr><td colspan="${page==="history"?17:16}" class="note">${q?`ไม่พบ IP ที่ตรงกับ “${esc(q)}”`:"ไม่มี IP ที่รอ block ในช่วงเวลานี้"}</td></tr>`;
 }
 // unblock when the IP sent no request for N days: cloud provider / shared 7, others 60 (or set per IP / Keep)
 function expInfo(b){
