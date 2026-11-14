@@ -76,13 +76,44 @@
   // ... and catch a run with stale IPs: exec_tk / exec_desc changing while exec_ips is set
   [p + "_exec_tk", p + "_exec_desc"].forEach(function (k) { sub.on("change:" + k, function () { if (sub.get(p + "_exec_ips") !== undefined) window.RUNS.push({kind: "STALE", ips: sub.get(p + "_exec_ips")}); }); });
 
+  // search <p>_find (impervafind + ES detections): answers for the IPs typed in the search box
+  var FIND = {
+    "192.0.2.55": ["no", "al¦ALLOWED by policy 1000002 Allowlist-Partners (192.0.2.55) - cannot be blocked"],
+    "185.220.101.47": ["no", "no¦already BLOCKED in policy 1000001 Block DDoS policy · on the policy since 2026-05-01 (block date not kept by Imperva)"],
+    "54.245.10.21": ["yes", "ok¦not on the WAF and not blocked from Splunk - can be blocked ‖ pg¦detected 2026-11-14 08:00 · Threat - WAF scanner · ticket 1000101 · on the " + (p === "h" ? "Older detections" : "Block – last 7 days") + " page"]
+  };
+  var fmgr = new Mgr(p + "_find"), ft = null;
+  fmgr.data = function (kind, opts) { window.FIND_OPTS = opts; return this.res; };
+  function dispatchFind() {
+    clearTimeout(ft);
+    ft = setTimeout(function () {
+      fmgr.runs++;
+      if (cfg.findFail) { fmgr.trigger("search:failed"); return; }
+      var q = String(sub.get(p + "_q") || "*").replace(/\*/g, "").trim().toLowerCase().replace(/^ithm[\s:#-]*/, "");
+      var isip = function (x) { return /^\d{1,3}(\.\d{1,3}){3}(\/\d{1,2})?$/.test(x) || (/:/.test(x) && /^[0-9a-f:.]+(\/\d{1,3})?$/.test(x)); };
+      var ips = q.split(/[\s,;]+/).filter(Boolean).filter(isip), rows = [];
+      if (ips.length) {
+        ips.forEach(function (ip) {
+          var f = FIND[ip] || ["yes", "ok¦not on the WAF and not blocked from Splunk - can be blocked"];
+          rows.push([ip, f[1] + (CLOUD[ip] ? " ‖ pg¦cloud provider (" + CLOUD[ip] + ") - short block: auto unblock after 7 days without an attack" : ""), f[0], CLOUD[ip] || "-"]);
+        });
+      } else if (q) {
+        rows.push(["-", "pg¦2 blocked from Splunk (Blocked IPs page) ‖ pg¦1 IP rules in other WAF policies ‖ pg¦0 in the Not block list", "-", "-"]);
+      }
+      fmgr.res.d = {fields: ["ip", "found", "find_blockable", "find_cloud"], rows: rows};
+      fmgr.res.trigger("data");
+    }, cfg.findDelay || 60);
+  }
+  if (p !== "b") sub.on("change:" + p + "_q", dispatchFind);
+
   var tableComp = {settings: {get: function (k) { return k === "managerid" ? p + "_act" : null; }}};
   var comps = {"default": def, "submitted": sub};
   comps[p + "_act"] = cfg.noMgrId ? undefined : mgr;
   comps["mgr_hidden"] = mgr;
   comps[p + "_acttable"] = cfg.noMgrId ? {settings: {get: function () { return "mgr_hidden"; }}} : tableComp;
+  if (p !== "b") comps[p + "_find"] = fmgr;
   var mvc = {Components: {get: function (id) { if (cfg.throwIn === id) throw new Error("boom"); return comps[id]; }}};
-  window.DEF = def; window.SUB = sub; window.MGR = mgr;
+  window.DEF = def; window.SUB = sub; window.MGR = mgr; window.FMGR = fmgr;
 
   // drilldown of the IP table: <set token="p_sel">$p_sel$,$row.src$,</set> + <eval token="form.p_tk">
   window.rowClick = function (ip, inc) {

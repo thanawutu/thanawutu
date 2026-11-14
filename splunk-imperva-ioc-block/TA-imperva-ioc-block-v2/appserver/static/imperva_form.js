@@ -3,9 +3,14 @@
  *
  * Replaces the Simple XML inputs + action table of panel "<p>_actpanel" with one card:
  *
- *   Search IP / Ticket / Incident no.        | Add IPs manually (detection pages)
+ *   Search or add IPs (IP / Ticket / Incident no. / Rule)   - one box (mockup v3.12)
+ *   Found: where the typed IPs are - every page and every WAF policy (detection pages)
  *   Selected IPs (× = unselect) | Ticket / Incident no. | Description | [⛔ Block n IPs] [✖ Not block n IPs]
- *   WAF check of the selected / added IPs (detection pages)
+ *   WAF check of the selected IPs (detection pages)
+ *
+ * Full IPs typed in the search box are the manual IPs: the card puts them in $p_add$ for the action
+ * search and reads the search "<p>_find" (impervafind: every WAF policy, registry, Not block list,
+ * ES detections of both pages). The Block button counts only the typed IPs that can be blocked.
  *
  * The card only reads and sets the SAME tokens as the Simple XML panel ($p_q$, $p_add$, $p_tk$,
  * $p_desc$, $p_sel$, $p_exec_*$, $p_nb_*$), so the searches of the views do not change.
@@ -25,12 +30,12 @@ require([
     "use strict";
 
     var PAGES = {
-        d: {verb: "block", manual: true, table: "det_table", ipField: "src",
-            search: "🔎 Search IP / Ticket / Incident no. / Rule",
-            qph: "เช่น 54.245 หรือ 1000101", dph: "เหตุผล / รายละเอียด"},
-        h: {verb: "block", manual: true, table: "det_table", ipField: "src",
-            search: "🔎 Search IP / Ticket / Incident no. / Rule",
-            qph: "เช่น 54.245 หรือ 1000101", dph: "เหตุผล / รายละเอียด"},
+        d: {verb: "block", manual: true, table: "det_table", ipField: "src", page: "Block – last 7 days",
+            search: "🔎 Search or add IPs – IP / Ticket / Incident no. / Rule · searches every page and every WAF policy",
+            qph: "เช่น 54.245 · 1000101 · หรือวาง IP หลายตัว 203.0.113.10, 198.51.100.7", dph: "เหตุผล / รายละเอียด"},
+        h: {verb: "block", manual: true, table: "det_table", ipField: "src", page: "Older detections",
+            search: "🔎 Search or add IPs – IP / Ticket / Incident no. / Rule · searches every page and every WAF policy",
+            qph: "เช่น 54.245 · 1000101 · หรือวาง IP หลายตัว 203.0.113.10, 198.51.100.7", dph: "เหตุผล / รายละเอียด"},
         b: {verb: "unblock", manual: false, table: "b_table", ipField: "ip",
             search: "🔎 Search IP / Ticket / Incident no. / Description",
             qph: "เช่น 193.42 หรือ 1000090", dph: "เหตุผลที่ unblock"}
@@ -70,6 +75,12 @@ require([
         ".imp-chk.imp-warn{background:var(--imp-warn-bg);color:var(--imp-warn)}",
         ".imp-chk.imp-wait{background:var(--imp-wait-bg);color:var(--imp-muted)}",
         ".imp-hidden{display:none!important}",
+        ".imp-find{font-size:12.5px;border:1px solid var(--imp-line);border-radius:5px;padding:6px 10px;background:var(--imp-bg2);display:flex;flex-direction:column;gap:4px;line-height:1.45}",
+        ".imp-find .imp-hd{font-size:11.5px;color:var(--imp-muted);font-weight:600}",
+        ".imp-fl{display:flex;flex-wrap:wrap;gap:2px 14px;align-items:baseline}",
+        ".imp-fl b{font-family:Menlo,Consolas,monospace;font-weight:600}",
+        ".imp-f-no{color:var(--imp-crit)}.imp-f-al{color:var(--imp-ok)}.imp-f-ok{color:var(--imp-ok)}.imp-f-pg{color:var(--imp-fg)}.imp-f-note{color:var(--imp-muted)}",
+        ".imp-tag.imp-wait{border-style:dashed;background:var(--imp-wait-bg);color:var(--imp-muted);padding-right:8px}",
         ".imp-sticky{position:sticky;top:0;z-index:20}",
         "body.imp-scope tr.imp-selrow>td:not([style*=background]){background-color:var(--imp-sel)!important}",
         "body.imp-scope tr.imp-selrow>td:first-child{box-shadow:inset 4px 0 0 var(--imp-accent)}"
@@ -215,6 +226,9 @@ require([
         this.chk = null;         // last WAF check text
         this.chkFor = null;      // IPs that WAF check was made for
         this.chkWait = false;
+        this.found = {};         // typed IP -> {lines, blockable, cloud} from the search <p>_find
+        this.findText = null;    // Found lines of a text search (no IP typed)
+        this.findErr = false;
 
         var card = el("div", "imp-card" + (cfg.verb === "unblock" ? " imp-u" : ""));
         card.setAttribute("role", "group");
@@ -239,12 +253,9 @@ require([
         var row1 = el("div", "imp-row");
         var q = field("imp_" + p + "_q", cfg.search, "1 1 300px", cfg.qph);
         row1.appendChild(q.wrap);
-        var add = null;
-        if (cfg.manual) {
-            add = field("imp_" + p + "_add", "➕ Add IPs manually – other sources, comma separated",
-                "1 1 300px", "เช่น 203.0.113.10, 198.51.100.7");
-            row1.appendChild(add.wrap);
-        }
+        // V2: no separate "Add IPs manually" box - full IPs typed in the search box are added
+        var find = el("div", "imp-find imp-hidden");
+        find.setAttribute("aria-live", "polite");
 
         var row2 = el("div", "imp-row");
         var selWrap = el("div", "imp-field");
@@ -285,11 +296,12 @@ require([
         chk.setAttribute("aria-live", "polite");
 
         card.appendChild(row1);
+        card.appendChild(find);
         card.appendChild(row2);
         card.appendChild(chk);
 
-        this.el = {card: card, q: q.input, add: add && add.input, tk: tk.input, desc: desc.input,
-            sel: selBox, all: allBtn, clear: clearBtn, go: go, nb: nb, chk: chk};
+        this.el = {card: card, q: q.input, tk: tk.input, desc: desc.input,
+            sel: selBox, all: allBtn, clear: clearBtn, go: go, nb: nb, chk: chk, find: find};
 
         // --- put the card in the panel, hide the Simple XML inputs + action table
         var $dp = $panel.find(".dashboard-panel").first();
@@ -310,9 +322,6 @@ require([
 
         // --- initial values from the tokens (defaults "*" and "-" = empty)
         q.input.value = blankIf(defTokens.get("form." + p + "_q"), "*");
-        if (add) {
-            add.input.value = blankIf(defTokens.get("form." + p + "_add"), "-");
-        }
         tk.input.value = blankIf(defTokens.get("form." + p + "_tk"), "-");
         desc.input.value = blankIf(defTokens.get("form." + p + "_desc"), "-");
 
@@ -320,6 +329,9 @@ require([
         this.applyQ = debounce(function () {
             var v = q.input.value.trim();
             setInputTok(p + "_q", v || "*");
+            if (cfg.manual) {        // typed IPs = manual IPs of the action search (WAF check, cloud)
+                setInputTok(p + "_add", self.manualItems().join(", ") || "-");
+            }
             // a search for an incident number fills Ticket / Incident no. (digits only)
             if (incidentOf(v)) {
                 if (!tk.input.value.trim() || self.autoTk) {
@@ -333,11 +345,6 @@ require([
                 setInputTok(p + "_tk", "-");
             }
         }, 500);
-        this.applyAdd = debounce(function () {
-            if (add) {
-                setInputTok(p + "_add", add.input.value.trim() || "-");
-            }
-        }, 600);
         this.applyTk = debounce(function () {
             setInputTok(p + "_tk", tk.input.value.trim() || "-");
         }, 600);
@@ -345,18 +352,15 @@ require([
             setInputTok(p + "_desc", desc.input.value.trim() || "-");
         }, 600);
 
-        $(q.input).on("input", this.applyQ).on("change", this.applyQ.flush).on("keydown", function (e) {
+        $(q.input).on("input", function () {
+            self.render();
+            self.applyQ();
+        }).on("change", this.applyQ.flush).on("keydown", function (e) {
             if (e.key === "Enter") {
                 self.applyQ();
                 self.applyQ.flush();
             }
         });
-        if (add) {
-            $(add.input).on("input", function () {
-                self.render();
-                self.applyAdd();
-            }).on("change", this.applyAdd.flush);
-        }
         $(tk.input).on("input", function () {
             self.autoTk = false;
             self.applyTk();
@@ -374,10 +378,10 @@ require([
         });
         $(clearBtn).on("click", function () {
             setTok(p + "_sel", ",");
-            if (add) {
-                add.input.value = "";
-                self.applyAdd();
-                self.applyAdd.flush();
+            if (cfg.manual) {        // the typed IPs are in the search box
+                q.input.value = "";
+                self.applyQ();
+                self.applyQ.flush();
             }
             self.render();
         });
@@ -410,16 +414,8 @@ require([
                 q.input.value = blankIf(v, "*");
             }
         });
-        if (add) {
-            defTokens.on("change:form." + p + "_add", function (m, v) {
-                if (document.activeElement !== add.input && (add.input.value.trim() || "-") !== (v || "-")) {
-                    add.input.value = blankIf(v, "-");
-                    self.render();
-                }
-            });
-        }
-
         this.watchActionSearch();
+        this.watchFind();
         this.watchTable();
         this.render();
     }
@@ -428,14 +424,15 @@ require([
         return selectedFrom(getTok(this.p + "_sel"));
     };
 
+    // full IPs / CIDRs typed in the search box (text such as a ticket or a rule name is only a search)
     Card.prototype.manualItems = function () {
-        if (!this.el.add) {
+        if (!this.cfg.manual) {
             return [];
         }
         var seen = {}, out = [];
-        this.el.add.value.split(/[\s,;]+/).forEach(function (x) {
+        this.el.q.value.replace(/^\s*ithm[\s:#-]*/i, "").split(/[\s,;]+/).forEach(function (x) {
             x = x.trim();
-            if (x && x !== "-" && !seen[x]) {
+            if (x && isIp(x) && !seen[x]) {
                 seen[x] = true;
                 out.push(x);
             }
@@ -443,15 +440,102 @@ require([
         return out;
     };
 
-    // IPs the main button acts on: selected rows + valid manually added IPs
+    // IPs the main button acts on: selected rows + typed IPs that the Found check says can be blocked
+    // (if that check fails, every typed IP: impervablock / SOAR check them again)
     Card.prototype.targets = function () {
-        var out = this.selected().slice();
+        var out = this.selected().slice(), self = this;
         this.manualItems().forEach(function (x) {
-            if (isIp(x) && out.indexOf(x) < 0) {
+            var f = self.found[x];
+            if (out.indexOf(x) < 0 && ((f && f.blockable === "yes") || (!f && self.findErr))) {
                 out.push(x);
             }
         });
         return out;
+    };
+
+    var ICON = {no: "⛔ ", al: "✅ ", ok: "✔ ", pg: "• "};
+
+    // "Found" box under the search field (mockup v3.12)
+    Card.prototype.renderFind = function () {
+        var box = this.el.find, self = this, cfg = this.cfg;
+        if (!box) {
+            return;
+        }
+        var q = this.el.q.value.trim();
+        if (!cfg.manual || !q || q === "*") {
+            $(box).addClass("imp-hidden");
+            return;
+        }
+        var lineEls = function (row, lines) {
+            lines.forEach(function (l) {
+                var i = l.indexOf("¦"), cls = i > 0 ? l.slice(0, i) : "pg", t = i > 0 ? l.slice(i + 1) : l;
+                t = t.replace("on the " + cfg.page + " page", "on this page");
+                row.appendChild(el("span", "imp-f-" + (ICON[cls] ? cls : "pg"), (ICON[cls] || ICON.pg) + t));
+            });
+        };
+        box.textContent = "";
+        box.appendChild(el("span", "imp-hd", "Found – every page and every WAF policy"));
+        var man = this.manualItems();
+        if (man.length) {
+            man.forEach(function (ip) {
+                var row = el("div", "imp-fl"), f = self.found[ip];
+                row.appendChild(el("b", null, ip));
+                if (!f) {
+                    row.appendChild(el("span", "imp-f-note", self.findErr
+                        ? "check unavailable – checked again when blocking"
+                        : "⏳ checking every page and every WAF policy …"));
+                } else {
+                    lineEls(row, f.lines);
+                    row.appendChild(el("span", "imp-f-note", f.blockable === "yes" ? "→ included in Block" : "→ not blocked again"));
+                }
+                box.appendChild(row);
+            });
+        } else {
+            var row = el("div", "imp-fl");
+            row.appendChild(el("b", null, "“" + q + "”"));
+            row.appendChild(el("span", "imp-f-pg", ICON.pg + this.shown.length + " IP on this page"));
+            if (this.findText) {
+                lineEls(row, this.findText);
+            } else if (!this.findErr) {
+                row.appendChild(el("span", "imp-f-note", "⏳ …"));
+            }
+            box.appendChild(row);
+        }
+        $(box).removeClass("imp-hidden");
+    };
+
+    Card.prototype.watchFind = function () {
+        var self = this;
+        var mgr = this.cfg.manual ? mvc.Components.get(this.p + "_find") : null;
+        if (!mgr) {
+            return;
+        }
+        mgr.on("search:failed search:error search:cancelled", function () {
+            self.findErr = true;
+            self.render();
+        });
+        var results = mgr.data("results", {count: 0, output_mode: "json_rows"});
+        results.on("data", function () {
+            var d = results.data() || {};
+            var fields = (d.fields || []).map(function (f) {
+                return f && typeof f === "object" ? f.name : f;
+            });
+            var col = function (r, name) {
+                var i = fields.indexOf(name), v = i < 0 ? null : r[i];
+                return Array.isArray(v) ? v.join(" ‖ ") : v;
+            };
+            self.findErr = false;
+            self.findText = null;
+            (d.rows || []).forEach(function (r) {
+                var ip = col(r, "ip"), lines = String(col(r, "found") || "").split(" ‖ ").filter(function (x) { return x; });
+                if (!ip || ip === "-") {
+                    self.findText = lines;
+                } else {
+                    self.found[ip] = {lines: lines, blockable: col(r, "find_blockable"), cloud: col(r, "find_cloud")};
+                }
+            });
+            self.render();
+        });
     };
 
     Card.prototype.render = function () {
@@ -474,18 +558,26 @@ require([
             t.appendChild(x);
             e.sel.appendChild(t);
         });
+        var found = this.found, findErr = this.findErr, tagged = 0;
         man.forEach(function (x) {
             if (sel.indexOf(x) >= 0) {
                 return;
             }
-            var ok = isIp(x), isCloud = cloud.indexOf(x) >= 0;
-            var t = el("span", "imp-tag " + (ok ? "imp-man" : "imp-bad"),
-                (ok ? "✍ " : "✖ ") + (isCloud ? "☁ " + x + " · short block" : x));
-            t.title = isCloud ? "added manually - cloud provider IP, short block (Auto unblock)" : (ok ? "added manually" : "not an IP / CIDR - ignored");
+            var f = found[x];
+            if (f && f.blockable !== "yes") {
+                return;              // already blocked / allowed / cannot be blocked: see Found
+            }
+            var pending = !f && !findErr;
+            var isCloud = (f && f.cloud && f.cloud !== "-") || cloud.indexOf(x) >= 0;
+            var t = el("span", "imp-tag " + (pending ? "imp-wait" : "imp-man") + (isCloud ? " imp-cloud" : ""),
+                (pending ? "⏳ " : "✍ ") + (isCloud ? "☁ " + x + " · short block" : x));
+            t.title = pending ? "typed in the search box - checking every WAF policy …"
+                : "typed in the search box" + (isCloud ? " - cloud provider / shared IP, short block (Auto unblock)" : "");
             e.sel.appendChild(t);
+            tagged++;
         });
-        if (!sel.length && !man.length) {
-            e.sel.appendChild(el("span", "imp-none", "ยังไม่ได้เลือก IP"));
+        if (!sel.length && !tagged) {
+            e.sel.appendChild(el("span", "imp-none", this.cfg.manual ? "ยังไม่ได้เลือก IP – คลิกแถว หรือพิมพ์ IP ในช่องค้นหา" : "ยังไม่ได้เลือก IP"));
         }
 
         e.go.textContent = verb + plural(all.length);
@@ -498,12 +590,13 @@ require([
         $(e.all).toggleClass("imp-hidden", !this.shown.length);
         e.all.textContent = "☑ Select all " + this.shown.length + " shown";
         this.renderCheck(sel.concat(all), man);
+        this.renderFind();
         this.highlight(sel);
     };
 
     Card.prototype.renderCheck = function (all, man) {
         var c = this.el.chk;
-        if (!this.cfg.manual || (!all.length && !man.length)) {
+        if (!this.cfg.manual || !this.selected().length) {      // typed IPs: see the Found box
             $(c).addClass("imp-hidden");
             return;
         }
@@ -610,7 +703,6 @@ require([
 
     Card.prototype.flushAll = function () {
         this.applyQ.flush();
-        this.applyAdd.flush();
         this.applyTk.flush();
         this.applyDesc.flush();
     };
@@ -632,8 +724,9 @@ require([
         this.autoTk = false;
         setInputTok(p + "_tk", "-");
         setInputTok(p + "_desc", "-");
-        if (clearManual && e.add) {
-            e.add.value = "";
+        if (clearManual && this.cfg.manual) {     // typed IPs are in the search box
+            e.q.value = "";
+            setInputTok(p + "_q", "*");
             setInputTok(p + "_add", "-");
         }
         this.render();

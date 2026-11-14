@@ -25,6 +25,10 @@ export = none
 access = read : [ admin, imperva_blocker ], write : [ admin ]
 export = none
 
+[commands/impervafind]
+access = read : [ admin, imperva_blocker ], write : [ admin ]
+export = none
+
 [commands/impervalist]
 access = read : [ admin, imperva_blocker ], write : [ admin ]
 export = none

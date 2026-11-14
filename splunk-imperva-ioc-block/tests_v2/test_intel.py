@@ -383,7 +383,7 @@ class TestConfig(unittest.TestCase):
         i, j = macros.index("| vtcheck field=src count_field=count check_waf=false cache_only=true"), macros.index("| intelcheck field=src cache_only=true")
         self.assertLess(i, j)
         self.assertLess(j, macros.index("| eval prio=case(suggestion"))       # the adjusted suggestion is sorted
-        self.assertEqual(macros.count('rename abuse_score_txt AS "AbuseIPDB %", gn_txt AS GreyNoise'), 2)
+        self.assertEqual(macros.count('abuse_score_txt AS "AbuseIPDB %", gn_txt AS GreyNoise'), 2)
         for v in ("imperva_ioc_block.xml", "imperva_ioc_history.xml"):
             x = self.read("default", "data", "ui", "views", v)
             self.assertIn("https://www.abuseipdb.com/check/$row.src|n$", x)
