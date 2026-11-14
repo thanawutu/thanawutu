@@ -138,6 +138,13 @@ class TestViews(unittest.TestCase):
         self.assertIn("https://www.virustotal.com/gui/ip-address/$row.src|n$", x)
         self.assertNotIn("vt_score AS VT", x)
 
+    def test_no_hidden_list_and_hidden_ips_come_back_when_detected_again(self):
+        x = self.read("imperva_ioc_history.xml")
+        self.assertNotIn("Not blocked (hidden)", x)
+        self.assertNotIn("impervadismiss action=remove", x)
+        macros = open(os.path.join(APP, "default", "macros.conf"), encoding="utf-8").read()
+        self.assertIn("| where isnull(_dismissed_at) OR last_seen > tonumber(_dismissed_at)", macros)
+
     def test_command_registered(self):
         self.assertIn("[impervafind]\nfilename = impervafind.py", open(os.path.join(APP, "default", "commands.conf")).read())
         self.assertIn("[commands/impervafind]", open(os.path.join(APP, "metadata", "default.meta")).read())

@@ -86,10 +86,12 @@ const wait = ms => page.waitForTimeout(ms);
   T('Block 7d', 'blocked IP leaves the page and joins Blocked IPs', !(await rows('#d_tbl')).includes(ip1) && num(await txt('#nBlk')) === blk0 + 1, `${blk0} -> ${await txt('#nBlk')}`);
   T('Block 7d', 'inputs reset after the run', (await page.inputValue('#d_tk')) === '' && (await page.inputValue('#d_q')) === '');
   // Not block
-  const ip2 = (await rows('#d_tbl'))[0], nb0 = num(await txt('#nbCount'));
+  const ip2 = (await rows('#d_tbl'))[0];
   await page.click(`#d_tbl tr[data-ip="${ip2}"] td.ip`); await page.click('#d_nb'); await wait(150);
   T('Block 7d', 'Not block hides the IP (no WAF call)', (await txt('#d_res')).includes('Not block 1 IP') && !(await rows('#d_tbl')).includes(ip2));
-  T('Block 7d', 'Not block list grows', num(await txt('#nbCount')) === nb0 + 1);
+  await page.fill('#d_q', ip2); await wait(150);
+  T('Block 7d', 'search finds the hidden IP: hidden by Not block, can still be blocked', /hidden by Not block[\s\S]*can still be blocked/.test(await txt('#d_find')));
+  await page.fill('#d_q', ''); await wait(100);
 
   // ---------------- page 2: Older detections
   await go('history');
@@ -98,11 +100,8 @@ const wait = ms => page.waitForTimeout(ms);
   for (const v of ['30', '90', 'all']) { await page.selectOption('#h_rng', v); await wait(150); counts[v] = (await rows('#h_tbl')).length; }
   T('Older', 'Detected range 8-30 / 31-90 / all changes rows', counts.all >= counts['30'] && counts.all >= counts['90'] && counts.all === num(await txt('#nHist')), JSON.stringify(counts));
   T('Older', 'title follows the range', (await txt('#h_title')).includes('older than 7 days'));
-  T('Older', 'Not block list shows the hidden IP', (await rows('#nb_tbl')).length === 0 ? (await txt('#nb_tbl')).includes(ip2) : true, '');
-  await page.click(`#nb_tbl [data-restore="${ip2}"]`); await wait(150);
-  T('Older', 'Restore shows the IP again', num(await txt('#nbCount')) === nb0 && (await txt('#toast')).includes(ip2));
-  await go(''); T('Block 7d', 'restored IP is back on the Block page', (await rows('#d_tbl')).includes(ip2));
-  await go('history');
+  T('Older', 'no Not blocked (hidden) table any more', await page.locator('#nb_tbl').count() === 0 && !(await txt('#v-history')).includes('Not blocked (hidden)'));
+  T('Older', 'hidden IP stays hidden until it is detected again', !(await rows('#h_tbl')).includes(ip2) && !(await rows('#h_tbl')).includes('118.193.33.60'));
   const hIp = (await rows('#h_tbl'))[0];
   await page.click(`#h_tbl tr[data-ip="${hIp}"] td.ip`); await page.fill('#h_desc', 'old finding'); await page.click('#h_run'); await wait(1900);
   T('Older', 'Block from the Older page works', (await txt('#h_res')).includes('✔ Block 1 IP') && !(await rows('#h_tbl')).includes(hIp));
@@ -183,7 +182,7 @@ const wait = ms => page.waitForTimeout(ms);
   // ---------------- audit log
   await go('audit');
   const aRows = await page.locator('#audit tr').evaluateAll(t => t.map(r => [r.children[0]?.innerText, r.children[2]?.innerText]));
-  T('Audit', 'every action above is in the audit log', ['block', 'unblock', 'not_block', 'restore', 'rule_add', 'rule_remove', 'rule_enable', 'rule_disable', 'auto_unblock_rule'].every(a => aRows.some(x => x[1] === a)), [...new Set(aRows.map(x => x[1]))].join(','));
+  T('Audit', 'every action above is in the audit log', ['block', 'unblock', 'not_block', 'rule_add', 'rule_remove', 'rule_enable', 'rule_disable', 'auto_unblock_rule'].every(a => aRows.some(x => x[1] === a)), [...new Set(aRows.map(x => x[1]))].join(','));
   T('Audit', 'newest first', aRows.map(x => x[0]).join() === [...aRows.map(x => x[0])].sort().reverse().join());
   await page.fill('#aq', '141.98.10.60'); await wait(100);
   T('Audit', 'search by IP', (await page.locator('#audit tr').evaluateAll(t => t.every(r => r.innerText.includes('141.98.10.60')))));

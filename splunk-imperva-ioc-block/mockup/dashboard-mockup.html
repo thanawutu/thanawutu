@@ -191,7 +191,7 @@ td.aid:hover{background:var(--info-bg)!important}
   <div class="in">
     <div><span class="label">Apps › Imperva IOC Block</span><h1 id="pageTitle">Imperva WAF – IOC Block</h1></div>
     <div class="chips">
-      <span class="chip sim">Mockup v3.18 · simulated data</span>
+      <span class="chip sim">Mockup v3.19 · simulated data</span>
       <span class="chip">Policy 2169031 · via SOAR</span>
     </div>
   </div>
@@ -206,7 +206,7 @@ td.aid:hover{background:var(--info-bg)!important}
 
 <!-- ============ Page 1: dashboard (7 days, search + Block) ============ -->
 <main class="wrap" id="v-dash">
-  <div class="review"><b>Mockup v3.18:</b> Auto unblock ไม่จำกัดวันละ 50 แล้ว: ปลดทีละ <b>10 IP</b> → อ่าน policy กลับจาก WAF ตรวจว่าลบแล้ว → ค่อยยิงรอบถัดไป จนหมด (ถ้ารอบไหนตรวจไม่ผ่าน หยุดเฉพาะ policy นั้น ลองใหม่รอบถัดไป) · <b>v3.17:</b> Auto unblock run now และ log ย้ายไปหน้า <b>Audit log</b> · ช่อง VirusTotal = คะแนน (คลิกเปิด VirusTotal) · <b>v3.16:</b> เพิ่มคอลัมน์ <b>AbuseIPDB</b> (คะแนน % + จำนวน report 90 วัน) และ <b>GreyNoise</b> (malicious / benign / RIOT / not observed) ในหน้า Block และ Older detections · ตรวจผ่าน <b>SOAR</b> เหมือน VirusTotal เก็บ cache 24 ชม. · Suggestion ปรับตาม: AbuseIPDB ≥ 75% → BLOCK, ≥ 25% → อย่างน้อย REVIEW, GreyNoise malicious → อย่างน้อย REVIEW, GreyNoise RIOT / benign → ไม่เกิน REVIEW · IP detail มีกล่อง Threat intel และลิงก์ไปทั้ง 3 เว็บ · <b>v3.15:</b> รวมหน้า <b>Blocked IPs / Unblock</b> กับ <b>Auto unblock</b> เป็นหน้าเดียว: ตารางเดียวแสดง IP ที่ block จาก<b>ทุก policy</b> พร้อม Last attack / Attacks 24h / Unblock on / Status · เลือกแถวแล้วกด <b>🔓 Unblock</b> ทันที หรือ <b>Apply rule</b> (Keep / Default / จำนวนวัน) · แถบบนสุดบอกกฎ auto unblock (7 / 60 วัน · ทุก policy · 50 ต่อรอบ) · log ของ auto unblock อยู่ล่างสุด · <b>v3.14:</b> หน้า Auto unblock <b>ไม่มีหน้าตั้งค่าแล้ว</b> ใช้ค่าคงที่: unblock จริงทุกวัน (<b>ไม่มี Report only</b>) · cloud / shared IP <b>7 วัน</b> · IP อื่น <b>60 วัน</b> · <b>All enabled policies</b> · <b>max 50 IP ต่อรอบ</b> · <b>v3.13:</b> Auto unblock: IP <b>cloud และ shared IP</b> (เครือข่ายมือถือ) ไม่โจมตีครบ <b>7 วัน</b> → unblock · IP อื่นไม่โจมตีครบ <b>60 วัน</b> → unblock · หน้า Blocked IPs และ Auto unblock มีคอลัมน์ <b>Attacks 24h</b> (request ที่ WAF ยัง block จาก IP นั้นใน 24 ชม.) และยอดรวม · <b>v3.12:</b> ช่อง <b>Search</b> ใช้ทั้งค้นหาและ<b>เพิ่ม IP</b> (ตัดช่อง Add IPs manually ออก) · ค้นหาจาก<b>ทุกหน้าและทุก WAF policy</b>: กล่อง <b>Found</b> บอกว่า IP อยู่ที่ไหน – หน้านี้ / หน้าอื่น / <b>block แล้วใน policy ไหน วันไหน</b> / allow / Not block / <b>ไม่เจอ → นับเข้าปุ่ม Block ทันที</b> · ลองพิมพ์ <span class="mono">193.42.33.7, 185.220.101.47, 20.20.20.20, 45.95.147.236, 203.0.113.10</span> · <b>Auto unblock (V2):</b> หน้า <b>⏱ Auto unblock</b> แสดง IP ที่ถูก block จาก<b>ทุก rule / policy</b> ของ WAF · นับจาก<b>การโจมตีครั้งสุดท้าย</b> (log “Blocked IP” ของ Imperva = IP ยังส่ง request เข้ามา): IP ของ <b>cloud provider</b> ไม่โจมตีครบ <b>7 วัน</b> → unblock · IP อื่นไม่โจมตีครบ <b>60 วัน</b> → unblock · ถ้ายังโจมตีอยู่ นับใหม่อัตโนมัติ · IP ที่ไม่เคยเห็นโจมตีหลัง block นับจากวันที่ block (หรือวันที่ Splunk เห็นใน policy) · IP cloud block ได้ · Keep = ไม่ unblock · ส่วนอื่นเหมือน v3.8b</div>
+  <div class="review"><b>Mockup v3.19:</b> เอาตาราง <b>Not blocked (hidden)</b> ออกจากหน้า Older detections: IP ที่กด Not block จะซ่อนไว้ และ<b>กลับมาที่ตาราง detect เอง</b>เมื่อมี rule detect IP นั้นใหม่ (ค้นหา IP นั้นในช่องค้นหายังเห็นว่า "hidden by Not block") · <b>v3.18:</b> Auto unblock ไม่จำกัดวันละ 50 แล้ว: ปลดทีละ <b>10 IP</b> → อ่าน policy กลับจาก WAF ตรวจว่าลบแล้ว → ค่อยยิงรอบถัดไป จนหมด (ถ้ารอบไหนตรวจไม่ผ่าน หยุดเฉพาะ policy นั้น ลองใหม่รอบถัดไป) · <b>v3.17:</b> Auto unblock run now และ log ย้ายไปหน้า <b>Audit log</b> · ช่อง VirusTotal = คะแนน (คลิกเปิด VirusTotal) · <b>v3.16:</b> เพิ่มคอลัมน์ <b>AbuseIPDB</b> (คะแนน % + จำนวน report 90 วัน) และ <b>GreyNoise</b> (malicious / benign / RIOT / not observed) ในหน้า Block และ Older detections · ตรวจผ่าน <b>SOAR</b> เหมือน VirusTotal เก็บ cache 24 ชม. · Suggestion ปรับตาม: AbuseIPDB ≥ 75% → BLOCK, ≥ 25% → อย่างน้อย REVIEW, GreyNoise malicious → อย่างน้อย REVIEW, GreyNoise RIOT / benign → ไม่เกิน REVIEW · IP detail มีกล่อง Threat intel และลิงก์ไปทั้ง 3 เว็บ · <b>v3.15:</b> รวมหน้า <b>Blocked IPs / Unblock</b> กับ <b>Auto unblock</b> เป็นหน้าเดียว: ตารางเดียวแสดง IP ที่ block จาก<b>ทุก policy</b> พร้อม Last attack / Attacks 24h / Unblock on / Status · เลือกแถวแล้วกด <b>🔓 Unblock</b> ทันที หรือ <b>Apply rule</b> (Keep / Default / จำนวนวัน) · แถบบนสุดบอกกฎ auto unblock (7 / 60 วัน · ทุก policy · 50 ต่อรอบ) · log ของ auto unblock อยู่ล่างสุด · <b>v3.14:</b> หน้า Auto unblock <b>ไม่มีหน้าตั้งค่าแล้ว</b> ใช้ค่าคงที่: unblock จริงทุกวัน (<b>ไม่มี Report only</b>) · cloud / shared IP <b>7 วัน</b> · IP อื่น <b>60 วัน</b> · <b>All enabled policies</b> · <b>max 50 IP ต่อรอบ</b> · <b>v3.13:</b> Auto unblock: IP <b>cloud และ shared IP</b> (เครือข่ายมือถือ) ไม่โจมตีครบ <b>7 วัน</b> → unblock · IP อื่นไม่โจมตีครบ <b>60 วัน</b> → unblock · หน้า Blocked IPs และ Auto unblock มีคอลัมน์ <b>Attacks 24h</b> (request ที่ WAF ยัง block จาก IP นั้นใน 24 ชม.) และยอดรวม · <b>v3.12:</b> ช่อง <b>Search</b> ใช้ทั้งค้นหาและ<b>เพิ่ม IP</b> (ตัดช่อง Add IPs manually ออก) · ค้นหาจาก<b>ทุกหน้าและทุก WAF policy</b>: กล่อง <b>Found</b> บอกว่า IP อยู่ที่ไหน – หน้านี้ / หน้าอื่น / <b>block แล้วใน policy ไหน วันไหน</b> / allow / Not block / <b>ไม่เจอ → นับเข้าปุ่ม Block ทันที</b> · ลองพิมพ์ <span class="mono">193.42.33.7, 185.220.101.47, 20.20.20.20, 45.95.147.236, 203.0.113.10</span> · <b>Auto unblock (V2):</b> หน้า <b>⏱ Auto unblock</b> แสดง IP ที่ถูก block จาก<b>ทุก rule / policy</b> ของ WAF · นับจาก<b>การโจมตีครั้งสุดท้าย</b> (log “Blocked IP” ของ Imperva = IP ยังส่ง request เข้ามา): IP ของ <b>cloud provider</b> ไม่โจมตีครบ <b>7 วัน</b> → unblock · IP อื่นไม่โจมตีครบ <b>60 วัน</b> → unblock · ถ้ายังโจมตีอยู่ นับใหม่อัตโนมัติ · IP ที่ไม่เคยเห็นโจมตีหลัง block นับจากวันที่ block (หรือวันที่ Splunk เห็นใน policy) · IP cloud block ได้ · Keep = ไม่ unblock · ส่วนอื่นเหมือน v3.8b</div>
   <section class="kpis" aria-label="Summary">
     <div class="kpi k-warn"><span class="label">Detected WAF IPs</span><span class="v" id="kDet">0</span><span class="s" id="kDetSub">last 7 days</span></div>
     <div class="kpi k-info"><span class="label">Blocked on WAF now</span><span class="v" id="kWaf">0</span><span class="s">policy 2169031 (live)</span></div>
@@ -273,12 +273,6 @@ td.aid:hover{background:var(--info-bg)!important}
     <div class="tbl-wrap"><table>
       <thead><tr><th></th><th>IP</th><th>VirusTotal</th><th title="AbuseIPDB: confidence of abuse 0-100 % (red ≥ 75, yellow ≥ 25) and number of reports in 90 days · click = AbuseIPDB page">AbuseIPDB</th><th title="GreyNoise: malicious / benign internet scanner, RIOT = known service (CDN, search engine, SaaS), not observed · click = GreyNoise page">GreyNoise</th><th>Rule</th><th>Incident no.</th><th>Severity</th><th>Last detected</th><th style="text-align:right">Findings</th><th style="text-align:right" title="WAF requests in the last 30 days: blocked / allowed">Block / Allow (30d)</th><th style="text-align:right" title="websites the IP tried in the last 30 days: blocked on / allowed on">Web Block / Allow (30d)</th><th title="top URLs of this IP in the last 30 days: red = blocked by the WAF, green = let through">Top paths (30d)</th><th title="last request of this IP seen on the WAF (30 days)">WAF last seen</th><th>Suggestion</th><th>Location</th><th title="new: owner of the IP and warning signals – click to open IP detail">Decision aid (30d)<span class="new">NEW</span></th></tr></thead>
       <tbody id="h_tbl"></tbody></table></div>
-  </section>
-  <section class="panel">
-    <div class="panel-head"><h2>Not blocked (hidden) <span class="note" id="nbCount"></span></h2><p>ซ่อนจากหน้า Block / Older detections จนกว่าจะถูก detect ใหม่ · ↩ Restore = แสดงกลับทันที</p></div>
-    <div class="tbl-wrap"><table>
-      <thead><tr><th></th><th>IP</th><th>Not blocked at</th><th>By</th><th>Ticket / Incident no.</th><th>Description</th></tr></thead>
-      <tbody id="nb_tbl"></tbody></table></div>
   </section>
 </main>
 
@@ -778,7 +772,7 @@ function renderKPIs(){
   chart("chart7",7); chart("chart30",30);
 }
 const hTitle={"30":"8 to 30 days ago","90":"31 to 90 days ago","all":"older than 7 days"};
-function renderAll(){renderNB(); renderKPIs(); renderDet("dash"); renderDet("history"); renderDetail("dash"); renderDetail("history"); renderBlocked(); ["dash","history","blocked"].forEach(renderCtl); $("h_title").textContent="IPs detected by WAF rules – "+hTitle[$("h_rng").value];}
+function renderAll(){renderKPIs(); renderDet("dash"); renderDet("history"); renderDetail("dash"); renderDetail("history"); renderBlocked(); ["dash","history","blocked"].forEach(renderCtl); $("h_title").textContent="IPs detected by WAF rules – "+hTitle[$("h_rng").value];}
 
 function pick(page,ip){
   const pg=P[page]; if(pg.busy) return; const tk=$(pg.p+"_tk");
@@ -816,15 +810,6 @@ function notBlock(page){
   r.textContent=`✔ Not block ${ips.length} IP — ซ่อนจากหน้า Block / Older detections จนกว่าจะถูก detect ใหม่ (ไม่ได้ส่งอะไรไป WAF) · บันทึกลง imperva_audit.csv`;
   pg.sel.clear(); $(pg.p+"_tk").value=""; $(pg.p+"_desc").value=""; renderAll();
 }
-function renderNB(){
-  $("nbCount").textContent=`(${notBlocked.length})`;
-  $("nb_tbl").innerHTML=notBlocked.slice().sort((a,b)=>b.t-a.t).map(x=>`<tr><td><button type="button" data-restore="${x.ip}">↩ Restore</button></td><td class="ip">${x.ip}</td><td class="mono nw">${fmt(x.t)}</td><td>${esc(x.by)}</td><td class="mono nw">${esc(x.tk)}</td><td class="small">${esc(x.desc)}</td></tr>`).join("")
-    ||'<tr><td colspan="6" class="note">ไม่มี IP ที่ถูกซ่อน</td></tr>';
-}
-$("nb_tbl").addEventListener("click",e=>{const b=e.target.closest("[data-restore]"); if(!b) return; const ip=b.dataset.restore;
-  const i=notBlocked.findIndex(x=>x.ip===ip); if(i>=0) notBlocked.splice(i,1);
-  audit.push({t:Date.now(),user:USER,action:"restore",ip,tk:"-",desc:"shown again",status:"restored",ver:"-",cont:"-"});
-  toast(`${ip} แสดงกลับในหน้า Block / Older detections แล้ว`); renderAll();});
 async function run(page){
   const pg=P[page]; const ips=allIPs(page); if(!ips.length||pg.busy) return;
   const tk=$(pg.p+"_tk").value.trim()||"-", desc=$(pg.p+"_desc").value.trim()||"-", cont=soarSeq++, r=$(pg.p+"_res");
