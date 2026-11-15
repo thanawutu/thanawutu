@@ -9,6 +9,8 @@ One row per finding:
     notable_id    full id "<uuid>@@notable@@..."
     ithm          "ITHM 1234567" (several, comma separated, if more than one)
     note_time     latest note time
+    ithm_times    "1234567@<epoch>" per number: when the FIRST note with it was written (V2: a block
+                  without ticket only takes a number written after the block - impervaticketfill)
 
 Usage (the dashboard joins it on source_guid):
     | impervanotes
@@ -55,13 +57,18 @@ def notes_to_rows(notes):
         if not guid or not nums:
             continue
         r = by.setdefault(guid, {"finding_guid": guid, "notable_id": n.get("notable_id"),
-                                 "ithm": [], "note_time": 0})
+                                 "ithm": [], "note_time": 0, "_first": {}})
+        t = float(n.get("create_time") or 0)
         for x in nums:
             if x not in r["ithm"]:
                 r["ithm"].append(x)
-        r["note_time"] = max(r["note_time"], float(n.get("create_time") or 0))
+            if x not in r["_first"] or (t and t < r["_first"][x]):
+                r["_first"][x] = t
+        r["note_time"] = max(r["note_time"], t)
     rows = []
     for r in by.values():
+        first = r.pop("_first")
+        r["ithm_times"] = ", ".join("%s@%d" % (x.split(" ", 1)[1], first[x]) for x in r["ithm"])
         r["ithm"] = ", ".join(r["ithm"])
         rows.append(r)
     return rows

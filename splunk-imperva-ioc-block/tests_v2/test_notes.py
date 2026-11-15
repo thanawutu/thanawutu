@@ -34,6 +34,8 @@ class TestNotes(unittest.TestCase):
         self.assertEqual(rows[G1]["ithm"], "ITHM 1234567")             # duplicate note -> once
         self.assertEqual(rows[G1]["note_time"], 200.0)
         self.assertEqual(rows[G2]["ithm"], "ITHM 7654321, ITHM 7654322")
+        self.assertEqual(rows[G1]["ithm_times"], "1234567@100")              # first note with the number
+        self.assertEqual(rows[G2]["ithm_times"], "7654321@50, 7654322@50")
 
 
 if __name__ == "__main__":

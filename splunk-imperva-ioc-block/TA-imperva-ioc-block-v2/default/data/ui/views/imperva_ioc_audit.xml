@@ -21,6 +21,7 @@
         <choice value="restore">restore (undo not block)</choice>
         <choice value="rule_*">detection rule changes</choice>
         <choice value="auto_unblock_rule">auto unblock rule (Keep / Default / days)</choice>
+        <choice value="ticket_update">ticket / description filled from the ES finding</choice>
         <default>*</default>
       </input>
       <input type="dropdown" token="a_days" searchWhenChanged="true">
