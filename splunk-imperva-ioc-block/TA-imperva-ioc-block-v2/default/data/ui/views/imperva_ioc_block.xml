@@ -140,8 +140,15 @@
   | `imperva_ioc_fields`
   | stats max(_time) AS _det_last values(ioc_rule) AS _det_rule values(ioc_incident) AS _det_inc BY ioc_ip
   | rename ioc_ip AS ip]
+| join type=left ip [search `imperva_ioc_notables` earliest=-90d@d [| impervanotes | eval _n=replace(lower(trim(replace($d_q|s$, "[*]", ""))), "^ithm[\s:#-]*", "") | where match(_n, "^\d{5,}\z") AND match(ithm, "(?i)ITHM "._n."(\D|\z)") | stats count AS n values(finding_guid) AS g | eval search=if(n>0, "(".mvjoin(mvmap(g, "\"".g."\""), " OR ").")", "\"imperva_no_ticket_typed\"") | fields search]
+  | `imperva_ioc_ip`
+  | mvexpand ioc_ip
+  | stats values(ioc_ip) AS _tk_ips count AS _tk_n
+  | where _tk_n>0
+  | eval ip="-"]
 | eval _det_inc=mvdedup(mvmap(_det_inc, replace(_det_inc, "(?i)ITHM\s*-?\s*", "")))
 | eval found=find_lines.if(isnotnull(_det_last), " ‖ pg¦detected ".strftime(_det_last, "%Y-%m-%d %H:%M")." · ".mvjoin(_det_rule, "; ").if(isnotnull(_det_inc), " · ticket ".mvjoin(_det_inc, ", "), "")." · on the ".if(_det_last>=relative_time(now(), "-7d@d"), "Block – last 7 days", "Older detections")." page", "")
+| eval found=found.if(isnotnull(_tk_ips), " ‖ ok¦ES finding with this ticket (notes, last 90 days): IP ".mvjoin(_tk_ips, ", ")." – type the IP to see where it is and block / unblock it", "")
 | table ip found find_blockable find_cloud find_unblockable find_unblock_policy</query>
     <earliest>-1m</earliest>
     <latest>now</latest>

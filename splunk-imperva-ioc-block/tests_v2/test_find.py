@@ -159,6 +159,12 @@ class TestViews(unittest.TestCase):
             self.assertIn("| table ip found find_blockable find_cloud find_unblockable find_unblock_policy", x)
             self.assertGreaterEqual(x.count("_hit=if(coalesce(_iptok, 0)&gt;0") + x.count("_hit=if(coalesce(_iptok, 0)>0"), 2)
             self.assertIn("Search or add IPs", x)
+            # a ticket number typed in -> IPs of the ES findings whose notes have it (also IPs blocked
+            # outside Splunk, which no other list has)
+            self.assertIn('| where match(_n, "^\\d{5,}\\z") AND match(ithm, "(?i)ITHM "._n."(\\D|\\z)")', x)
+            self.assertIn('"\\"imperva_no_ticket_typed\\""', x)
+            self.assertIn("ok¦ES finding with this ticket (notes, last 90 days): IP ", x)
+            self.assertNotIn("$_n$", x)
 
     def test_unblock_result_panel_on_both_detection_pages(self):
         for v, p in (("imperva_ioc_block.xml", "d"), ("imperva_ioc_history.xml", "h")):
