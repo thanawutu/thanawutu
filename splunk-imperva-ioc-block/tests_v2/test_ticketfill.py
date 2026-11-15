@@ -208,7 +208,92 @@ class TestTicketFill(unittest.TestCase):
     def test_bad_action(self):
         with self.assertRaises(AssertionError) as ctx:
             self.run_([{}], "action=delete")
-        self.assertIn("action must be terms, update, pending or reset", str(ctx.exception))
+        self.assertIn("action must be terms, update, rules, pending or reset", str(ctx.exception))
+
+
+class TestOtherPolicies(unittest.TestCase):
+    """Rules of the other policies (blocked outside Splunk): ticket / description on the rule state."""
+    def setUp(self):
+        import auto_unblock as au
+        import impervaticketfill as c
+        import impervapolicycheck as pc
+        self.c, self.au, self.pc = c, au, pc
+        E = lambda cidr, pid, action="BLOCK", enabled=True: {"cidr": cidr, "policy_id": pid, "policy_name": "P" + pid,
+                                                            "action": action, "kind": "setting", "enabled": enabled}
+        self.entries = [E("198.51.100.238", "1000003"), E("198.51.100.238", "2169031"),     # other + own policy
+                        E("198.51.100.10", "1000003", enabled=False), E("198.51.100.20", "1000004", action="ALLOW"),
+                        E("198.51.100.30", "1000003")]
+        self.listed = NOW - 23 * H
+        self.state = {au.entry_key(e["policy_id"], e["cidr"]): {"_key": au.entry_key(e["policy_id"], e["cidr"]),
+                      "_user": "nobody", "policy_id": e["policy_id"], "cidr": e["cidr"], "first_listed": self.listed,
+                      "rule": "default"} for e in self.entries}
+        self.saved = []
+        self._load = pc.load_entries
+        pc.load_entries = lambda sk, conf, log, force=False: (self.entries, ["2169031"], "cache")
+        c.load_conf_stanza = lambda sk, conf, st: {"policy_ids": "2169031"}
+
+        def kv_query(sk, col, q):
+            if col == au.STATE:
+                return [dict(self.state[k]) for k in q["_key"]["$in"] if k in self.state]
+            return []
+        c.kv_query = kv_query
+        c.kv_upsert = lambda sk, docs, col: self.saved.append((col, [dict(d) for d in docs]))
+        self._clock = c.time.time
+        c.time.time = lambda: NOW
+        self.out = {}
+        c.si.outputResults = lambda r: self.out.__setitem__("rows", r)
+        c.si.generateErrorResults = lambda m: self.out.__setitem__("err", m)
+        c.get_logger = lambda *a: type("L", (), {"info": lambda s, *a: None, "error": lambda s, *a: None})()
+
+    def tearDown(self):
+        self.c.time.time = self._clock
+        self.pc.load_entries = self._load
+
+    def run_(self, rows):
+        self.c.si.getOrganizedResults = lambda: (rows, None, {"sessionKey": "k"})
+        sys.argv = ["impervaticketfill.py", "action=rules"]
+        self.out.clear()
+        self.c.main()
+        if "err" in self.out:
+            raise AssertionError(self.out["err"])
+        return self.out["rows"]
+
+    def test_ticket_and_rule_name_on_the_rule_of_the_other_policy_only(self):
+        f = lambda ip, t, rule, notes="": {"ip": ip, "finding_time": str(t), "rule_name": rule, "ithm_times": notes}
+        rows = self.run_([f("198.51.100.238", self.listed + 11 * H, "WAF attack on a partner site - Rule",
+                            "1000637@%d" % (self.listed + 13 * H)),
+                          f("198.51.100.238", self.listed - 30 * 86400, "Old rule", "1000001@%d" % (self.listed - 29 * 86400)),
+                          f("198.51.100.10", NOW, "x", "1000002@%d" % NOW), f("198.51.100.20", NOW, "x", "1000003@%d" % NOW)])
+        col, docs = self.saved[0]
+        self.assertEqual(col, "imperva_auto_unblock")
+        self.assertEqual([(d["policy_id"], d["cidr"], d["ticket"], d["description"]) for d in docs],
+                         [("1000003", "198.51.100.238", "1000637", "WAF attack on a partner site - Rule")])
+        self.assertNotIn("_user", docs[0])
+        self.assertEqual((docs[0]["first_listed"], docs[0]["rule"]), (self.listed, "default"))    # state kept
+        self.assertEqual((rows[0]["site_id"], rows[0]["incident_no"], rows[0]["action"]), ("1000003", "1000637", "ticket_update"))
+        self.assertIn("rule of another policy, blocked outside Splunk", rows[0]["detail"])
+
+    def test_a_note_older_than_the_rule_is_not_taken_and_filled_values_stay(self):
+        k = self.au.entry_key("1000003", "198.51.100.30")
+        self.run_([{"ip": "198.51.100.30", "finding_time": str(self.listed - H), "rule_name": "R",
+                    "ithm_times": "1000500@%d" % (self.listed - 3 * H)}])
+        doc = self.saved[0][1][0]
+        self.assertEqual((doc.get("ticket"), doc["description"]), (None, "R"))
+        self.state[k].update(ticket="1000999", description="typed")
+        self.saved.clear()
+        self.assertEqual(self.run_([{"ip": "198.51.100.30", "finding_time": str(NOW), "rule_name": "R2",
+                                     "ithm_times": "1000600@%d" % NOW}]), [])
+        self.assertEqual(self.saved, [])
+
+    def test_blocked_ips_page_shows_it(self):
+        st = {"first_listed": 1, "ticket": "1000637", "description": "R"}
+        self.assertEqual(self.au.filled("-", st.get("ticket")), "1000637")
+        self.assertEqual(self.au.filled("1000101", st.get("ticket")), "1000101")              # registry first
+        self.assertEqual(self.au.filled("", None), "-")
+        items, _new = self.au.plan(NOW, self.entries, ["2169031"], {self.au.entry_key("1000003", "198.51.100.238"):
+                                   dict(st, rule="default")}, {}, {}, {}, lambda o: None)
+        it = [i for i in items if i["policy_id"] == "1000003" and i["cidr"] == "198.51.100.238"][0]
+        self.assertEqual((it["ticket"], it["description"]), ("1000637", "R"))
 
 
 class TestConf(unittest.TestCase):
@@ -228,6 +313,14 @@ class TestConf(unittest.TestCase):
                      "| impervaticketfill action=update \\", "| `imperva_audit_write`"):
             self.assertIn(line, st)
         self.assertNotIn("soar", st.lower())                                  # nothing is sent to SOAR
+
+    def test_saved_search_of_other_policies(self):
+        s = self.read("default", "savedsearches.conf")
+        i = s.index("[Imperva V2 - Ticket of rules in other policies (every 10 min)]")
+        st = s[i:s.index("\n\n", i)]
+        for line in ("cron_schedule = 9-59/10 * * * *", '| where note_time >= relative_time(now(), "-7d")',
+                     '"\\"imperva_no_new_note\\""', "| impervaticketfill action=rules \\", "| `imperva_audit_write`"):
+            self.assertIn(line, st)
 
     def test_registered_and_shown(self):
         self.assertIn("[impervaticketfill]\nfilename = impervaticketfill.py", self.read("default", "commands.conf"))

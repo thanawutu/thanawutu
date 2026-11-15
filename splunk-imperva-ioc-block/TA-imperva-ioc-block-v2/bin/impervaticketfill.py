@@ -30,6 +30,12 @@ action=update   input: one row per finding of a waiting IP:
                   ip, finding_time (epoch), rule_name, ithm_times ("1234567@<epoch>, ..." from
                   impervanotes), comment_ithm (ITHM numbers in the finding's comment fields)
                 output: one audit row per registry entry changed (user auto-ticket, action ticket_update)
+action=rules    rules of the OTHER enabled WAF policies (blocked outside Splunk, no registry):
+                input as action=update, from the findings that got a note in the last 7 days
+                (saved search "Imperva V2 - Ticket of rules in other policies (every 10 min)").
+                Same choice of ticket / description, counted from the day V2 first saw the rule
+                (imperva_auto_unblock first_listed: no block date in Imperva). Stored on that rule
+                (KV imperva_auto_unblock ticket / description), shown on the Blocked IPs page.
 action=pending  the registry entries still waiting (ip, policy, blocked_at, waiting_for, hours_left)
 action=reset    clears a ticket / description that THIS command filled (not one an analyst typed)
                 for ip="a,b" or ip=all (only blocks still inside the window), so the next run fills
@@ -47,7 +53,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import splunk.Intersplunk as si  # noqa: E402
 
-from splunk_helpers import REGISTRY, get_logger, kv_query, kv_upsert, parse_options  # noqa: E402
+import auto_unblock as au         # noqa: E402
+from splunk_helpers import (REGISTRY, get_logger, kv_query, kv_upsert, load_conf_stanza,  # noqa: E402
+                            parse_options)
 
 USER = "auto-ticket"
 WINDOW_HOURS = 24
@@ -183,6 +191,49 @@ def fill(docs, findings_by_ip, now):
     return save, audit
 
 
+def fill_rules(entries, own, states, findings_by_ip, now):
+    """Rules of the other enabled policies with exactly a finding's IP -> (state documents, audit rows).
+    states: {entry_key: imperva_auto_unblock document}"""
+    own = set(str(x) for x in own)
+    save, audit = [], []
+    for e in entries:
+        pid, cidr = str(e.get("policy_id")), str(e.get("cidr") or "")
+        if (pid in own or cidr not in findings_by_ip or not e.get("enabled", True) or e.get("kind") == "exception"
+                or not str(e.get("action", "")).startswith("BLOCK")):
+            continue
+        st = states.get(au.entry_key(pid, cidr))
+        if not st:
+            continue                      # not seen by Auto unblock yet: next run
+        found, since = findings_by_ip[cidr], num(st.get("first_listed"), now)
+        new, what = dict(st), []
+        new.pop("_user", None)
+        if empty(st.get("ticket")):
+            tk = new_tickets(found, since)
+            if tk:
+                new["ticket"], new["ticket_filled_at"] = ", ".join(tk), int(now)
+                what.append("ticket %s from a new note of the ES finding" % new["ticket"])
+        if empty(st.get("description")):
+            # the rule of the finding that got the new ticket note (first_listed is only when V2 first
+            # saw the rule), else the findings around first_listed
+            tk_new = set(new_tickets(found, since))
+            rules = []
+            for f in found:
+                if any(n in tk_new for n, _t in f["notes"]):
+                    rules += [x for x in f["rules"] if x not in rules]
+            rules = rules or rule_names(found, since)
+            if rules:
+                desc = "; ".join(rules)
+                new["description"] = desc if len(desc) <= MAX_DESC else desc[:MAX_DESC - 1] + "…"
+                new["description_filled_at"] = int(now)
+                what.append("description = detection rule name")
+        if what:
+            save.append(new)
+            audit.append(audit_row(now, {"ip": cidr, "site_id": pid, "incident_no": new.get("ticket"),
+                                         "comment": new.get("description")}, "updated",
+                                   " · ".join(what) + " (rule of another policy, blocked outside Splunk)"))
+    return save, audit
+
+
 def audit_row(now, doc, status, detail):
     return {"_time": now, "user": USER, "action": "ticket_update", "ip": doc.get("ip"),
             "site_id": doc.get("site_id") or "-", "status": status,
@@ -252,6 +303,28 @@ def main():
             log.info("ticketfill waiting=%d finding_rows=%d ips=%d updated=%d", len(docs), len(results),
                      len(by_ip), len(save))
             si.outputResults(audit)
+        elif action == "rules":
+            by_ip = {}
+            for r in results:
+                ip = str(r.get("ip") or "").strip()
+                if ip:
+                    by_ip.setdefault(ip, []).append(finding_of(r))
+            save, audit = [], []
+            if by_ip:
+                import impervapolicycheck as pc
+                conf = load_conf_stanza(session_key, "imperva", "settings")
+                entries, targets, _via = pc.load_entries(session_key, conf, log)
+                own = [str(x) for x in (targets or [p.strip() for p in str(conf.get("policy_ids", "")).split(",") if p.strip()])]
+                keys = [au.entry_key(e["policy_id"], e["cidr"]) for e in entries if e.get("cidr") in by_ip]
+                states = dict((d["_key"], d) for d in kv_query(session_key, au.STATE, {"_key": {"$in": keys}})) if keys else {}
+                save, audit = fill_rules(entries, own, states, by_ip, now)
+            if save:
+                kv_upsert(session_key, save, au.STATE)
+            for a in audit:
+                log.info('user=%s action=ticket_update ip=%s site_id=%s incident_no="%s" comment="%s" detail="%s"',
+                         USER, a["ip"], a["site_id"], a["incident_no"], a["comment"], a["detail"])
+            log.info("ticketfill rules finding_rows=%d ips=%d updated=%d", len(results), len(by_ip), len(save))
+            si.outputResults(audit)
         elif action == "reset":
             ips = values(opts.get("ip"))
             if not ips:
@@ -263,7 +336,7 @@ def main():
                 log.info('user=%s action=ticket_update status=reset ip=%s detail="%s"', USER, a["ip"], a["detail"])
             si.outputResults(audit)
         else:
-            raise ValueError("action must be terms, update, pending or reset")
+            raise ValueError("action must be terms, update, rules, pending or reset")
     except Exception as e:  # noqa: BLE001
         log.error("impervaticketfill failed: %s", e)
         si.generateErrorResults("impervaticketfill: %s" % e)

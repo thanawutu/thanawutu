@@ -129,6 +129,15 @@ def hits_for(cidr, hits):
     return total
 
 
+def filled(*vals):
+    """First value that is not empty / "-" (registry of a Splunk block, else what impervaticketfill
+    found in the ES finding notes for a rule of another policy) or "-"."""
+    for v in vals:
+        if str(v or "").strip() not in ("", "-"):
+            return str(v).strip()
+    return "-"
+
+
 def plan(now, entries, own_ids, states, seen, registry, owners, short_of, hits=None):
     """
     -> (items, new_states)
@@ -164,8 +173,9 @@ def plan(now, entries, own_ids, states, seen, registry, owners, short_of, hits=N
         item = {"policy_id": pid, "policy_name": e.get("policy_name") or "-", "cidr": cidr,
                 "own": e["own"], "owner": owner or "", "cloud": cloud or "",
                 "shared": shared or "", "short": short[0] if short else "",
-                "blocked_at": blocked_at, "ticket": reg.get("incident_no") or "-",
-                "description": reg.get("comment") or "-", "blocked_by": reg.get("blocked_by") or "-",
+                "blocked_at": blocked_at, "ticket": filled(reg.get("incident_no"), st.get("ticket")),
+                "description": filled(reg.get("comment"), st.get("description")),
+                "blocked_by": reg.get("blocked_by") or "-",
                 "first_listed": first, "last_seen": last, "rule": rule,
                 "attacks_24h": hits_for(cidr, hits or {}),
                 "rule_reason": st.get("rule_reason") or "", "key": key}
