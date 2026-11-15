@@ -1,7 +1,8 @@
 # Imperva IOC Block V2 (`TA-imperva-ioc-block-v2`)
 
-V2 is a separate Splunk app installed **next to V1** (`TA-imperva-ioc-block`). V1 is not changed.
-When V2 is tested and confirmed, V1 is removed (see *Cut-over*).
+V2 was installed **next to V1** (`TA-imperva-ioc-block`) and confirmed in production; **V1 was removed
+on 2026-11-15** (deployer: backup, delete the app, push) and its code removed from this repository.
+The sections about living next to V1 and the import from V1 are kept as history.
 
 ## What is new in V2
 

@@ -1,3 +1,7 @@
+> **2026-11-15: V1 (`TA-imperva-ioc-block`) was removed after V2 was confirmed in production.**
+> The app is now `TA-imperva-ioc-block-v2` only - see [README_V2.md](README_V2.md) for what V2 adds and
+> how it is installed. The architecture, setup and operation below still apply (app name V2).
+
 # Splunk → Imperva WAF: Manual IOC IP Block Button
 
 > **V2** (`TA-imperva-ioc-block-v2`, auto unblock, cloud IPs blockable) is a separate app installed next to this one: see [README_V2.md](README_V2.md).
@@ -53,7 +57,7 @@ With a premium key, raise `requests_per_minute` and `max_lookups_per_run`.
 
 Store the VirusTotal key:
 ```bash
-curl -k -u admin https://localhost:8089/servicesNS/nobody/TA-imperva-ioc-block/storage/passwords -d name=vt -d password=<VT_API_KEY> -d realm=virustotal
+curl -k -u admin https://localhost:8089/servicesNS/nobody/TA-imperva-ioc-block-v2/storage/passwords -d name=vt -d password=<VT_API_KEY> -d realm=virustotal
 ```
 
 ## Live blocked-IP list, verification and description registry
@@ -144,11 +148,11 @@ Set `api_mode = soar`. Splunk sends each block, unblock or list request to Splun
 | Every action is logged with the user, IP, site, status and reason | `_internal` |
 
 ## Install
-1. Copy `TA-imperva-ioc-block/` to `$SPLUNK_HOME/etc/apps/` on the **search head**, then restart Splunk.
+1. Copy `TA-imperva-ioc-block-v2/` to `$SPLUNK_HOME/etc/apps/` on the **search head**, then restart Splunk.
 2. In Imperva, create an API ID / API Key (Account → API Keys) that is allowed to change site settings.
 3. Store the credential in Splunk. Realm must be `imperva_waf`, username = API ID, password = API Key:
    ```bash
-   curl -k -u admin https://localhost:8089/servicesNS/nobody/TA-imperva-ioc-block/storage/passwords -d name=<API_ID> -d password=<API_KEY> -d realm=imperva_waf
+   curl -k -u admin https://localhost:8089/servicesNS/nobody/TA-imperva-ioc-block-v2/storage/passwords -d name=<API_ID> -d password=<API_KEY> -d realm=imperva_waf
    ```
 4. Create `local/imperva.conf`:
    ```ini

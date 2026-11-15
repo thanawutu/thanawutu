@@ -74,7 +74,7 @@ containers created by the live list are deleted after they are read (`soar_delet
 
 1. Store the SOAR token. The Imperva key is **not** needed on the Search Head in this mode.
    ```bash
-   curl -k -u admin https://localhost:8089/servicesNS/nobody/TA-imperva-ioc-block/storage/passwords -d name=soar -d password=<SOAR_AUTOMATION_TOKEN> -d realm=splunk_soar
+   curl -k -u admin https://localhost:8089/servicesNS/nobody/TA-imperva-ioc-block-v2/storage/passwords -d name=soar -d password=<SOAR_AUTOMATION_TOKEN> -d realm=splunk_soar
    ```
 2. `local/imperva.conf`:
    ```ini
