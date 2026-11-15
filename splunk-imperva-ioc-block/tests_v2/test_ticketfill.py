@@ -235,7 +235,9 @@ class TestOtherPolicies(unittest.TestCase):
         def kv_query(sk, col, q):
             if col == au.STATE:
                 return [dict(self.state[k]) for k in q["_key"]["$in"] if k in self.state]
-            return []
+            return [dict(d) for d in self.registry]
+        self.registry = [{"_key": "2169031_198.51.100.238", "site_id": "2169031", "ip": "198.51.100.238",
+                          "status": "blocked", "blocked_at": NOW - 10 * H, "incident_no": "-", "comment": "-"}]
         c.kv_query = kv_query
         c.kv_upsert = lambda sk, docs, col: self.saved.append((col, [dict(d) for d in docs]))
         self._clock = c.time.time
@@ -272,6 +274,15 @@ class TestOtherPolicies(unittest.TestCase):
         self.assertEqual((docs[0]["first_listed"], docs[0]["rule"]), (self.listed, "default"))    # state kept
         self.assertEqual((rows[0]["site_id"], rows[0]["incident_no"], rows[0]["action"]), ("1000003", "1000637", "ticket_update"))
         self.assertIn("rule of another policy, blocked outside Splunk", rows[0]["detail"])
+
+    def test_own_policy_rule_without_v2_registry_is_filled_too(self):
+        self.registry = []                         # blocked from V1 or in Imperva: no V2 registry entry
+        rows = self.run_([{"ip": "198.51.100.238", "finding_time": str(self.listed + H), "rule_name": "R",
+                           "ithm_times": "1000637@%d" % (self.listed + 2 * H)}])
+        self.assertEqual(sorted((d["policy_id"], d["ticket"]) for d in self.saved[0][1]),
+                         [("1000003", "1000637"), ("2169031", "1000637")])
+        own = [r for r in rows if r["site_id"] == "2169031"][0]
+        self.assertIn("own policy, blocked outside Splunk V2", own["detail"])
 
     def test_a_note_older_than_the_rule_is_not_taken_and_filled_values_stay(self):
         k = self.au.entry_key("1000003", "198.51.100.30")

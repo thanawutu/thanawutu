@@ -342,7 +342,8 @@ def main():
                     p = by.get((str(r.get(pfield, "")), (r.get(field) or "").strip()))
                     if p:
                         for k in ("unblock_after", "last_attack", "attacks_24h", "unblock_on", "days_left", "status",
-                                  "status_code", "cloud_provider", "short_block", "owner", "policy_name"):
+                                  "status_code", "cloud_provider", "short_block", "owner", "policy_name",
+                                  "ticket", "description", "listed_since"):
                             r["auto_" + k] = p[k]
                 si.outputResults(results)
         else:

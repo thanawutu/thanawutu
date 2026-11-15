@@ -25,6 +25,7 @@
 | eval ticket=coalesce(mvjoin(mvmap(incident_no, replace(incident_no, "(?i)ITHM\s*-?\s*", "")), ", "), "-"), description=coalesce(mvjoin(comment, "; "), "-"), blocked_by=coalesce(mvjoin(blocked_by, ", "), "-")
 | impervaautounblock action=annotate field=ip policy_field=site_id
 | eval policy=site_id, policy_name=coalesce(auto_policy_name, mvjoin(site_name, ", "), "-"), own_policy="yes", owner=coalesce(auto_owner, "-")
+| eval ticket=if(ticket="-", coalesce(auto_ticket, "-"), ticket), description=if(description="-", coalesce(auto_description, "-"), description), since=if(since="-" AND isnotnull(auto_listed_since) AND auto_listed_since!="-", auto_listed_since." (listed)", since)
 | append [| makeresults | impervaautounblock action=list | where own_policy="no"
   | eval site_id=policy_id, policy=policy_id, in_waf="yes", verification="✔ On WAF (other policy)", since=listed_since." (listed)"
   | rename unblock_after AS auto_unblock_after, last_attack AS auto_last_attack, attacks_24h AS auto_attacks_24h, unblock_on AS auto_unblock_on, days_left AS auto_days_left, status AS auto_status, status_code AS auto_status_code, short_block AS auto_short_block

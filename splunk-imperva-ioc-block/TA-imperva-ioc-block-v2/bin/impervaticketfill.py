@@ -191,15 +191,18 @@ def fill(docs, findings_by_ip, now):
     return save, audit
 
 
-def fill_rules(entries, own, states, findings_by_ip, now):
-    """Rules of the other enabled policies with exactly a finding's IP -> (state documents, audit rows).
-    states: {entry_key: imperva_auto_unblock document}"""
+def fill_rules(entries, own, states, findings_by_ip, now, registry=None):
+    """Rules blocked outside Splunk V2 with exactly a finding's IP -> (state documents, audit rows):
+    every rule of the other enabled policies, and a rule of the own policy that has no V2 registry
+    entry (blocked from V1 or directly in Imperva). states: {entry_key: imperva_auto_unblock document};
+    registry: {(site_id, ip)} of the V2 registry entries with status blocked."""
     own = set(str(x) for x in own)
+    registry = registry or set()
     save, audit = [], []
     for e in entries:
         pid, cidr = str(e.get("policy_id")), str(e.get("cidr") or "")
-        if (pid in own or cidr not in findings_by_ip or not e.get("enabled", True) or e.get("kind") == "exception"
-                or not str(e.get("action", "")).startswith("BLOCK")):
+        if ((pid in own and (pid, cidr) in registry) or cidr not in findings_by_ip or not e.get("enabled", True)
+                or e.get("kind") == "exception" or not str(e.get("action", "")).startswith("BLOCK")):
             continue
         st = states.get(au.entry_key(pid, cidr))
         if not st:
@@ -230,7 +233,8 @@ def fill_rules(entries, own, states, findings_by_ip, now):
             save.append(new)
             audit.append(audit_row(now, {"ip": cidr, "site_id": pid, "incident_no": new.get("ticket"),
                                          "comment": new.get("description")}, "updated",
-                                   " · ".join(what) + " (rule of another policy, blocked outside Splunk)"))
+                                   " · ".join(what) + (" (own policy, blocked outside Splunk V2)" if pid in own
+                                                       else " (rule of another policy, blocked outside Splunk)")))
     return save, audit
 
 
@@ -317,7 +321,8 @@ def main():
                 own = [str(x) for x in (targets or [p.strip() for p in str(conf.get("policy_ids", "")).split(",") if p.strip()])]
                 keys = [au.entry_key(e["policy_id"], e["cidr"]) for e in entries if e.get("cidr") in by_ip]
                 states = dict((d["_key"], d) for d in kv_query(session_key, au.STATE, {"_key": {"$in": keys}})) if keys else {}
-                save, audit = fill_rules(entries, own, states, by_ip, now)
+                reg = set((str(d.get("site_id")), str(d.get("ip"))) for d in blocked)
+                save, audit = fill_rules(entries, own, states, by_ip, now, reg)
             if save:
                 kv_upsert(session_key, save, au.STATE)
             for a in audit:
