@@ -40,7 +40,10 @@ action=pending  the registry entries still waiting (ip, policy, blocked_at, wait
 action=reset    clears a ticket / description that THIS command filled (not one an analyst typed)
                 for ip="a,b" or ip=all (only blocks still inside the window), so the next run fills
                 it again with the current rules; audit status "reset"
-Option: window_hours (default 24)
+Options: window_hours (default 24)
+         any_time=true  one-off backfill (run by hand, never scheduled): take the ITHM number of the
+                        most recent note of the IP's findings whatever its age - for rules / blocks
+                        that were on the WAF before the notes rule applied (e.g. before V2 was installed)
 """
 
 import ipaddress
@@ -164,7 +167,25 @@ def rule_names(findings, blocked_at):
     return out
 
 
-def fill(docs, findings_by_ip, now):
+def latest_ticket(findings):
+    """any_time=true (one-off backfill): the ITHM number of the most recent note of the IP's findings
+    (or of the finding comments, by finding time), whatever its age."""
+    best = None
+    for f in findings:
+        for n, t in f["notes"]:
+            if t is not None and (best is None or t > best[1]):
+                best = (n, t)
+        for n in f["comment"]:
+            if f["t"] is not None and (best is None or f["t"] > best[1]):
+                best = (n, f["t"])
+    return [best[0]] if best else []
+
+
+def pick(findings, since, any_time):
+    return latest_ticket(findings) if any_time else new_tickets(findings, since)
+
+
+def fill(docs, findings_by_ip, now, any_time=False):
     """docs: waiting registry entries; findings_by_ip: {ip: [finding]} -> (documents to save, audit rows)"""
     save, audit = [], []
     for d in docs:
@@ -173,11 +194,11 @@ def fill(docs, findings_by_ip, now):
         new, what = dict(d), []
         new.pop("_user", None)
         if empty(d.get("incident_no")):
-            tk = new_tickets(found, blocked_at)
+            tk = pick(found, blocked_at, any_time)
             if tk:
                 new["incident_no"] = ", ".join(tk)
                 new["ticket_filled_at"] = int(now)
-                what.append("ticket %s from a new note of the ES finding" % new["incident_no"])
+                what.append("ticket %s from %s" % (new["incident_no"], "the latest note of the ES findings (backfill)" if any_time else "a new note of the ES finding"))
         if FILL_DESCRIPTION and empty(d.get("comment")):
             rules = rule_names(found, blocked_at)
             if rules:
@@ -195,7 +216,7 @@ def fill(docs, findings_by_ip, now):
     return save, audit
 
 
-def fill_rules(entries, own, states, findings_by_ip, now, registry=None):
+def fill_rules(entries, own, states, findings_by_ip, now, registry=None, any_time=False):
     """Rules blocked outside Splunk V2 with exactly a finding's IP -> (state documents, audit rows):
     every rule of the other enabled policies, and a rule of the own policy that has no V2 registry
     entry (blocked from V1 or directly in Imperva). states: {entry_key: imperva_auto_unblock document};
@@ -215,14 +236,14 @@ def fill_rules(entries, own, states, findings_by_ip, now, registry=None):
         new, what = dict(st), []
         new.pop("_user", None)
         if empty(st.get("ticket")):
-            tk = new_tickets(found, since)
+            tk = pick(found, since, any_time)
             if tk:
                 new["ticket"], new["ticket_filled_at"] = ", ".join(tk), int(now)
-                what.append("ticket %s from a new note of the ES finding" % new["ticket"])
+                what.append("ticket %s from %s" % (new["ticket"], "the latest note of the ES findings (backfill)" if any_time else "a new note of the ES finding"))
         if FILL_DESCRIPTION and empty(st.get("description")):
             # the rule of the finding that got the new ticket note (first_listed is only when V2 first
             # saw the rule), else the findings around first_listed
-            tk_new = set(new_tickets(found, since))
+            tk_new = set(pick(found, since, any_time))
             rules = []
             for f in found:
                 if any(n in tk_new for n, _t in f["notes"]):
@@ -279,7 +300,8 @@ def reset(docs, ips, now, window_hours=WINDOW_HOURS):
 
 def main():
     results, _dummy, settings = si.getOrganizedResults()
-    opts = parse_options(sys.argv[1:], ("action", "window_hours", "ip"))
+    opts = parse_options(sys.argv[1:], ("action", "window_hours", "ip", "any_time"))
+    any_time = str(opts.get("any_time", "false")).strip().lower() in ("1", "true", "yes")
     session_key = settings.get("sessionKey")
     log = get_logger("imperva_ticketfill", "imperva_ticketfill.log")
     action = (opts.get("action") or "update").strip().lower()
@@ -302,7 +324,7 @@ def main():
                 ip = str(r.get("ip") or "").strip()
                 if ip:
                     by_ip.setdefault(ip, []).append(finding_of(r))
-            save, audit = fill(docs, by_ip, now)
+            save, audit = fill(docs, by_ip, now, any_time)
             if save:
                 kv_upsert(session_key, save, REGISTRY)
             for a in audit:
@@ -326,7 +348,7 @@ def main():
                 keys = [au.entry_key(e["policy_id"], e["cidr"]) for e in entries if e.get("cidr") in by_ip]
                 states = dict((d["_key"], d) for d in kv_query(session_key, au.STATE, {"_key": {"$in": keys}})) if keys else {}
                 reg = set((str(d.get("site_id")), str(d.get("ip"))) for d in blocked)
-                save, audit = fill_rules(entries, own, states, by_ip, now, reg)
+                save, audit = fill_rules(entries, own, states, by_ip, now, reg, any_time)
             if save:
                 kv_upsert(session_key, save, au.STATE)
             for a in audit:

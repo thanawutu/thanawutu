@@ -342,6 +342,43 @@ class TestTicketOnlyByDefault(TestTicketFill):
     test_reset_clears_only_what_was_filled_automatically = None
 
 
+class TestBackfill(TestOtherPolicies):
+    """any_time=true: rules on the WAF before V2 - the latest ITHM of the findings, whatever its age."""
+    def setUp(self):
+        super().setUp()
+        self.c.FILL_DESCRIPTION = False                                       # default: ticket only
+
+    def run_any(self, rows, action="rules", *more):
+        self.c.si.getOrganizedResults = lambda: (rows, None, {"sessionKey": "k"})
+        sys.argv = ["impervaticketfill.py", "action=" + action, "any_time=true"] + list(more)
+        self.out.clear()
+        self.c.main()
+        if "err" in self.out:
+            raise AssertionError(self.out["err"])
+        return self.out["rows"]
+
+    def test_latest_old_ticket_is_taken_for_a_rule_listed_at_install(self):
+        old = self.listed - 20 * 86400
+        rows = self.run_any([{"ip": "198.51.100.30", "finding_time": str(old), "rule_name": "R",
+                              "ithm_times": "1000100@%d, 1000200@%d" % (old + 60, old + 3600)},
+                             {"ip": "198.51.100.30", "finding_time": str(old - 86400), "rule_name": "R0",
+                              "ithm_times": "1000050@%d" % (old - 86000)}])
+        doc = [d for d in self.saved[0][1] if d["cidr"] == "198.51.100.30"][0]
+        self.assertEqual(doc["ticket"], "1000200")                            # the most recent note
+        self.assertIn("latest note of the ES findings (backfill)", rows[0]["detail"])
+        self.saved.clear()
+        self.run_([{"ip": "198.51.100.30", "finding_time": str(old), "rule_name": "R",
+                    "ithm_times": "1000300@%d" % (old + 60)}])
+        self.assertEqual(self.saved, [])                                      # default: old note not taken
+
+    # inherited cases that test the optional description logic
+    test_a_note_older_than_the_rule_is_not_taken_and_filled_values_stay = None
+    test_ticket_and_rule_name_on_the_rule_of_the_other_policy_only = None
+
+    def test_nothing_without_a_note(self):
+        self.assertEqual(self.run_any([{"ip": "198.51.100.30", "finding_time": str(self.listed), "rule_name": "R"}]), [])
+
+
 class TestConf(unittest.TestCase):
     def read(self, *p):
         with open(os.path.join(APP, *p), encoding="utf-8") as f:
