@@ -64,6 +64,10 @@ RULE_DAYS = 7                   # findings of the 7 days up to the block give th
 NONE_TERM = '"imperva_no_ip_pending"'
 NUM_RE = re.compile(r"(?i)(?:ITHM\s*-?\s*)?(\d{5,})")
 MAX_DESC = 250
+# The Description is set on the card when the analyst selects the IPs (rule names of the rows), so the
+# scheduled searches only look for the ITHM ticket in the ES findings. True = also fill an empty
+# description with the rule name (the earlier behaviour).
+FILL_DESCRIPTION = False
 
 
 def empty(v):
@@ -74,7 +78,7 @@ def waiting_for(doc):
     out = []
     if empty(doc.get("incident_no")):
         out.append("ticket")
-    if empty(doc.get("comment")):
+    if FILL_DESCRIPTION and empty(doc.get("comment")):
         out.append("description")
     return out
 
@@ -174,7 +178,7 @@ def fill(docs, findings_by_ip, now):
                 new["incident_no"] = ", ".join(tk)
                 new["ticket_filled_at"] = int(now)
                 what.append("ticket %s from a new note of the ES finding" % new["incident_no"])
-        if empty(d.get("comment")):
+        if FILL_DESCRIPTION and empty(d.get("comment")):
             rules = rule_names(found, blocked_at)
             if rules:
                 desc = "; ".join(rules)
@@ -215,7 +219,7 @@ def fill_rules(entries, own, states, findings_by_ip, now, registry=None):
             if tk:
                 new["ticket"], new["ticket_filled_at"] = ", ".join(tk), int(now)
                 what.append("ticket %s from a new note of the ES finding" % new["ticket"])
-        if empty(st.get("description")):
+        if FILL_DESCRIPTION and empty(st.get("description")):
             # the rule of the finding that got the new ticket note (first_listed is only when V2 first
             # saw the rule), else the findings around first_listed
             tk_new = set(new_tickets(found, since))

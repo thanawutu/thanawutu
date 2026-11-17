@@ -149,7 +149,8 @@
 | eval _det_inc=mvdedup(mvmap(_det_inc, replace(_det_inc, "(?i)ITHM\s*-?\s*", "")))
 | eval found=find_lines.if(isnotnull(_det_last), " ‖ pg¦detected ".strftime(_det_last, "%Y-%m-%d %H:%M")." · ".mvjoin(_det_rule, "; ").if(isnotnull(_det_inc), " · ticket ".mvjoin(_det_inc, ", "), "")." · on the ".if(_det_last>=relative_time(now(), "-7d@d"), "Block – last 7 days", "Older detections")." page", "")
 | eval found=found.if(isnotnull(_tk_ips), " ‖ ok¦ES finding with this ticket (notes, last 90 days): IP ".mvjoin(_tk_ips, ", ")." – type the IP to see where it is and block / unblock it", "")
-| table ip found find_blockable find_cloud find_unblockable find_unblock_policy</query>
+| eval find_rule=if(isnotnull(_det_rule), mvjoin(_det_rule, "; "), "-")
+| table ip found find_blockable find_cloud find_unblockable find_unblock_policy find_rule</query>
     <earliest>-1m</earliest>
     <latest>now</latest>
   </search>

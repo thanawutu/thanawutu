@@ -29,8 +29,8 @@ module.exports = function (p, dark, extra) {
   <div class="panel-element-row"><div id="${p}_acttable" class="dashboard-element table">LEGACY ACTION TABLE</div></div>
 </div></div></div>
 <div class="dashboard-row"><div class="dashboard-cell"><div class="dashboard-panel"><div id="${tableId}" class="dashboard-element table">
-<table><thead><tr><th data-sort-key="${ipField}">${ipField}</th><th data-sort-key="VirusTotal">VirusTotal</th><th data-sort-key="incident_no">incident_no</th><th data-sort-key="severity">severity</th></tr></thead>
-<tbody>${rows.map(r => `<tr><td>${r.ip}</td><td style="background-color:#2C62B3;color:#fff">🔗</td><td>${r.inc}</td><td>high</td></tr>`).join("")}</tbody></table>
+<table><thead><tr><th data-sort-key="${ipField}">${ipField}</th><th data-sort-key="VirusTotal">VirusTotal</th><th data-sort-key="incident_no">incident_no</th><th data-sort-key="severity">severity</th>${p === "b" ? "" : '<th data-sort-key="rule_name">rule_name</th>'}</tr></thead>
+<tbody>${rows.map(r => `<tr><td>${r.ip}</td><td style="background-color:#2C62B3;color:#fff">🔗</td><td>${r.inc}</td><td>high</td>${p === "b" ? "" : `<td>${r.rule}</td>`}</tr>`).join("")}</tbody></table>
 </div></div></div></div>
 <div class="dashboard-row"><div class="dashboard-cell"><div class="dashboard-panel"><div id="${p}_paths" class="dashboard-element table"><div class="table-wrap"><table><tbody>${Array.from({length: 40}, (_, i) => `<tr><td>www.example.com/p${i}</td></tr>`).join("")}</tbody></table></div></div></div></div></div>
 <div class="filler"></div>

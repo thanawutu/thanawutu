@@ -43,6 +43,7 @@ class TestTicketFill(unittest.TestCase):
         c.kv_upsert = kv_upsert
         self._clock = c.time.time
         c.time.time = lambda: NOW                                          # global time module: restored
+        c.FILL_DESCRIPTION = True                                          # optional logic; default below
         self.out = {}
         c.si.outputResults = lambda r: self.out.__setitem__("rows", r)
         c.si.generateErrorResults = lambda m: self.out.__setitem__("err", m)
@@ -51,6 +52,7 @@ class TestTicketFill(unittest.TestCase):
 
     def tearDown(self):
         self.c.time.time = self._clock
+        self.c.FILL_DESCRIPTION = False
 
     def run_(self, rows, *argv):
         self.c.si.getOrganizedResults = lambda: (rows, None, {"sessionKey": "k"})
@@ -242,6 +244,7 @@ class TestOtherPolicies(unittest.TestCase):
         c.kv_upsert = lambda sk, docs, col: self.saved.append((col, [dict(d) for d in docs]))
         self._clock = c.time.time
         c.time.time = lambda: NOW
+        c.FILL_DESCRIPTION = True
         self.out = {}
         c.si.outputResults = lambda r: self.out.__setitem__("rows", r)
         c.si.generateErrorResults = lambda m: self.out.__setitem__("err", m)
@@ -250,6 +253,7 @@ class TestOtherPolicies(unittest.TestCase):
     def tearDown(self):
         self.c.time.time = self._clock
         self.pc.load_entries = self._load
+        self.c.FILL_DESCRIPTION = False
 
     def run_(self, rows):
         self.c.si.getOrganizedResults = lambda: (rows, None, {"sessionKey": "k"})
@@ -307,6 +311,37 @@ class TestOtherPolicies(unittest.TestCase):
         self.assertEqual((it["ticket"], it["description"]), ("1000637", "R"))
 
 
+class TestTicketOnlyByDefault(TestTicketFill):
+    """Default: the scheduled searches fill the ITHM ticket only (the card sets the description)."""
+    def setUp(self):
+        super().setUp()
+        self.c.FILL_DESCRIPTION = False
+
+    def test_ticket_only(self):
+        self.assertFalse(self.c.FILL_DESCRIPTION is True)
+        b = NOW - 2 * H
+        rows = self.run_([self.F("198.51.100.48", b - 60, "WAF - Scanner", "1000600@%d" % (b + H)),
+                          self.F("198.51.100.72", NOW - 3 * H - 60, "WAF - SQLi")], "action=update")
+        docs = dict((d["ip"], d) for d in self.saved[0][1])
+        self.assertEqual(sorted(docs), ["198.51.100.48"])                    # rule name alone: nothing saved
+        self.assertEqual((docs["198.51.100.48"]["incident_no"], docs["198.51.100.48"]["comment"]), ("1000600", "-"))
+        self.assertEqual(rows[0]["detail"], "ticket 1000600 from a new note of the ES finding (filled after the block)")
+        pend = dict((r["ip"], r["waiting_for"]) for r in self.run_([{}], "action=pending"))
+        self.assertEqual(pend.get("198.51.100.72"), None)                    # has a ticket: not waiting for a description
+        self.assertEqual(pend["198.51.100.68"], "ticket")
+
+    # the inherited cases test the optional description logic
+    test_update_fills_only_what_is_empty = None
+    test_old_ticket_of_a_previous_incident_is_never_taken = None
+    test_note_just_before_the_block_counts_and_comment_numbers_count_from_the_finding_time = None
+    test_description_falls_back_to_the_latest_finding_before_then_the_first_after = None
+    test_finding_without_ithm_fills_the_description_and_keeps_waiting_for_the_ticket = None
+    test_long_rule_names_are_cut = None
+    test_pending_lists_what_each_ip_waits_for = None
+    test_terms_are_the_waiting_ips_only = None
+    test_reset_clears_only_what_was_filled_automatically = None
+
+
 class TestConf(unittest.TestCase):
     def read(self, *p):
         with open(os.path.join(APP, *p), encoding="utf-8") as f:
@@ -338,7 +373,7 @@ class TestConf(unittest.TestCase):
         self.assertIn("[commands/impervaticketfill]", self.read("metadata", "default.meta"))
         audit = self.read("default", "data", "ui", "views", "imperva_ioc_audit.xml")
         self.assertIn('<choice value="ticket_update">ticket / description filled from the ES finding</choice>', audit)
-        self.assertIn("gets them for 24 hours from the ES finding", self.read("default", "data", "ui", "views", "imperva_ioc_blocked.xml"))
+        self.assertIn("gets it for 24 hours from the ES finding", self.read("default", "data", "ui", "views", "imperva_ioc_blocked.xml"))
 
 
 if __name__ == "__main__":

@@ -224,6 +224,8 @@ require([
         this.p = p;
         this.cfg = cfg;
         this.autoTk = false;     // Ticket was filled from an "ITHM ..." search, not typed
+        this.autoDesc = false;   // Description = rule names of the selected IPs, not typed
+        this.ruleOf = {};        // IP -> rule_name (detection table rows / Found search)
         this.shown = [];         // IPs of "Select all shown" (from the action search)
         this.cloud = [];         // selected / added IPs of a cloud provider: short block (auto unblock)
         this.chk = null;         // last WAF check text
@@ -374,7 +376,10 @@ require([
             self.autoTk = false;
             self.applyTk();
         }).on("change", this.applyTk.flush);
-        $(desc.input).on("input", this.applyDesc).on("change", this.applyDesc.flush);
+        $(desc.input).on("input", function () {
+            self.autoDesc = false;           // typed by the analyst: never replaced
+            self.applyDesc();
+        }).on("change", this.applyDesc.flush);
 
         $(selBox).on("click", "button[data-ip]", function () {
             // one more click on an IP = unselect it (same odd / even rule as a row click)
@@ -577,6 +582,10 @@ require([
                 } else {
                     self.found[ip] = {lines: lines, blockable: col(r, "find_blockable"), cloud: col(r, "find_cloud"),
                         unblockable: col(r, "find_unblockable"), unblockPolicy: col(r, "find_unblock_policy")};
+                    var fr = col(r, "find_rule");
+                    if (fr && fr !== "-") {
+                        self.ruleOf[ip] = fr;
+                    }
                 }
             });
             self.render();
@@ -650,6 +659,36 @@ require([
         this.renderCheck(sel.concat(all), man);
         this.renderFind();
         this.highlight(sel);
+        this.autoFillDesc(sel.concat(all));
+    };
+
+    // Description = detection rule names of the selected / added IPs, at once (while the analyst
+    // has not typed one); the scheduled search only adds the ITHM ticket later
+    Card.prototype.autoFillDesc = function (ips) {
+        var e = this.el, self = this, p = this.p;
+        if (!this.cfg.manual || !e.desc || document.activeElement === e.desc) {
+            return;
+        }
+        if (e.desc.value.trim() && !this.autoDesc) {
+            return;
+        }
+        var rules = [];
+        ips.forEach(function (ip) {
+            String(self.ruleOf[ip] || "").split(/\s*;\s*/).forEach(function (r) {
+                if (r && r !== "-" && rules.indexOf(r) < 0) {
+                    rules.push(r);
+                }
+            });
+        });
+        var v = rules.join("; ");
+        if (v.length > 250) {
+            v = v.slice(0, 249) + "…";
+        }
+        if (v !== e.desc.value) {
+            e.desc.value = v;
+            this.autoDesc = !!v;
+            setInputTok(p + "_desc", v || "-");
+        }
     };
 
     Card.prototype.renderCheck = function (all, man) {
@@ -730,7 +769,9 @@ require([
             return;
         }
         var again = debounce(function () {
-            self.highlight(self.selected());
+            var sel = self.selected();
+            self.highlight(sel);
+            self.autoFillDesc(self.targets());      // rule names of rows that just loaded
         }, 80);
         new MutationObserver(again).observe(node, {childList: true, subtree: true});
     };
@@ -740,7 +781,7 @@ require([
         if (!node) {
             return;
         }
-        var field = this.cfg.ipField, idx = -1, set = {};
+        var field = this.cfg.ipField, idx = -1, ridx = -1, set = {}, ruleOf = this.ruleOf;
         sel.forEach(function (ip) {
             set[ip] = true;
         });
@@ -749,6 +790,9 @@ require([
             if (key === field && idx < 0) {
                 idx = i;
             }
+            if (key === "rule_name" && ridx < 0) {
+                ridx = i;
+            }
         });
         if (idx < 0) {
             return;
@@ -756,6 +800,12 @@ require([
         $(node).find("tbody tr").each(function () {
             var ip = $(this).children().eq(idx).text().trim();
             $(this).toggleClass("imp-selrow", set[ip] === true);
+            if (ridx >= 0 && ip) {
+                var rule = $(this).children().eq(ridx).text().trim();
+                if (rule && rule !== "-") {
+                    ruleOf[ip] = rule;
+                }
+            }
         });
     };
 
@@ -780,6 +830,7 @@ require([
         e.tk.value = "";
         e.desc.value = "";
         this.autoTk = false;
+        this.autoDesc = false;
         setInputTok(p + "_tk", "-");
         setInputTok(p + "_desc", "-");
         if (clearManual && this.cfg.manual) {     // typed IPs are in the search box

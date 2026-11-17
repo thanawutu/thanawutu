@@ -156,7 +156,7 @@ class TestViews(unittest.TestCase):
             self.assertIn("| impervafind field=ip text_field=_text", x)
             self.assertIn('"\\"imperva_no_ip_typed\\""', x)                     # never an unfiltered notable search
             self.assertIn('mvjoin(mvmap(t, "\\"".t."\\""), " OR ")', x)
-            self.assertIn("| table ip found find_blockable find_cloud find_unblockable find_unblock_policy", x)
+            self.assertIn("| table ip found find_blockable find_cloud find_unblockable find_unblock_policy find_rule", x)
             self.assertGreaterEqual(x.count("_hit=if(coalesce(_iptok, 0)&gt;0") + x.count("_hit=if(coalesce(_iptok, 0)>0"), 2)
             self.assertIn("Search or add IPs", x)
             # a ticket number typed in -> IPs of the ES findings whose notes have it (also IPs blocked
