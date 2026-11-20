@@ -49,7 +49,7 @@ FAIL_TTL = 3600   # a lookup that failed (rate_limited / error) is remembered 1 
 
 DEFAULTS = {   # per source: requests per minute, lookups per run
     "abuseipdb": {"requests_per_minute": 30, "max_lookups_per_run": 40},
-    "greynoise": {"requests_per_minute": 10, "max_lookups_per_run": 10},
+    "greynoise": {"requests_per_minute": 10, "max_lookups_per_run": 2},    # free account: small daily quota
 }
 
 
