@@ -32,6 +32,12 @@
   | fields site_id ip policy policy_name own_policy owner in_waf verification since ticket description blocked_by auto_*]
 | eval auto_status=case(like(verification, "✖%"), "✖ NOT on WAF - removed outside Splunk", like(verification, "⚠%"), verification, true(), coalesce(auto_status, "-")), auto_status_code=if(like(verification, "✖%"), "not_on_waf", coalesce(auto_status_code, "-")), auto_attacks_24h=coalesce(auto_attacks_24h, 0)
 | eval _ord=case(auto_status_code="not_on_waf", 0, like(verification, "⚠%"), 1, true(), 2), _un=if(isnull(auto_unblock_on) OR auto_unblock_on="-", "9999", auto_unblock_on)
+| append [| inputlookup imperva_audit | eval _t=tonumber(time) | where action="unblock" AND status="unblocked" AND _t>=relative_time(now(), "-30d@d")
+  | sort 0 - _t | dedup ip
+  | eval in_waf="unblocked", verification="unblocked", auto_status_code="unblocked", auto_status="Unblocked · ".if(user="auto-unblock", "auto", "manual")." ".strftime(_t, "%Y-%m-%d %H:%M"), auto_unblock_on=strftime(_t, "%Y-%m-%d %H:%M"), auto_attacks_24h=0, auto_last_attack="-", auto_unblock_after="-", auto_days_left="-", auto_short_block="-", owner="-", policy=coalesce(policy, "-"), policy_name="", since="-", ticket=coalesce(ticket, "-"), description=coalesce(description, "-"), blocked_by=user, own_policy="-", _ord=3, _un="9999"
+  | fields ip in_waf verification auto_* owner policy policy_name since ticket description blocked_by own_policy _ord _un]
+| eventstats max(eval(if(auto_status_code!="unblocked", 1, 0))) AS _on BY ip
+| where NOT (auto_status_code="unblocked" AND _on=1)
 | sort 0 _ord _un ip]]></query>
     <earliest>-1m</earliest>
     <latest>now</latest>
@@ -112,7 +118,7 @@
       <single>
         <title>Unblocked 7 days</title>
         <search base="audit7">
-          <query>| stats sum("Unblocked IPs") AS unblocked</query>
+          <query>| eval u='Unblocked IPs'+'Auto unblocked IPs' | stats sum(u) AS unblocked</query>
         </search>
         <option name="colorMode">block</option>
         <option name="rangeColors">["0x53A051","0x53A051"]</option>
@@ -318,21 +324,16 @@
       <input type="dropdown" token="b_f" searchWhenChanged="true">
         <label>Show</label>
         <choice value="all">All</choice>
-        <choice value="own">Own policy (read live)</choice>
-        <choice value="other">Other policies</choice>
         <choice value="cloud">Cloud / shared IPs</choice>
         <choice value="attacking">Attacking now</choice>
-        <choice value="soon">Unblock soon</choice>
-        <choice value="due">Due</choice>
-        <choice value="kept">Kept</choice>
-        <choice value="not_on_waf">NOT on WAF (removed outside Splunk)</choice>
+        <choice value="unblocked">Unblocked (last 30 days)</choice>
         <default>all</default>
       </input>
       <table id="b_table">
         <search base="waf_list">
           <query><![CDATA[| eval _q=replace(lower(trim(replace($b_q|s$, "[*]", ""))), "^ithm[\s:#-]*", ""), _f=$b_f|s$
 | where _q="" OR like(lower(ip." ".ticket." ".description." ".blocked_by." ".policy." ".policy_name." ".owner), "%"._q."%")
-| where _f="all" OR auto_status_code=_f OR (_f="own" AND own_policy="yes") OR (_f="other" AND own_policy="no") OR (_f="cloud" AND isnotnull(auto_short_block) AND auto_short_block!="-")
+| where (_f="all" AND auto_status_code!="unblocked") OR auto_status_code=_f OR (_f="cloud" AND auto_status_code!="unblocked" AND isnotnull(auto_short_block) AND auto_short_block!="-")
 | eval Events="🔍 Search", policy=policy." ".policy_name
 | table ip auto_status auto_last_attack auto_attacks_24h auto_unblock_after auto_unblock_on auto_days_left owner auto_short_block policy since ticket description blocked_by Events
 | rename auto_status AS Status, auto_last_attack AS "Last attack", auto_attacks_24h AS "Attacks 24h", auto_unblock_after AS "Unblock after", auto_unblock_on AS "Unblock on", auto_days_left AS "Days left", auto_short_block AS "Cloud / shared", since AS "Blocked / listed since", blocked_by AS "Blocked by"]]></query>
@@ -341,7 +342,7 @@
         <option name="wrap">true</option>
         <option name="drilldown">cell</option>
         <format type="color" field="Status">
-          <colorPalette type="expression">case(like(value,"Due%"),"#5A9BD5", like(value,"Attacking%"),"#DC4E41", like(value,"Unblock soon%"),"#F8BE34", like(value,"Kept%"),"#53A051", like(value,"✖%"),"#DC4E41", like(value,"⚠%"),"#F8BE34", true(),"#3C444D")</colorPalette>
+          <colorPalette type="expression">case(like(value,"Due%"),"#5A9BD5", like(value,"Attacking%"),"#DC4E41", like(value,"Unblock soon%"),"#F8BE34", like(value,"Kept%"),"#53A051", like(value,"✖%"),"#DC4E41", like(value,"⚠%"),"#F8BE34", like(value,"Unblocked%"),"#708794", true(),"#3C444D")</colorPalette>
         </format>
         <format type="color" field="Attacks 24h">
           <colorPalette type="expression">if(tonumber(value)&gt;0, "#DC4E41", "#3C444D")</colorPalette>
@@ -349,6 +350,10 @@
         <drilldown>
           <condition field="Events">
             <link target="_blank">search?q=search%20index%3Dimperva%20sourcetype%3D%22incapsula%3Acef%22%20src%3D$row.ip|u$&amp;earliest=-7d%40d&amp;latest=now</link>
+          </condition>
+          <condition match="like('row.Status', &quot;Unblocked%&quot;)">
+            <!-- already unblocked: history only, not selectable -->
+            <set token="b_noop">$row.ip$</set>
           </condition>
           <condition>
             <set token="b_sel">$b_sel$,$row.ip$,</set>

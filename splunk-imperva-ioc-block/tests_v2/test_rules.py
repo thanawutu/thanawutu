@@ -116,5 +116,20 @@ class TestRuleCheckCommand(unittest.TestCase):
         self.assertEqual([r["rule_used"] for r in out["rows"]], ["yes", "no"])
 
 
+
+
+class TestActiveCorrelationSearches(unittest.TestCase):
+    def test_preview_and_dropdown_list_every_active_correlation_search(self):
+        import os as _os
+        x = open(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "TA-imperva-ioc-block-v2", "default",
+                               "data", "ui", "views", "imperva_ioc_rules.xml"), encoding="utf-8").read()
+        rest = "| rest /servicesNS/-/-/saved/searches splunk_server=local count=0"
+        cond = "| where 'action.correlationsearch.enabled'=\"1\" AND (disabled=\"0\" OR disabled=0)"
+        self.assertEqual(x.count(rest), 2)                                    # Preview + Add dropdown
+        self.assertIn(cond, x)
+        self.assertIn("| append [search index=notable earliest=-7d latest=now | stats count AS findings_7d BY search_name]", x)
+        self.assertIn("| stats max(findings_7d) AS findings_7d BY search_name", x)
+        self.assertIn("every active (enabled) ES correlation search", x)
+
 if __name__ == "__main__":
     unittest.main()

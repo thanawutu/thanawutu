@@ -409,6 +409,21 @@ class TestCommand(unittest.TestCase):
 
 
 
+class TestDailyChart(unittest.TestCase):
+    def test_auto_unblock_is_its_own_series(self):
+        root = os.path.join(HERE, "..", "TA-imperva-ioc-block-v2", "default")
+        m = open(os.path.join(root, "macros.conf"), encoding="utf-8").read()
+        self.assertIn('series=case(status="blocked", "Blocked IPs", user="auto-unblock", "Auto unblocked IPs", true(), "Unblocked IPs")', m)
+        self.assertIn('fillnull value=0 "Blocked IPs" "Unblocked IPs" "Auto unblocked IPs"', m)
+        for v in ("imperva_ioc_block.xml", "imperva_ioc_history.xml"):
+            x = open(os.path.join(root, "data", "ui", "views", v), encoding="utf-8").read()
+            self.assertIn('| fields _time "Blocked IPs" "Unblocked IPs" "Auto unblocked IPs"', x)
+            self.assertIn('"Auto unblocked IPs":0x5A9BD5', x)
+        for v in ("imperva_ioc_block.xml", "imperva_ioc_blocked.xml"):        # KPI: manual + auto
+            x = open(os.path.join(root, "data", "ui", "views", v), encoding="utf-8").read()
+            self.assertIn("| eval u='Unblocked IPs'+'Auto unblocked IPs' | stats sum(u) AS unblocked", x)
+
+
 class TestMergedPage(unittest.TestCase):
     """Blocked IPs / Unblock and Auto unblock are one page since mockup v3.15."""
     def setUp(self):
@@ -427,9 +442,22 @@ class TestMergedPage(unittest.TestCase):
         self.assertIn("| impervalist", p)                                              # own policy: live
         self.assertIn('| append [| makeresults | impervaautounblock action=list | where own_policy="no"', p)
         self.assertIn("| impervaautounblock action=annotate field=ip policy_field=site_id", p)
-        for f in ("all", "own", "other", "cloud", "attacking", "soon", "due", "kept", "not_on_waf"):
+        for f in ("all", "cloud", "attacking", "unblocked"):                    # Show filter (mockup v3.21)
             self.assertIn('<choice value="%s">' % f, p)
+        for f in ("own", "other", "soon", "due", "kept", "not_on_waf"):
+            self.assertNotIn('<choice value="%s">' % f, p)
         self.assertIn('<set token="b_sel">$b_sel$,$row.ip$,</set>', p)
+
+    def test_unblocked_rows_of_the_last_30_days(self):
+        p = self.page
+        self.assertIn('| append [| inputlookup imperva_audit | eval _t=tonumber(time) | where action="unblock" AND status="unblocked" AND _t>=relative_time(now(), "-30d@d")', p)
+        self.assertIn('auto_status="Unblocked · ".if(user="auto-unblock", "auto", "manual")', p)
+        self.assertIn('| where NOT (auto_status_code="unblocked" AND _on=1)', p)          # blocked again: not history
+        self.assertIn('| where (_f="all" AND auto_status_code!="unblocked") OR auto_status_code=_f', p)
+        self.assertIn("""<condition match="like('row.Status', &quot;Unblocked%&quot;)">""", p)   # not selectable
+        self.assertLess(p.index("like('row.Status', &quot;Unblocked%&quot;)"), p.index('<set token="b_sel">$b_sel$,$row.ip$,</set>'))
+        # KPIs still count blocked rules only
+        self.assertIn('<query>| where in_waf="yes" | stats count</query>', p)
 
     def test_actions(self):
         p = self.page

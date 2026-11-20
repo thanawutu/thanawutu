@@ -20,7 +20,7 @@
         <fieldForLabel>label</fieldForLabel>
         <fieldForValue>search_name</fieldForValue>
         <search>
-          <query>index=notable | stats count BY search_name | sort - count | eval label=search_name." (".count.")"</query>
+          <query>| rest /servicesNS/-/-/saved/searches splunk_server=local count=0 | where 'action.correlationsearch.enabled'="1" AND (disabled="0" OR disabled=0) | dedup title | eval search_name=title, count=0 | fields search_name count | append [search index=notable earliest=-7d latest=now | stats count BY search_name] | stats max(count) AS count BY search_name | sort 0 - count search_name | eval label=search_name." (".count.")"</query>
           <earliest>-30d@d</earliest>
           <latest>now</latest>
         </search>
@@ -135,15 +135,20 @@
 
   <row>
     <panel>
-      <title>Preview – ES correlation searches with findings in the last 7 days (✔ used = shown on the Block pages)</title>
+      <title>Preview – every active (enabled) ES correlation search and its findings in the last 7 days (✔ used = shown on the Block pages)</title>
       <table>
         <search>
-          <query>index=notable
-| stats count AS findings_7d BY search_name
+          <query>| rest /servicesNS/-/-/saved/searches splunk_server=local count=0
+| where 'action.correlationsearch.enabled'="1" AND (disabled="0" OR disabled=0)
+| dedup title
+| eval search_name=title, findings_7d=0
+| fields search_name findings_7d
+| append [search index=notable earliest=-7d latest=now | stats count AS findings_7d BY search_name]
+| stats max(findings_7d) AS findings_7d BY search_name
 | impervarulecheck field=search_name
 | eval _r=$r_refresh|s$
 | eval used=if(rule_used="yes", "✔ used", "– not used")
-| sort - findings_7d
+| sort 0 - findings_7d search_name
 | table used search_name findings_7d matched_by</query>
           <earliest>-7d</earliest>
           <latest>now</latest>
