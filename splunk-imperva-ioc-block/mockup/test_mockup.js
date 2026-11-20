@@ -193,6 +193,7 @@ const wait = ms => page.waitForTimeout(ms);
   await page.fill('#rName', ''); await page.click('#rAdd'); await wait(80);
   T('Rules', 'empty name refused', (await txt('#toast')).includes('ใส่ชื่อ'));
   await page.fill('#rName', 'Bot - *'); await page.fill('#rNote', 'bots'); await page.click('#rAdd'); await wait(120);
+  T('Rules', 'Preview lists every active correlation search, also with 0 findings', (await txt('#esPrev')).includes('Network - DNS Tunneling Detected - Rule') && (await page.locator('#esPrev tr').count()) === 12);
   T('Rules', 'add Include rule: listed + preview uses the search', (await txt('#rules')).includes('Bot - *') && /✔ used\s+Bot - Credential Stuffing/.test(await txt('#esPrev')));
   await page.fill('#rName', 'bot - *'); await page.click('#rAdd'); await wait(80);
   T('Rules', 'duplicate rule refused', (await txt('#toast')).includes('มี rule นี้อยู่แล้ว'));
