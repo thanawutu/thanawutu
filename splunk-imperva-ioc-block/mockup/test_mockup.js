@@ -138,6 +138,12 @@ const wait = ms => page.waitForTimeout(ms);
   let chipOk = true, chipDet = [];
   for (const [f, n] of chips) { await page.click(`#b_filters [data-f="${f}"]`); await wait(80); const k = (await rows('#b_tbl')).length; chipDet.push(`${f}:${n}/${k}`); if (k !== n) chipOk = false; }
   T('Blocked+Auto', 'each filter chip shows exactly its count', chipOk, chipDet.join(' '));
+  T('Blocked+Auto', 'Show filter has only All / Cloud / shared IP / Attacking now / Unblocked', chips.map(c => c[0]).join() === 'all,cloud,attacking,unblocked', chips.map(c => c[0]).join());
+  await page.click('#b_filters [data-f="unblocked"]'); await wait(80);
+  const unbRows = await rows('#b_tbl');
+  T('Blocked+Auto', 'Unblocked shows the IPs unblocked in 30 days (manual + auto)', unbRows.includes('80.94.95.115') && (await txt('#b_tbl')).includes('Unblocked · auto'), unbRows.join(','));
+  await page.click(`#b_tbl tr[data-ip="${unbRows[0]}"]`); await wait(80);
+  T('Blocked+Auto', 'an unblocked row cannot be selected', (await txt('#b_run')).includes('Unblock 0'));
   await page.click('#b_filters [data-f="all"]');
   const sorted = await page.locator('#b_tbl tr[data-ip]').evaluateAll(t => t.map(r => r.children[6].innerText.trim()));
   const dated = sorted.filter(x => x !== '-');
@@ -175,6 +181,9 @@ const wait = ms => page.waitForTimeout(ms);
   T('Blocked+Auto', 'Next run plan = Due now, in rounds of 10', (await txt('#au_plan')).includes(`${due} to unblock`) && due > 0, await txt('#au_plan'));
   await page.click('#au_run'); await wait(1800);
   T('Audit', 'Run now (Audit log page) unblocks every due IP', (await txt('#au_res')).includes(`Unblocked ${due} IP`) && num(await txt('#bDue')) === 0, await txt('#au_res'));
+  const blue = await page.locator('#chart7 svg rect[fill="var(--auto)"]').count();
+  T('Audit', 'chart: Auto unblocked is its own (blue) series, today grows after Run now', blue > 0 && (await page.locator('#chart7 svg g.day').last().locator('rect[fill="var(--auto)"]').count()) === 1, String(blue));
+  T('Audit', 'chart legend shows Auto unblocked', (await txt('#v-dash .legend')).includes('Auto unblocked'));
   T('Audit', 'auto unblocks logged with the reason', /auto unblock[\s\S]*no attack for (7|60) days/.test(await txt('#au_log')));
   await go('blocked');
 

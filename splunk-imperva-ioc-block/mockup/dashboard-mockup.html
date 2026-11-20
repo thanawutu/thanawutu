@@ -7,7 +7,7 @@
 :root{
   --bg:#eef1f4; --panel:#ffffff; --panel-2:#f5f7f9; --line:#d7dde3; --fg:#18202a; --muted:#5d6b78;
   --accent:#1f6f8b; --sel:#e3f0f5;
-  --crit:#c4362b; --crit-bg:#fbe7e5; --warn:#a86b00; --warn-bg:#fdf1d8; --ok:#2f7d4a; --ok-bg:#e3f3e8;
+  --crit:#c4362b; --crit-bg:#fbe7e5; --warn:#a86b00; --warn-bg:#fdf1d8; --ok:#2f7d4a; --ok-bg:#e3f3e8; --auto:#2f6fb3;
   --info:#2c62b3; --info-bg:#e4ecf9; --mute-bg:#e9edf1; --grid:#e3e7eb;
   --font-ui:"IBM Plex Sans Thai","Noto Sans Thai","Segoe UI",system-ui,sans-serif;
   --font-data:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace; --r:6px;
@@ -15,12 +15,12 @@
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#0f141a; --panel:#161d25; --panel-2:#1b242e; --line:#2a3542; --fg:#e3e9ef; --muted:#8d9cab;
   --accent:#4fb3d4; --sel:#18323d;
-  --crit:#ff6b5e; --crit-bg:#3a1a19; --warn:#f2b445; --warn-bg:#3a2c12; --ok:#5fcf86; --ok-bg:#16301f;
+  --crit:#ff6b5e; --crit-bg:#3a1a19; --warn:#f2b445; --warn-bg:#3a2c12; --ok:#5fcf86; --ok-bg:#16301f; --auto:#6fa8e6;
   --info:#7aa7f0; --info-bg:#1a2740; --mute-bg:#232d38; --grid:#222c37; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#0f141a; --panel:#161d25; --panel-2:#1b242e; --line:#2a3542; --fg:#e3e9ef; --muted:#8d9cab;
   --accent:#4fb3d4; --sel:#18323d;
-  --crit:#ff6b5e; --crit-bg:#3a1a19; --warn:#f2b445; --warn-bg:#3a2c12; --ok:#5fcf86; --ok-bg:#16301f;
+  --crit:#ff6b5e; --crit-bg:#3a1a19; --warn:#f2b445; --warn-bg:#3a2c12; --ok:#5fcf86; --ok-bg:#16301f; --auto:#6fa8e6;
   --info:#7aa7f0; --info-bg:#1a2740; --mute-bg:#232d38; --grid:#222c37; color-scheme:dark}
 *{box-sizing:border-box} [hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font-ui);font-size:14px;line-height:1.5;
@@ -68,6 +68,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .run.nb{background:var(--muted);color:var(--bg)}
 .run.u{background:var(--ok)}
 .tag.un{border-color:var(--ok);background:var(--ok-bg);color:var(--ok)}
+tr.done td{color:var(--muted)} tr.done{cursor:default}
 .selbox{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:36px;border:1px dashed var(--line);border-radius:5px;padding:4px 8px;background:var(--panel-2)}
 .tag{display:inline-flex;align-items:center;gap:4px;font-family:var(--font-data);font-size:12px;background:var(--sel);border:1px solid var(--accent);border-radius:4px;padding:1px 4px 1px 8px}
 .tag.man{border-style:dashed;background:var(--warn-bg)} .tag.bad{border-color:var(--crit);background:var(--crit-bg);color:var(--crit)}
@@ -192,7 +193,7 @@ td.aid:hover{background:var(--info-bg)!important}
   <div class="in">
     <div><span class="label">Apps › Imperva IOC Block</span><h1 id="pageTitle">Imperva WAF – IOC Block</h1></div>
     <div class="chips">
-      <span class="chip sim">Mockup v3.20 · simulated data</span>
+      <span class="chip sim">Mockup v3.21 · simulated data</span>
       <span class="chip">Policy 2169031 · via SOAR</span>
     </div>
   </div>
@@ -207,7 +208,7 @@ td.aid:hover{background:var(--info-bg)!important}
 
 <!-- ============ Page 1: dashboard (7 days, search + Block) ============ -->
 <main class="wrap" id="v-dash">
-  <div class="review"><b>Mockup v3.20:</b> ช่องค้นหาหน้า Block / Older detections: IP ที่<b>ถูก block อยู่แล้ว</b> (rule ของ IP นั้นตรง ๆ ใน policy ใดก็ได้) กดได้แค่ <b>🔓 Unblock</b> (ปุ่มสีเขียวโผล่มาเฉพาะตอนมี IP แบบนี้ · ปลดจาก policy ที่ถือ IP นั้น verify บน WAF และลง audit) · IP ที่<b>ยังไม่ถูก block</b> กดได้แค่ <b>⛔ Block</b> · IP ที่อยู่ใน CIDR rule ใหญ่ ให้ไป unblock rule นั้นที่หน้า Blocked IPs · ลองพิมพ์ <span class="mono">45.9.20.18, 203.0.113.10</span> · <b>v3.19:</b> เอาตาราง <b>Not blocked (hidden)</b> ออกจากหน้า Older detections: IP ที่กด Not block จะซ่อนไว้ และ<b>กลับมาที่ตาราง detect เอง</b>เมื่อมี rule detect IP นั้นใหม่ (ค้นหา IP นั้นในช่องค้นหายังเห็นว่า "hidden by Not block") · <b>v3.18:</b> Auto unblock ไม่จำกัดวันละ 50 แล้ว: ปลดทีละ <b>10 IP</b> → อ่าน policy กลับจาก WAF ตรวจว่าลบแล้ว → ค่อยยิงรอบถัดไป จนหมด (ถ้ารอบไหนตรวจไม่ผ่าน หยุดเฉพาะ policy นั้น ลองใหม่รอบถัดไป) · <b>v3.17:</b> Auto unblock run now และ log ย้ายไปหน้า <b>Audit log</b> · ช่อง VirusTotal = คะแนน (คลิกเปิด VirusTotal) · <b>v3.16:</b> เพิ่มคอลัมน์ <b>AbuseIPDB</b> (คะแนน % + จำนวน report 90 วัน) และ <b>GreyNoise</b> (malicious / benign / RIOT / not observed) ในหน้า Block และ Older detections · ตรวจผ่าน <b>SOAR</b> เหมือน VirusTotal เก็บ cache 24 ชม. · Suggestion ปรับตาม: AbuseIPDB ≥ 75% → BLOCK, ≥ 25% → อย่างน้อย REVIEW, GreyNoise malicious → อย่างน้อย REVIEW, GreyNoise RIOT / benign → ไม่เกิน REVIEW · IP detail มีกล่อง Threat intel และลิงก์ไปทั้ง 3 เว็บ · <b>v3.15:</b> รวมหน้า <b>Blocked IPs / Unblock</b> กับ <b>Auto unblock</b> เป็นหน้าเดียว: ตารางเดียวแสดง IP ที่ block จาก<b>ทุก policy</b> พร้อม Last attack / Attacks 24h / Unblock on / Status · เลือกแถวแล้วกด <b>🔓 Unblock</b> ทันที หรือ <b>Apply rule</b> (Keep / Default / จำนวนวัน) · แถบบนสุดบอกกฎ auto unblock (7 / 60 วัน · ทุก policy · 50 ต่อรอบ) · log ของ auto unblock อยู่ล่างสุด · <b>v3.14:</b> หน้า Auto unblock <b>ไม่มีหน้าตั้งค่าแล้ว</b> ใช้ค่าคงที่: unblock จริงทุกวัน (<b>ไม่มี Report only</b>) · cloud / shared IP <b>7 วัน</b> · IP อื่น <b>60 วัน</b> · <b>All enabled policies</b> · <b>max 50 IP ต่อรอบ</b> · <b>v3.13:</b> Auto unblock: IP <b>cloud และ shared IP</b> (เครือข่ายมือถือ) ไม่โจมตีครบ <b>7 วัน</b> → unblock · IP อื่นไม่โจมตีครบ <b>60 วัน</b> → unblock · หน้า Blocked IPs และ Auto unblock มีคอลัมน์ <b>Attacks 24h</b> (request ที่ WAF ยัง block จาก IP นั้นใน 24 ชม.) และยอดรวม · <b>v3.12:</b> ช่อง <b>Search</b> ใช้ทั้งค้นหาและ<b>เพิ่ม IP</b> (ตัดช่อง Add IPs manually ออก) · ค้นหาจาก<b>ทุกหน้าและทุก WAF policy</b>: กล่อง <b>Found</b> บอกว่า IP อยู่ที่ไหน – หน้านี้ / หน้าอื่น / <b>block แล้วใน policy ไหน วันไหน</b> / allow / Not block / <b>ไม่เจอ → นับเข้าปุ่ม Block ทันที</b> · ลองพิมพ์ <span class="mono">193.42.33.7, 185.220.101.47, 20.20.20.20, 45.95.147.236, 203.0.113.10</span> · <b>Auto unblock (V2):</b> หน้า <b>⏱ Auto unblock</b> แสดง IP ที่ถูก block จาก<b>ทุก rule / policy</b> ของ WAF · นับจาก<b>การโจมตีครั้งสุดท้าย</b> (log “Blocked IP” ของ Imperva = IP ยังส่ง request เข้ามา): IP ของ <b>cloud provider</b> ไม่โจมตีครบ <b>7 วัน</b> → unblock · IP อื่นไม่โจมตีครบ <b>60 วัน</b> → unblock · ถ้ายังโจมตีอยู่ นับใหม่อัตโนมัติ · IP ที่ไม่เคยเห็นโจมตีหลัง block นับจากวันที่ block (หรือวันที่ Splunk เห็นใน policy) · IP cloud block ได้ · Keep = ไม่ unblock · ส่วนอื่นเหมือน v3.8b</div>
+  <div class="review"><b>Mockup v3.21 (รอ confirm ก่อนแก้ code):</b> หน้า Blocked IPs ตัวกรอง <b>Show</b> เหลือ 4 ตัว: <b>All · Cloud / shared IP · Attacking now · Unblocked</b> (Unblocked = IP ที่ unblock ใน 30 วัน ทั้งกดเองและ auto แสดงเป็นประวัติ เลือกไม่ได้) · กราฟ <b>Blocked / unblocked IPs per day</b> (หน้า Block 7 วัน และ Older detections 30 วัน) เพิ่มค่า <b>Auto unblocked</b> สีฟ้า แยกจาก Unblocked ที่กดเอง (สีเขียว) · ชี้ที่แท่งเพื่อดูจำนวนแต่ละค่า · KPI Unblocked 7 days ยังรวมทั้งกดเองและอัตโนมัติ · กด Run now ที่หน้า Audit log แล้วแท่งวันนี้จะมีสีฟ้าเพิ่ม · <b>v3.20:</b> ช่องค้นหาหน้า Block / Older detections: IP ที่<b>ถูก block อยู่แล้ว</b> (rule ของ IP นั้นตรง ๆ ใน policy ใดก็ได้) กดได้แค่ <b>🔓 Unblock</b> (ปุ่มสีเขียวโผล่มาเฉพาะตอนมี IP แบบนี้ · ปลดจาก policy ที่ถือ IP นั้น verify บน WAF และลง audit) · IP ที่<b>ยังไม่ถูก block</b> กดได้แค่ <b>⛔ Block</b> · IP ที่อยู่ใน CIDR rule ใหญ่ ให้ไป unblock rule นั้นที่หน้า Blocked IPs · ลองพิมพ์ <span class="mono">45.9.20.18, 203.0.113.10</span> · <b>v3.19:</b> เอาตาราง <b>Not blocked (hidden)</b> ออกจากหน้า Older detections: IP ที่กด Not block จะซ่อนไว้ และ<b>กลับมาที่ตาราง detect เอง</b>เมื่อมี rule detect IP นั้นใหม่ (ค้นหา IP นั้นในช่องค้นหายังเห็นว่า "hidden by Not block") · <b>v3.18:</b> Auto unblock ไม่จำกัดวันละ 50 แล้ว: ปลดทีละ <b>10 IP</b> → อ่าน policy กลับจาก WAF ตรวจว่าลบแล้ว → ค่อยยิงรอบถัดไป จนหมด (ถ้ารอบไหนตรวจไม่ผ่าน หยุดเฉพาะ policy นั้น ลองใหม่รอบถัดไป) · <b>v3.17:</b> Auto unblock run now และ log ย้ายไปหน้า <b>Audit log</b> · ช่อง VirusTotal = คะแนน (คลิกเปิด VirusTotal) · <b>v3.16:</b> เพิ่มคอลัมน์ <b>AbuseIPDB</b> (คะแนน % + จำนวน report 90 วัน) และ <b>GreyNoise</b> (malicious / benign / RIOT / not observed) ในหน้า Block และ Older detections · ตรวจผ่าน <b>SOAR</b> เหมือน VirusTotal เก็บ cache 24 ชม. · Suggestion ปรับตาม: AbuseIPDB ≥ 75% → BLOCK, ≥ 25% → อย่างน้อย REVIEW, GreyNoise malicious → อย่างน้อย REVIEW, GreyNoise RIOT / benign → ไม่เกิน REVIEW · IP detail มีกล่อง Threat intel และลิงก์ไปทั้ง 3 เว็บ · <b>v3.15:</b> รวมหน้า <b>Blocked IPs / Unblock</b> กับ <b>Auto unblock</b> เป็นหน้าเดียว: ตารางเดียวแสดง IP ที่ block จาก<b>ทุก policy</b> พร้อม Last attack / Attacks 24h / Unblock on / Status · เลือกแถวแล้วกด <b>🔓 Unblock</b> ทันที หรือ <b>Apply rule</b> (Keep / Default / จำนวนวัน) · แถบบนสุดบอกกฎ auto unblock (7 / 60 วัน · ทุก policy · 50 ต่อรอบ) · log ของ auto unblock อยู่ล่างสุด · <b>v3.14:</b> หน้า Auto unblock <b>ไม่มีหน้าตั้งค่าแล้ว</b> ใช้ค่าคงที่: unblock จริงทุกวัน (<b>ไม่มี Report only</b>) · cloud / shared IP <b>7 วัน</b> · IP อื่น <b>60 วัน</b> · <b>All enabled policies</b> · <b>max 50 IP ต่อรอบ</b> · <b>v3.13:</b> Auto unblock: IP <b>cloud และ shared IP</b> (เครือข่ายมือถือ) ไม่โจมตีครบ <b>7 วัน</b> → unblock · IP อื่นไม่โจมตีครบ <b>60 วัน</b> → unblock · หน้า Blocked IPs และ Auto unblock มีคอลัมน์ <b>Attacks 24h</b> (request ที่ WAF ยัง block จาก IP นั้นใน 24 ชม.) และยอดรวม · <b>v3.12:</b> ช่อง <b>Search</b> ใช้ทั้งค้นหาและ<b>เพิ่ม IP</b> (ตัดช่อง Add IPs manually ออก) · ค้นหาจาก<b>ทุกหน้าและทุก WAF policy</b>: กล่อง <b>Found</b> บอกว่า IP อยู่ที่ไหน – หน้านี้ / หน้าอื่น / <b>block แล้วใน policy ไหน วันไหน</b> / allow / Not block / <b>ไม่เจอ → นับเข้าปุ่ม Block ทันที</b> · ลองพิมพ์ <span class="mono">193.42.33.7, 185.220.101.47, 20.20.20.20, 45.95.147.236, 203.0.113.10</span> · <b>Auto unblock (V2):</b> หน้า <b>⏱ Auto unblock</b> แสดง IP ที่ถูก block จาก<b>ทุก rule / policy</b> ของ WAF · นับจาก<b>การโจมตีครั้งสุดท้าย</b> (log “Blocked IP” ของ Imperva = IP ยังส่ง request เข้ามา): IP ของ <b>cloud provider</b> ไม่โจมตีครบ <b>7 วัน</b> → unblock · IP อื่นไม่โจมตีครบ <b>60 วัน</b> → unblock · ถ้ายังโจมตีอยู่ นับใหม่อัตโนมัติ · IP ที่ไม่เคยเห็นโจมตีหลัง block นับจากวันที่ block (หรือวันที่ Splunk เห็นใน policy) · IP cloud block ได้ · Keep = ไม่ unblock · ส่วนอื่นเหมือน v3.8b</div>
   <section class="kpis" aria-label="Summary">
     <div class="kpi k-warn"><span class="label">Detected WAF IPs</span><span class="v" id="kDet">0</span><span class="s" id="kDetSub">last 7 days</span></div>
     <div class="kpi k-info"><span class="label">Blocked on WAF now</span><span class="v" id="kWaf">0</span><span class="s">policy 2169031 (live)</span></div>
@@ -216,7 +217,7 @@ td.aid:hover{background:var(--info-bg)!important}
     <div class="kpi k-ok"><span class="label">Unblocked 7 days</span><span class="v" id="kUn7">0</span><span class="s">from audit CSV</span></div>
   </section>
   <section class="panel">
-    <div class="panel-head"><h2>Blocked / unblocked IPs per day – last 7 days</h2><div class="legend"><span><i style="background:var(--crit)"></i>Blocked</span><span><i style="background:var(--ok)"></i>Unblocked (+n)</span><span>30 days → Older detections</span></div></div>
+    <div class="panel-head"><h2>Blocked / unblocked IPs per day – last 7 days</h2><div class="legend"><span><i style="background:var(--crit)"></i>Blocked</span><span><i style="background:var(--ok)"></i>Unblocked (+n)</span><span><i style="background:var(--auto)"></i>Auto unblocked (+n)</span><span>30 days → Older detections</span></div></div>
     <div class="chart-wrap" id="chart7"></div>
   </section>
   <section class="control" aria-label="Search and block">
@@ -250,7 +251,7 @@ td.aid:hover{background:var(--info-bg)!important}
 <!-- ============ Page 2: older detections (> 7 days, search + Block) ============ -->
 <main class="wrap" id="v-history" hidden>
   <section class="panel">
-    <div class="panel-head"><h2>Blocked / unblocked IPs per day – last 30 days</h2><div class="legend"><span><i style="background:var(--crit)"></i>Blocked</span><span><i style="background:var(--ok)"></i>Unblocked (+n)</span><span>hover a day for details</span></div></div>
+    <div class="panel-head"><h2>Blocked / unblocked IPs per day – last 30 days</h2><div class="legend"><span><i style="background:var(--crit)"></i>Blocked</span><span><i style="background:var(--ok)"></i>Unblocked (+n)</span><span><i style="background:var(--auto)"></i>Auto unblocked (+n)</span><span>hover a day for details</span></div></div>
     <div class="chart-wrap" id="chart30"></div>
   </section>
   <section class="control" aria-label="Search and block older detections">
@@ -462,6 +463,8 @@ const ruleUsed=name=>{const inc=rules.find(r=>r.on&&r.mode==="include"&&wild(r.p
 let seed=11; const rnd=()=>(seed=(seed*9301+49297)%233280)/233280;
 const daily=[]; const t0=new Date(); t0.setHours(0,0,0,0);
 for(let i=29;i>=0;i--){ daily.push({day:new Date(t0.getTime()-i*DAY), b:i===0?0:Math.floor(rnd()*7)+(rnd()>.85?6:0), u:rnd()>.75?Math.floor(rnd()*3):0}); }
+// auto unblock (daily 02:17) - simulated: a few IPs on some days since V2 went live
+daily.forEach((d,k)=>{ const i=29-k; d.a=i>0&&i<12?[0,3,0,1,0,0,2,0,4,0,1,0][i]:0; });
 
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -685,9 +688,17 @@ const seenCell=b=>b.seen?`<span class="mono nw">${fmt(b.seen)}</span>${Date.now(
 function bMatchQ(b,i,q){ const o=OWN[b.ip]; return has(q,b.ip,b.tk,b.desc,b.by,b.rule,String(i.pol),POLICY[i.pol],o?o[1]:""); }
 function renderBlocked(){
   const pg=P.blocked, q=normQ($("b_q").value), items=allBlocked().map(b=>({b,i:expInfo(b)})), cnt={};
-  AUF.forEach(([k])=>cnt[k]=items.filter(x=>auMatch(x,k)).length);
+  AUK.forEach(k=>cnt[k]=items.filter(x=>auMatch(x,k)).length); const unb=unblockedRows().filter(l=>has(q,l.ip,l.tk,l.desc||l.det)); cnt.unblocked=unb.length;
   $("b_filters").innerHTML=AUF.map(([k,l])=>`<button type="button" data-f="${k}" aria-pressed="${auFilter===k}">${l}<span class="n">${cnt[k]}</span></button>`).join("");
-  const rows=items.filter(x=>bMatchQ(x.b,x.i,q)).filter(x=>auMatch(x,auFilter)).sort((a,c)=>(a.i.unb??Infinity)-(c.i.unb??Infinity));
+  const rows=auFilter==="unblocked"?[]:items.filter(x=>bMatchQ(x.b,x.i,q)).filter(x=>auMatch(x,auFilter)).sort((a,c)=>(a.i.unb??Infinity)-(c.i.unb??Infinity));
+  if(auFilter==="unblocked"){ const o=ip=>OWN[ip];
+    $("b_tbl").innerHTML=unb.map(l=>`<tr data-ip="${l.ip}" class="done" title="already unblocked – shown for the record"><td></td><td class="ip">${l.ip}</td>
+    <td class="nw"><span class="pill ${l.act==="auto_unblock"?"p-active":"p-safe"}">Unblocked · ${l.act==="auto_unblock"?"auto":"manual"}</span></td>
+    <td class="note">-</td><td class="num note">-</td><td class="note">-</td><td class="mono nw">${fmt(l.t).slice(0,16)}</td><td class="note">-</td>
+    <td class="nw">${o(l.ip)?`<span class="own o-${o(l.ip)[0]}">${OWN_LABEL[o(l.ip)[0]]}</span>`:'<span class="note">ISP / other</span>'}</td>
+    <td class="note">-</td><td class="note">-</td><td class="mono nw">${esc(l.tk||"-")}</td><td class="small">${esc(l.desc||l.det||"-")}</td><td>${l.act==="auto_unblock"?"auto-unblock":esc(USER)}</td><td class="note">-</td></tr>`).join("")
+      ||`<tr><td colspan="15" class="note">ไม่มี IP ที่ unblock ใน 30 วัน</td></tr>`;
+  } else
   $("b_tbl").innerHTML=rows.map(({b,i})=>{ const o=OWN[b.ip];
     return `<tr data-ip="${b.ip}" class="${pg.sel.has(b.ip)?"selected":""}"><td><span class="box"></span></td><td class="ip">${b.ip}</td>
     <td class="nw"><span class="pill ${EST[i.st][0]}">${stLabel(i)}</span></td>
@@ -702,7 +713,7 @@ function renderBlocked(){
   $("bWaf").textContent=items.length; $("bWafSub").textContent=`policy 2169031: ${cnt.splunk} · other policies: ${cnt.other} · cloud / shared ${cnt.cloud}`;
   $("bAtt").textContent=cnt.attacking; $("bAtk").textContent=atk.reduce((a,c)=>a+c,0).toLocaleString(); $("bAtkSub").textContent=`from ${atk.filter(x=>x>0).length} of ${items.length} blocked IPs`;
   $("bDue").textContent=dueM; $("bKeep").textContent=cnt.keep;
-  const man7=daily.slice(-7).reduce((a,d)=>a+d.u,0), auto7=auLog.filter(l=>l.act==="auto_unblock"&&Date.now()-l.t<=7*DAY).length;
+  const man7=daily.slice(-7).reduce((a,d)=>a+d.u,0), auto7=daily.slice(-7).reduce((a,d)=>a+(d.a||0),0);
   $("bUn7").textContent=man7+auto7; $("bUn7Sub").textContent=`manual ${man7} · auto ${auto7}`;
   $("bRead").textContent=`read ${fmt(Date.now()).slice(11)} · auto refresh every 5 min · sorted by unblock date`;
   $("au_plan").innerHTML=`Next auto unblock (02:17): <b>${dueM}</b> to unblock${dueM?` in ${Math.ceil(dueM/AU.batch)} round${Math.ceil(dueM/AU.batch)===1?"":"s"} of ${AU.batch} (each round confirmed on the WAF before the next)`:""} · <b>${cnt.attacking}</b> still attacking · <b>${cnt.keep}</b> kept`;
@@ -753,17 +764,20 @@ function renderFind(page){
 }
 function chart(el,days){
   const data=daily.slice(-days), n=data.length, W=days>7?1300:1000, H=days>7?230:200, L=34,R=8,T=28,B=34, cw=(W-L-R)/n, bw=days>7?.6:.4;
-  const mx=Math.max(4,...data.map(d=>d.b+d.u)), step=mx>12?5:2, top=Math.ceil(mx/step)*step, y=v=>T+(H-T-B)*(1-v/top);
+  const mx=Math.max(4,...data.map(d=>d.b+d.u+(d.a||0))), step=mx>12?5:2, top=Math.ceil(mx/step)*step, y=v=>T+(H-T-B)*(1-v/top);
   const wd=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
   let g="";
   for(let v=0;v<=top;v+=step) g+=`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/><text x="${L-6}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="var(--muted)">${v}</text>`;
   data.forEach((d,i)=>{const x0=L+i*cw, w=cw*bw, x=x0+(cw-w)/2, cx=x+w/2, today=i===n-1;
-    let s=`<g class="day"><rect class="hit" x="${x0}" y="${T-24}" width="${cw}" height="${H-T-B+24}"/><title>${fmt(d.day).slice(0,10)} (${wd[d.day.getDay()]}): ${d.b} blocked, ${d.u} unblocked</title>`;
+    let s=`<g class="day"><rect class="hit" x="${x0}" y="${T-24}" width="${cw}" height="${H-T-B+24}"/><title>${fmt(d.day).slice(0,10)} (${wd[d.day.getDay()]}): ${d.b} blocked, ${d.u} unblocked (manual), ${d.a||0} auto unblocked</title>`;
     if(d.b) s+=`<rect x="${x}" y="${y(d.b)}" width="${w}" height="${y(0)-y(d.b)}" fill="var(--crit)" rx="2"/>`;
     if(d.u) s+=`<rect x="${x}" y="${y(d.b+d.u)}" width="${w}" height="${y(d.b)-y(d.b+d.u)}" fill="var(--ok)" rx="2"/>`;
-    const ty=y(d.b+d.u);
+    const da=d.a||0;
+    if(da) s+=`<rect x="${x}" y="${y(d.b+d.u+da)}" width="${w}" height="${y(d.b+d.u)-y(d.b+d.u+da)}" fill="var(--auto)" rx="2"/>`;
+    const ty=y(d.b+d.u+da);
     s+=`<text x="${cx}" y="${ty-4}" text-anchor="middle" font-size="11.5" font-weight="600" font-family="var(--font-data)" fill="var(--crit)">${d.b}</text>`;
     if(d.u) s+=`<text x="${cx}" y="${ty-17}" text-anchor="middle" font-size="10.5" font-weight="600" font-family="var(--font-data)" fill="var(--ok)">+${d.u}</text>`;
+    if(da) s+=`<text x="${cx}" y="${ty-(d.u?30:17)}" text-anchor="middle" font-size="10.5" font-weight="600" font-family="var(--font-data)" fill="var(--auto)">+${da}</text>`;
     s+=`<text x="${cx}" y="${H-B+15}" text-anchor="middle" font-size="11" font-weight="${today?700:400}" fill="${today?"var(--fg)":"var(--muted)"}">${pad(d.day.getDate())}/${pad(d.day.getMonth()+1)}</text>`;
     s+=`<text x="${cx}" y="${H-B+28}" text-anchor="middle" font-size="10" fill="var(--muted)">${today?"today":wd[d.day.getDay()]}</text></g>`;
     g+=s;});
@@ -776,7 +790,7 @@ function renderKPIs(){
   const td=daily[daily.length-1], yd=daily[daily.length-2], w=daily.slice(-7);
   $("kToday").textContent=td.b; $("kTodaySub").textContent=`yesterday ${yd.b}`;
   const b7=w.reduce((s,d)=>s+d.b,0); $("k7").textContent=b7; $("k7Sub").textContent=`avg ${(b7/7).toFixed(1)} / day`;
-  const u7=w.reduce((s,d)=>s+d.u,0); $("kUn7").textContent=u7;
+  const u7=w.reduce((s,d)=>s+d.u+(d.a||0),0); $("kUn7").textContent=u7;
   $("nDash").textContent=v.length; $("nHist").textContent=pendingDetected().filter(d=>age(d)>7*DAY).length; $("nBlk").textContent=allBlocked().length;
   chart("chart7",7); chart("chart30",30);
 }
@@ -785,6 +799,7 @@ function renderAll(){renderKPIs(); renderDet("dash"); renderDet("history"); rend
 
 function pick(page,ip){
   const pg=P[page]; if(pg.busy) return; const tk=$(pg.p+"_tk");
+  if(page==="blocked"&&!allBlocked().some(x=>x.ip===ip)){ toast(`${ip} ถูก unblock แล้ว (แสดงไว้เป็นประวัติ)`); return; }
   if(page==="blocked"){ if(pg.sel.has(ip)) pg.sel.delete(ip); else {pg.sel.add(ip); const b=allBlocked().find(x=>x.ip===ip); if(b&&b.tk&&!tk.value) tk.value=b.tk;} }
   else { const d=detected.find(x=>x.ip===ip);
     if(d.sug==="DO_NOT_BLOCK"){toast(`${ip} ถูก allow อยู่ใน WAF policy (${d.pol}) — block ไม่ได้`);return;}
@@ -896,7 +911,11 @@ $("aq").addEventListener("input",renderAudit); $("aact").addEventListener("chang
 
 // ---------- Auto unblock (part of the Blocked IPs page since v3.15)
 let auFilter="all";
-const AUF=[["all","All"],["splunk","Policy 2169031"],["other","Other policies"],["cloud","Cloud / shared IP"],["attacking","Attacking now"],["soon","Unblock soon"],["due","Due"],["keep","Kept"]];
+// Show filter (v3.21): only All / Cloud / shared IP / Attacking now / Unblocked; the other counts feed the KPIs
+const AUF=[["all","All"],["cloud","Cloud / shared IP"],["attacking","Attacking now"],["unblocked","Unblocked"]];
+const AUK=["all","splunk","other","cloud","attacking","soon","due","keep"];
+// IPs unblocked in the last 30 days (manual + auto), newest first, one row per IP
+function unblockedRows(){ const seen=new Set(); return auLog.slice().sort((a,c)=>c.t-a.t).filter(l=>Date.now()-l.t<=30*DAY&&!seen.has(l.ip)&&seen.add(l.ip)); }
 const allBlocked=()=>blocked.concat(otherBlocked);
 function auMatch(x,f){ return f==="all"||(f==="splunk"?x.i.pol===2169031:f==="other"?x.i.pol!==2169031:f==="cloud"?x.i.cl:f==="due"?x.i.st==="due"||x.i.st==="other":x.i.st===f); }
 function auChart(){ const W=560,H=150,L=26,Rr=6,T=10,B=24,days=30, bk=Array(days).fill(0);
@@ -920,7 +939,7 @@ $("au_run").addEventListener("click",async()=>{ const btn=$("au_run"), res=$("au
   res.textContent=`กำลังปลดทีละ ${AU.batch} IP → SOAR → Imperva → อ่านกลับตรวจว่าลบแล้ว → รอบถัดไป…`; await sleep(1300);
   const t=Date.now(), items=allBlocked().map(b=>({b,i:expInfo(b)})), due=items.filter(x=>x.i.st==="due");
   const why=({b,i})=>`${i.cl?`cloud provider IP (${cloudOf(b.ip)}) – `:""}no attack for ${i.days} days (${b.seen?"last seen "+fmt(b.seen).slice(0,10):"not seen since the block"})${i.pol!==2169031?` · policy ${i.pol}`:""}`;
-  due.forEach(x=>{ const list=x.b.pol?otherBlocked:blocked; list.splice(list.indexOf(x.b),1);
+  const tdA=daily[daily.length-1]; due.forEach(x=>{ tdA.a=(tdA.a||0)+1; const list=x.b.pol?otherBlocked:blocked; list.splice(list.indexOf(x.b),1);
     auLog.push({t,ip:x.b.ip,act:"auto_unblock",st:"unblocked · verified",tk:x.b.tk||"-",det:why(x)});
     audit.push({t,user:"auto-unblock",action:"unblock",ip:x.b.ip,tk:x.b.tk||"-",desc:"auto unblock: "+why(x),status:"unblocked",ver:"removed",cont:soarSeq++}); });
   res.className="result ok"; res.textContent=`✔ Unblocked ${due.length} IP in ${Math.ceil(due.length/AU.batch)} round${Math.ceil(due.length/AU.batch)===1?"":"s"} of ${AU.batch} · each round confirmed on the WAF before the next · written to the audit log`;
