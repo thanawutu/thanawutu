@@ -1,0 +1,616 @@
+"""
+Pure-Python helpers for blocking / unblocking IP IOCs on Imperva Cloud WAF.
+
+No Splunk imports here, so the logic can be unit-tested outside Splunk.
+
+Imperva Cloud WAF API (v1) endpoints used:
+  POST {base}/api/prov/v1/sites/status         -> read current ACL rules of a site
+  POST {base}/api/prov/v1/sites/configure/acl  -> set the ACL rule "api.acl.blacklisted_ips"
+
+NOTE: configure/acl REPLACES the whole blacklist, so we always
+read -> merge -> write, never write only the new IPs.
+"""
+
+import ipaddress
+import json
+import ssl
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+
+BLACKLIST_RULE_ID = "api.acl.blacklisted_ips"
+DEFAULT_BASE_URL = "https://my.imperva.com"
+
+
+class ImpervaError(Exception):
+    pass
+
+
+# --------------------------------------------------------------------------- #
+# IP validation / safety guards
+# --------------------------------------------------------------------------- #
+def parse_ip_list(raw):
+    """Split a comma / space / newline separated string into unique tokens (order kept)."""
+    if raw is None:
+        return []
+    if isinstance(raw, (list, tuple)):
+        raw = ",".join(str(x) for x in raw)
+    seen, out = set(), []
+    for tok in raw.replace("\n", ",").replace(" ", ",").replace(";", ",").split(","):
+        tok = tok.strip().strip('"').strip("'")
+        if tok and tok not in seen:
+            seen.add(tok)
+            out.append(tok)
+    return out
+
+
+def _as_network(value):
+    """Return an ip_network for an IP or CIDR string, or raise ValueError."""
+    return ipaddress.ip_network(value, strict=False)
+
+
+def validate_ips(candidates, protected_networks=(), max_prefix_v4=24, max_prefix_v6=48):
+    """
+    Split candidate IPs/CIDRs into (accepted, rejected).
+
+    accepted : list[str]  normalised IP / CIDR strings that are safe to block
+    rejected : list[(str, reason)]
+
+    Rules:
+      * must parse as IPv4/IPv6 address or CIDR
+      * must be a public (global) address - private/loopback/reserved/multicast refused
+      * CIDR not wider than /max_prefix_v4 (IPv4) or /max_prefix_v6 (IPv6)
+      * must not overlap any protected network (own egress IPs, partners, CDN, ...)
+    """
+    protected = []
+    for p in protected_networks:
+        try:
+            protected.append(_as_network(p))
+        except ValueError:
+            continue
+
+    accepted, rejected = [], []
+    for c in candidates:
+        try:
+            net = _as_network(c)
+        except ValueError:
+            rejected.append((c, "invalid IP/CIDR"))
+            continue
+
+        addr = net.network_address
+        if not addr.is_global or addr.is_multicast:
+            rejected.append((c, "non-public address (private/reserved/loopback/multicast)"))
+            continue
+
+        limit = max_prefix_v4 if net.version == 4 else max_prefix_v6
+        if net.prefixlen < limit:
+            rejected.append((c, "CIDR wider than /%d not allowed" % limit))
+            continue
+
+        hit = next((p for p in protected if p.version == net.version and p.overlaps(net)), None)
+        if hit is not None:
+            rejected.append((c, "overlaps protected network %s" % hit))
+            continue
+
+        norm = str(net.network_address) if net.num_addresses == 1 else str(net)
+        accepted.append(norm)
+    return accepted, rejected
+
+
+def merge_blacklist(current, to_add=(), to_remove=()):
+    """Return (new_list, added, removed, already_present, not_present)."""
+    current = list(dict.fromkeys(current))  # dedupe, keep order
+    cur_set = set(current)
+    added = [ip for ip in dict.fromkeys(to_add) if ip not in cur_set]
+    already = [ip for ip in dict.fromkeys(to_add) if ip in cur_set]
+    rm_set = set(to_remove)
+    removed = [ip for ip in current if ip in rm_set]
+    not_present = [ip for ip in dict.fromkeys(to_remove) if ip not in cur_set]
+    new_list = [ip for ip in current if ip not in rm_set] + added
+    return new_list, added, removed, already, not_present
+
+
+# --------------------------------------------------------------------------- #
+# Imperva API client
+# --------------------------------------------------------------------------- #
+class ImpervaRateLimited(ImpervaError):
+    def __init__(self, msg, retry_after=None):
+        ImpervaError.__init__(self, msg)
+        self.retry_after = retry_after
+
+
+def _raise_http(e, what):
+    body = e.read()[:300]
+    if e.code in (429, 503):
+        try:
+            ra = float(e.headers.get("Retry-After")) if e.headers else None
+        except (TypeError, ValueError):
+            ra = None
+        raise ImpervaRateLimited("%s (rate limited / busy): %s" % (what, body), ra)
+    raise ImpervaError("%s: %s" % (what, body))
+
+
+# Imperva API rate limit (HTTP 429) or busy (503): wait and call again.
+# The writes are idempotent (full ACL / full policy body), so retrying is safe.
+RETRY_WAITS = (5, 15, 30, 60)
+
+
+def _with_retry(fn, waits=None, _sleep=time.sleep):
+    waits = RETRY_WAITS if waits is None else waits
+    for i in range(len(waits) + 1):
+        try:
+            return fn()
+        except ImpervaRateLimited as e:
+            if i >= len(waits):
+                raise
+            _sleep(min(max(e.retry_after or waits[i], 1), 120))
+
+
+class ImpervaClient(object):
+    def __init__(self, api_id, api_key, base_url=DEFAULT_BASE_URL, timeout=30,
+                 proxy=None, verify_ssl=True):
+        if not api_id or not api_key:
+            raise ImpervaError("Imperva API ID / API Key not configured")
+        self.api_id = api_id
+        self.api_key = api_key
+        self.base_url = (base_url or DEFAULT_BASE_URL).rstrip("/")
+        self.timeout = timeout
+        handlers = []
+        if proxy:
+            handlers.append(urllib.request.ProxyHandler({"http": proxy, "https": proxy}))
+        ctx = ssl.create_default_context()
+        if not verify_ssl:
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+        handlers.append(urllib.request.HTTPSHandler(context=ctx))
+        self._opener = urllib.request.build_opener(*handlers)
+
+    def _post(self, path, params):
+        return _with_retry(lambda: self._post_once(path, params))
+
+    def _post_once(self, path, params):
+        url = self.base_url + path
+        data = urllib.parse.urlencode(params).encode("utf-8")
+        req = urllib.request.Request(url, data=data, method="POST")
+        req.add_header("x-API-Id", self.api_id)
+        req.add_header("x-API-Key", self.api_key)
+        req.add_header("Content-Type", "application/x-www-form-urlencoded")
+        req.add_header("Accept", "application/json")
+        try:
+            with self._opener.open(req, timeout=self.timeout) as resp:
+                body = resp.read().decode("utf-8")
+        except urllib.error.HTTPError as e:
+            _raise_http(e, "HTTP %s from %s" % (e.code, path))
+        except urllib.error.URLError as e:
+            raise ImpervaError("Cannot reach Imperva API (%s): %s" % (path, e.reason))
+        try:
+            js = json.loads(body)
+        except ValueError:
+            raise ImpervaError("Non-JSON response from %s: %s" % (path, body[:300]))
+        if str(js.get("res", "")) not in ("0", ""):
+            raise ImpervaError("Imperva API error res=%s: %s" % (
+                js.get("res"), js.get("res_message") or js.get("debug_info")))
+        return js
+
+    def get_site_acl(self, site_id):
+        """Return (site_domain, [blacklisted ips]) read live from Imperva."""
+        js = self._post("/api/prov/v1/sites/status", {"site_id": site_id, "tests": ""})
+        rules = (js.get("security") or {}).get("acls", {}).get("rules", []) or []
+        ips = []
+        for r in rules:
+            if r.get("id") == BLACKLIST_RULE_ID:
+                ips = list(r.get("ips") or [])
+                break
+        return js.get("domain") or "-", ips
+
+    def get_blacklist(self, site_id):
+        return self.get_site_acl(site_id)[1]
+
+    def set_blacklist(self, site_id, ips):
+        return self._post("/api/prov/v1/sites/configure/acl", {
+            "site_id": site_id,
+            "rule_id": BLACKLIST_RULE_ID,
+            "ips": ",".join(ips),
+        })
+
+
+# --------------------------------------------------------------------------- #
+# Imperva Policies API v2 client (ACL policy, IP BLOCK setting)
+#   GET  {base}/policies/v2/policies/{id}?extended=true  -> {"value": {...}, "isError": false}
+#   PUT  {base}/policies/v2/policies/{id}                -> full policy body (overwrite)
+# Same interface as ImpervaClient, but the target id is a POLICY id, so one
+# write updates every site/account the policy is applied to.
+# --------------------------------------------------------------------------- #
+DEFAULT_V2_BASE_URL = "https://api.imperva.com"
+_SUBMIT_KEYS = ("name", "description", "enabled", "accountId", "policyType",
+                "policySettings", "defaultPolicyConfig")
+
+
+def find_ip_block_setting(policy):
+    for st in policy.get("policySettings") or []:
+        if st.get("policySettingType") == "IP" and st.get("settingsAction") == "BLOCK":
+            return st
+    return None
+
+
+def policy_with_blocked_ips(policy, ips):
+    """
+    Return the PUT body for `policy` with its IP/BLOCK setting set to `ips`.
+    Every other setting, exception and field is kept as it is.
+    """
+    if policy.get("policyType") != "ACL":
+        raise ImpervaError("policy %s is type %r, not ACL - refusing to modify"
+                           % (policy.get("id"), policy.get("policyType")))
+    body = {k: policy[k] for k in _SUBMIT_KEYS if k in policy}
+    settings = [dict(st) for st in (policy.get("policySettings") or [])]
+    idx = next((i for i, st in enumerate(settings)
+                if st.get("policySettingType") == "IP" and st.get("settingsAction") == "BLOCK"), None)
+    if idx is None:
+        if ips:
+            settings.append({"settingsAction": "BLOCK", "policySettingType": "IP",
+                             "data": {"ips": list(ips)}})
+    elif ips:
+        st = settings[idx]
+        st["data"] = dict(st.get("data") or {}, ips=list(ips))
+    else:
+        # an IP setting with an empty list is not valid - drop it
+        settings.pop(idx)
+    body["policySettings"] = settings
+    body.setdefault("defaultPolicyConfig", [])
+    return body
+
+
+class ImpervaPolicyClient(object):
+    def __init__(self, api_id, api_key, base_url=DEFAULT_V2_BASE_URL, timeout=30,
+                 proxy=None, verify_ssl=True, caid=None):
+        if not api_id or not api_key:
+            raise ImpervaError("Imperva API ID / API Key not configured")
+        self.api_id, self.api_key = api_id, api_key
+        self.base_url = (base_url or DEFAULT_V2_BASE_URL).rstrip("/")
+        self.timeout = timeout
+        self.caid = caid
+        handlers = []
+        if proxy:
+            handlers.append(urllib.request.ProxyHandler({"http": proxy, "https": proxy}))
+        ctx = ssl.create_default_context()
+        if not verify_ssl:
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+        handlers.append(urllib.request.HTTPSHandler(context=ctx))
+        self._opener = urllib.request.build_opener(*handlers)
+
+    def _request(self, method, path, query=None, body=None):
+        return _with_retry(lambda: self._request_once(method, path, query, body))
+
+    def _request_once(self, method, path, query=None, body=None):
+        q = dict(query or {})
+        if self.caid:
+            q["caid"] = self.caid
+        url = self.base_url + path + ("?" + urllib.parse.urlencode(q) if q else "")
+        data = json.dumps(body).encode("utf-8") if body is not None else None
+        req = urllib.request.Request(url, data=data, method=method)
+        req.add_header("x-API-Id", self.api_id)
+        req.add_header("x-API-Key", self.api_key)
+        req.add_header("Accept", "application/json")
+        if data is not None:
+            req.add_header("Content-Type", "application/json")
+        try:
+            with self._opener.open(req, timeout=self.timeout) as resp:
+                raw = resp.read().decode("utf-8")
+        except urllib.error.HTTPError as e:
+            _raise_http(e, "HTTP %s %s %s" % (e.code, method, path))
+        except urllib.error.URLError as e:
+            raise ImpervaError("Cannot reach Imperva API (%s): %s" % (path, e.reason))
+        try:
+            js = json.loads(raw)
+        except ValueError:
+            raise ImpervaError("Non-JSON response from %s: %s" % (path, raw[:300]))
+        if js.get("isError"):
+            raise ImpervaError("Imperva API error on %s: %s" % (path, raw[:300]))
+        return js
+
+    def get_policy(self, policy_id):
+        pol = self._request("GET", "/policies/v2/policies/%s" % policy_id,
+                            {"extended": "true"}).get("value") or {}
+        self.last_enabled = pol.get("enabled", True)
+        self.last_default = bool(pol.get("defaultPolicyConfig"))
+        return pol
+
+    def is_enabled(self, policy_id):
+        return bool(self.get_policy(policy_id).get("enabled", True))
+
+    def list_policies(self):
+        """Every policy of the account (extended = with settings and exceptions)."""
+        return self._request("GET", "/policies/v2/policies", {"extended": "true"}).get("value") or []
+
+    def get_site_acl(self, policy_id):
+        """Return (policy_name, [blocked ips]) read live from Imperva."""
+        pol = self.get_policy(policy_id)
+        st = find_ip_block_setting(pol)
+        ips = list(((st or {}).get("data") or {}).get("ips") or [])
+        name = pol.get("name") or "-"
+        if not pol.get("enabled", True):
+            name += " [POLICY DISABLED]"
+        return name, ips
+
+    def get_blacklist(self, policy_id):
+        return self.get_site_acl(policy_id)[1]
+
+    def set_blacklist(self, policy_id, ips):
+        pol = self.get_policy(policy_id)
+        return self._request("PUT", "/policies/v2/policies/%s" % policy_id,
+                             body=policy_with_blocked_ips(pol, ips))
+
+    def modify_ips(self, policy_id, add=(), remove=()):
+        """
+        Re-read the policy immediately before the PUT and apply only our delta,
+        so IPs that someone else added/removed in the console in the meantime
+        are not lost (minimises the read-modify-write race).
+        """
+        pol = self.get_policy(policy_id)
+        st = find_ip_block_setting(pol)
+        live = list(((st or {}).get("data") or {}).get("ips") or [])
+        new_list, _, _, _, _ = merge_blacklist(live, to_add=add, to_remove=remove)
+        return self._request("PUT", "/policies/v2/policies/%s" % policy_id,
+                             body=policy_with_blocked_ips(pol, new_list))
+
+
+def make_client(conf, api_id, api_key, override_ids=None):
+    """
+    Build the client and target ids from imperva.conf [settings].
+      api_mode = v2_policy (default) -> ImpervaPolicyClient, targets = policy_ids
+      api_mode = v1_site             -> ImpervaClient,       targets = site_ids
+    """
+    def truthy(v):
+        return str(v).strip().lower() in ("1", "t", "true", "y", "yes")
+
+    mode = (conf.get("api_mode") or "v2_policy").strip().lower()
+    common = dict(timeout=int(conf.get("timeout", 30)), proxy=conf.get("proxy") or None,
+                  verify_ssl=truthy(conf.get("verify_ssl", "true")))
+    if mode == "v1_site":
+        client = ImpervaClient(api_id, api_key,
+                               base_url=conf.get("api_base_url") or DEFAULT_BASE_URL, **common)
+        ids = parse_ip_list(override_ids or conf.get("site_ids", ""))
+        what = "site_ids"
+    elif mode == "v2_policy":
+        client = ImpervaPolicyClient(api_id, api_key,
+                                     base_url=conf.get("api_v2_base_url") or DEFAULT_V2_BASE_URL,
+                                     caid=conf.get("caid") or None, **common)
+        ids = parse_ip_list(override_ids or conf.get("policy_ids", ""))
+        what = "policy_ids"
+    else:
+        raise ImpervaError("api_mode must be v2_policy or v1_site, not %r" % mode)
+    if not ids:
+        raise ImpervaError("No %s configured in imperva.conf [settings]" % what)
+    return client, ids, mode
+
+
+def apply_action(client, site_id, ips, action="block", dry_run=False, verify=True):
+    """
+    Read current blacklist of site_id, merge, write it back and (optionally)
+    re-read it to VERIFY the change really landed on the WAF.
+
+    Returns dict:
+      changed      IPs added (block) / removed (unblock) and verified
+      unchanged    already blocked (block) / not in list (unblock)
+      not_applied  written but NOT found as expected on re-read (verification failed)
+    """
+    current = client.get_blacklist(site_id)
+    if action == "block":
+        new_list, changed, _, unchanged, _ = merge_blacklist(current, to_add=ips)
+    elif action == "unblock":
+        new_list, _, changed, _, unchanged = merge_blacklist(current, to_remove=ips)
+    else:
+        raise ImpervaError("unknown action %r (use block|unblock)" % action)
+
+    not_applied = []
+    after = current
+    if changed and not dry_run:
+        if hasattr(client, "modify_ips"):  # v2 policy: delta on a fresh read
+            client.modify_ips(site_id, add=changed if action == "block" else (),
+                              remove=changed if action == "unblock" else ())
+        else:
+            client.set_blacklist(site_id, new_list)
+        after = new_list
+        if verify:
+            after = client.get_blacklist(site_id)
+            live = set(after)
+            if action == "block":
+                not_applied = [ip for ip in changed if ip not in live]
+            else:
+                not_applied = [ip for ip in changed if ip in live]
+            changed = [ip for ip in changed if ip not in not_applied]
+    return {
+        "site_id": site_id,
+        "changed": changed,
+        "unchanged": unchanged,
+        "not_applied": not_applied,
+        "blacklist_size_before": len(current),
+        "blacklist_size_after": len(after) if not dry_run else len(current),
+    }
+
+
+def build_registry_doc(existing, key, site_id, ip, action, status, user, now, meta):
+    """
+    Decide what to store in the KV store registry for one (site, ip) result.
+    meta: dict(threat_actor, incident_no, comment, reason)
+    Returns the full document to save, or None (nothing to store).
+    """
+    meta = dict((k, (v or "").strip()) for k, v in (meta or {}).items())
+    if action == "block" and status == "blocked":
+        doc = {"_key": key, "site_id": site_id, "ip": ip, "status": "blocked",
+               "blocked_at": now, "blocked_by": user, "source": "splunk"}
+        doc.update(meta)
+        return doc
+    if action == "block" and status == "no_change":
+        if existing and existing.get("status") == "blocked":
+            return None  # keep the original description / time
+        doc = {"_key": key, "site_id": site_id, "ip": ip, "status": "blocked",
+               "blocked_at": now, "blocked_by": user,
+               "source": "already in WAF - registered from splunk"}
+        doc.update(meta)
+        return doc
+    if action == "unblock" and status == "no_change" and existing and existing.get("status") == "blocked":
+        status = "unblocked"  # removed outside Splunk: close the registry entry too
+    if action == "unblock" and status == "unblocked":
+        doc = dict(existing or {"_key": key, "site_id": site_id, "ip": ip})
+        doc.pop("_user", None)
+        doc.update({"_key": key, "status": "unblocked", "unblocked_at": now,
+                    "unblocked_by": user, "unblock_reason": meta.get("reason", ""),
+                    "unblock_incident_no": meta.get("incident_no", "")})
+        return doc
+    return None
+
+
+# --------------------------------------------------------------------------- #
+# High-level operations shared by the Splunk commands (direct mode) and the
+# SOAR playbook (soar mode). They return plain row dicts.
+# --------------------------------------------------------------------------- #
+def run_action(client, targets, ips, action="block", dry_run=False):
+    """Block/unblock already-validated `ips` on every target. Returns rows:
+    {ip, site_id, status, verified_in_waf, detail}"""
+    rows = []
+    ok = "blocked" if action == "block" else "unblocked"
+
+    def row(ip, sid, status, detail, verified="-"):
+        rows.append({"ip": ip, "site_id": sid, "status": status,
+                     "verified_in_waf": verified, "detail": detail})
+
+    for sid in targets:
+        if not ips:
+            break
+        try:
+            res = apply_action(client, sid, ips, action=action, dry_run=dry_run)
+            size = "blacklist size %d -> %d" % (res["blacklist_size_before"], res["blacklist_size_after"])
+            if getattr(client, "last_enabled", True) is False:
+                size += (" | WARNING: policy %s is DISABLED in Imperva - "
+                         "the block has NO effect until it is enabled" % sid)
+            if getattr(client, "last_default", True) is False:
+                size += (" | NOTE: policy %s is not a Default policy - websites added later "
+                         "will not get it; apply it to all websites and set Default" % sid)
+            for ip in res["changed"]:
+                if dry_run:
+                    row(ip, sid, "would_be_" + ok, size)
+                else:
+                    row(ip, sid, ok, size + " (re-read from WAF)", "yes" if action == "block" else "removed")
+            for ip in res["not_applied"]:
+                row(ip, sid, "error", "write accepted but NOT confirmed on re-read from WAF", "no")
+            for ip in res["unchanged"]:
+                row(ip, sid, "no_change",
+                    "already blocked" if action == "block" else "not in blacklist",
+                    "yes" if action == "block" else "-")
+        except ImpervaError as e:
+            for ip in ips:
+                row(ip, sid, "error", str(e), "unknown")
+    return rows
+
+
+def list_targets(client, targets):
+    """Read the live block list of every target. Returns rows:
+    {site_id, site_name, ip, in_waf[, detail]}"""
+    rows = []
+    for sid in targets:
+        try:
+            name, ips = client.get_site_acl(sid)
+            for ip in ips:
+                rows.append({"site_id": sid, "site_name": name, "ip": ip, "in_waf": "yes"})
+            if not ips:
+                rows.append({"site_id": sid, "site_name": name, "ip": "-", "in_waf": "empty"})
+        except ImpervaError as e:
+            rows.append({"site_id": sid, "site_name": "-", "ip": "-", "in_waf": "error", "detail": str(e)})
+    return rows
+
+
+
+# --------------------------------------------------------------------------- #
+# All WAF policies of the account: where is an IP already blocked / allowed?
+# --------------------------------------------------------------------------- #
+def policy_ip_entries(policies):
+    """
+    Flatten every IP-type rule of every policy into entries:
+      {cidr, policy_id, policy_name, policy_type, action, kind, enabled}
+    kind = "setting"   -> policySettings IP rule (action BLOCK / ALLOW / ALERT ...)
+    kind = "exception" -> IP exception of a rule (that rule does NOT apply to the IP)
+    """
+    out = []
+    for pol in policies or []:
+        base = {"policy_id": str(pol.get("id")), "policy_name": pol.get("name") or "-",
+                "policy_type": pol.get("policyType") or "-", "enabled": bool(pol.get("enabled", True))}
+        for st in pol.get("policySettings") or []:
+            action = str(st.get("settingsAction") or "-").upper()
+            if st.get("policySettingType") == "IP":
+                for ip in ((st.get("data") or {}).get("ips") or []):
+                    out.append(dict(base, cidr=str(ip), action=action, kind="setting"))
+            for exc in st.get("policyDataExceptions") or []:
+                for d in exc.get("data") or []:
+                    if str(d.get("exceptionType")).upper() == "IP":
+                        for ip in d.get("values") or []:
+                            out.append(dict(base, cidr=str(ip), kind="exception",
+                                            action="EXCEPTION(%s %s)" % (action, st.get("policySettingType"))))
+    return out
+
+
+def _entry_net(cidr):
+    """Imperva IP rules accept IP, CIDR or range 'a-b'. Return list of networks."""
+    cidr = cidr.strip()
+    try:
+        if "-" in cidr:
+            a, b = [ipaddress.ip_address(x.strip()) for x in cidr.split("-", 1)]
+            return list(ipaddress.summarize_address_range(a, b))
+        return [ipaddress.ip_network(cidr, strict=False)]
+    except ValueError:
+        return []
+
+
+def match_policies(ip, entries):
+    """Entries whose IP / CIDR / range covers `ip`."""
+    try:
+        a = ipaddress.ip_address(ip)
+    except ValueError:
+        return []
+    hits = []
+    for e in entries:
+        if any(a.version == n.version and a in n for n in _entry_net(e["cidr"])):
+            hits.append(e)
+    return hits
+
+
+def policy_verdict(matches, own_policy_ids=()):
+    """
+    -> (verdict, text_list)
+      ALLOWLISTED        an ENABLED policy allows the IP (ALLOW rule or IP exception)
+      BLOCKED_ELSEWHERE  an ENABLED policy other than ours already blocks it
+      BLOCKED_HERE       one of our policies already blocks it
+      NONE
+    """
+    own = set(str(x) for x in own_policy_ids)
+    texts, allow, block_other, block_own = [], [], [], []
+    for m in matches:
+        label = "%s in %s %s%s (%s)" % (m["action"], m["policy_id"], m["policy_name"],
+                                         "" if m["enabled"] else " [disabled]", m["cidr"])
+        texts.append(label)
+        if not m["enabled"]:
+            continue
+        if m["action"] == "ALLOW" or m["kind"] == "exception":
+            allow.append(label)
+        elif m["action"].startswith("BLOCK"):
+            (block_own if m["policy_id"] in own else block_other).append(label)
+    if allow:
+        return "ALLOWLISTED", texts
+    if block_other:
+        return "BLOCKED_ELSEWHERE", texts
+    if block_own:
+        return "BLOCKED_HERE", texts
+    return "NONE", texts
+
+
+def allowlist_conflicts(entries, ips):
+    """{ip: reason} for IPs that an ENABLED policy explicitly allows (ALLOW rule / IP exception)."""
+    out = {}
+    for ip in ips:
+        v, texts = policy_verdict(match_policies(ip, entries))
+        if v == "ALLOWLISTED":
+            out[ip] = "allowed by WAF policy: " + "; ".join(
+                t for t in texts if t.startswith(("ALLOW", "EXCEPTION")) and "[disabled]" not in t)
+    return out
