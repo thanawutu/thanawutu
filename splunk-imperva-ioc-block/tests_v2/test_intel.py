@@ -322,7 +322,29 @@ class TestCommand(unittest.TestCase):
         self.bridge = FakeBridge(fail="SOAR HTTP 401")
         r = self.run_()[0]
         self.assertEqual((r["abuse_status"], r["abuse_error"]), ("error", "SOAR HTTP 401"))
-        self.assertEqual(self.kv, {})                                           # errors are not cached
+        doc = self.kv["abuse_185.220.101.47"]                                   # remembered 1 h only
+        self.assertEqual(json.loads(doc["data"])["abuse_status"], "error")
+        import time as _t
+        self.assertAlmostEqual(doc["ts"], _t.time() - 24 * 3600 + 3600, delta=30)
+        self.bridge = FakeBridge()
+        r = self.run_("cache_only=true")[0]                                     # the table shows why
+        self.assertEqual((r["abuse_status"], r["gn_status"]), ("error", "error"))
+        self.assertEqual(self.bridge.calls, [])
+        for k in list(self.kv):                                                 # 1 h later: tried again
+            self.kv[k]["ts"] -= 3700
+        import shutil
+        shutil.rmtree(os.path.join(self.tmp, "var", "run", "splunk"))
+        os.makedirs(os.path.join(self.tmp, "var", "run", "splunk"))
+        r = self.run_()[0]
+        self.assertEqual(r["abuse_status"], "ok")
+
+    def test_greynoise_keeps_results_7_days_and_warm_up_starts_with_recent_ips(self):
+        conf = open(os.path.join(APP, "default", "imperva.conf"), encoding="utf-8").read()
+        gn = conf[conf.index("[greynoise]"):]
+        self.assertIn("cache_ttl_hours = 168", gn.split("\n[")[0])
+        ss = open(os.path.join(APP, "default", "savedsearches.conf"), encoding="utf-8").read()
+        st = ss[ss.index("[Imperva V2 - AbuseIPDB / GreyNoise cache warm-up]"):]
+        self.assertIn('| sort 0 - _recent - _sev_rank - count', st.split("\n\n")[0])
 
     def test_direct_mode_uses_the_credential(self):
         self.conf["settings"] = {"api_mode": "v2_policy"}

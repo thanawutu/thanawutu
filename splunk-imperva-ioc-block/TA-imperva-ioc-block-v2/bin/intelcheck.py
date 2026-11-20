@@ -44,6 +44,9 @@ from backend import get_soar_bridge  # noqa: E402
 from splunk_helpers import (CACHE, get_logger, is_true, kv_query, kv_upsert,  # noqa: E402
                             load_conf_stanza, load_credential, parse_options, splunk_home)
 
+FAIL_TTL = 3600   # a lookup that failed (rate_limited / error) is remembered 1 h: the tables show why
+                  # instead of "pending", and the warm-up tries that IP again after 1 h
+
 DEFAULTS = {   # per source: requests per minute, lookups per run
     "abuseipdb": {"requests_per_minute": 30, "max_lookups_per_run": 40},
     "greynoise": {"requests_per_minute": 10, "max_lookups_per_run": 10},
@@ -136,6 +139,10 @@ def lookup_source(source, ips, opts, sconf, iconf, session_key, log, now=None):
             if info.get(st) in ("ok", "not_found"):
                 cache.put(ip, info, now=now)
                 shared.append({"_key": cache_key(pre, ip), "ts": now, "data": json.dumps(info)})
+            elif info.get(st) in ("rate_limited", "error"):
+                ts = now - ttl + min(FAIL_TTL, ttl)          # expires after FAIL_TTL
+                cache.put(ip, info, now=ts)
+                shared.append({"_key": cache_key(pre, ip), "ts": ts, "data": json.dumps(info)})
             out[ip] = dict(info, **{pre + "_cached": "no"})
         if shared:
             try:
