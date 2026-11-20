@@ -30,7 +30,7 @@
       <title>Blocked / unblocked IPs per day – last 30 days</title>
       <chart>
         <search base="audit30">
-          <query>| fields _time "Blocked IPs" "Unblocked IPs" "Auto unblocked IPs"</query>
+          <query>| fields _time "Blocked IPs" "Unblocked IPs"</query>
         </search>
         <option name="charting.chart">column</option>
         <option name="charting.chart.stackMode">stacked</option>
@@ -38,7 +38,7 @@
         <option name="charting.axisTitleX.visibility">collapsed</option>
         <option name="charting.axisTitleY.text">IPs</option>
         <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
-        <option name="charting.fieldColors">{"Blocked IPs":0xDC4E41,"Unblocked IPs":0x53A051,"Auto unblocked IPs":0x5A9BD5}</option>
+        <option name="charting.fieldColors">{"Blocked IPs":0xDC4E41,"Unblocked IPs":0x53A051}</option>
         <option name="charting.legend.placement">top</option>
         <option name="height">280</option>
       </chart>
