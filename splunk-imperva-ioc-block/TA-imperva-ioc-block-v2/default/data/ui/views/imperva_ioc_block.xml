@@ -91,12 +91,12 @@
       <single>
         <title>Unblocked 7 days</title>
         <search base="audit7">
-          <query>| stats sum("Unblocked IPs") AS unblocked</query>
+          <query>| eval u='Unblocked IPs'+'Auto unblocked IPs' | stats sum(u) AS unblocked</query>
         </search>
         <option name="colorMode">block</option>
         <option name="rangeColors">["0x53A051","0x53A051"]</option>
         <option name="useColors">1</option>
-        <option name="underLabel">from the audit log</option>
+        <option name="underLabel">manual + auto, from the audit log</option>
       </single>
     </panel>
   </row>
@@ -106,7 +106,7 @@
       <title>Blocked / unblocked IPs per day – last 7 days (30 days: Older detections page)</title>
       <chart>
         <search base="audit7">
-          <query>| fields _time "Blocked IPs" "Unblocked IPs"</query>
+          <query>| fields _time "Blocked IPs" "Unblocked IPs" "Auto unblocked IPs"</query>
         </search>
         <option name="charting.chart">column</option>
         <option name="charting.chart.stackMode">stacked</option>
@@ -114,7 +114,7 @@
         <option name="charting.axisTitleX.visibility">collapsed</option>
         <option name="charting.axisTitleY.text">IPs</option>
         <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
-        <option name="charting.fieldColors">{"Blocked IPs":0xDC4E41,"Unblocked IPs":0x53A051}</option>
+        <option name="charting.fieldColors">{"Blocked IPs":0xDC4E41,"Unblocked IPs":0x53A051,"Auto unblocked IPs":0x5A9BD5}</option>
         <option name="charting.legend.placement">top</option>
         <option name="height">240</option>
       </chart>

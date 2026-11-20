@@ -112,7 +112,7 @@
       <single>
         <title>Unblocked 7 days</title>
         <search base="audit7">
-          <query>| stats sum("Unblocked IPs") AS unblocked</query>
+          <query>| eval u='Unblocked IPs'+'Auto unblocked IPs' | stats sum(u) AS unblocked</query>
         </search>
         <option name="colorMode">block</option>
         <option name="rangeColors">["0x53A051","0x53A051"]</option>

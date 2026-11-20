@@ -409,6 +409,21 @@ class TestCommand(unittest.TestCase):
 
 
 
+class TestDailyChart(unittest.TestCase):
+    def test_auto_unblock_is_its_own_series(self):
+        root = os.path.join(HERE, "..", "TA-imperva-ioc-block-v2", "default")
+        m = open(os.path.join(root, "macros.conf"), encoding="utf-8").read()
+        self.assertIn('series=case(status="blocked", "Blocked IPs", user="auto-unblock", "Auto unblocked IPs", true(), "Unblocked IPs")', m)
+        self.assertIn('fillnull value=0 "Blocked IPs" "Unblocked IPs" "Auto unblocked IPs"', m)
+        for v in ("imperva_ioc_block.xml", "imperva_ioc_history.xml"):
+            x = open(os.path.join(root, "data", "ui", "views", v), encoding="utf-8").read()
+            self.assertIn('| fields _time "Blocked IPs" "Unblocked IPs" "Auto unblocked IPs"', x)
+            self.assertIn('"Auto unblocked IPs":0x5A9BD5', x)
+        for v in ("imperva_ioc_block.xml", "imperva_ioc_blocked.xml"):        # KPI: manual + auto
+            x = open(os.path.join(root, "data", "ui", "views", v), encoding="utf-8").read()
+            self.assertIn("| eval u='Unblocked IPs'+'Auto unblocked IPs' | stats sum(u) AS unblocked", x)
+
+
 class TestMergedPage(unittest.TestCase):
     """Blocked IPs / Unblock and Auto unblock are one page since mockup v3.15."""
     def setUp(self):
