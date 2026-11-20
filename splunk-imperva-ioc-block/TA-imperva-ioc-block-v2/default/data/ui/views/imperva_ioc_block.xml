@@ -376,7 +376,7 @@
 | `imperva_ioc_decision_aid(24h)`
 | intelcheck field=src cache_only=true adjust=false
 | eval AbuseIPDB=if(abuse_status="ok", abuse_score."% · ".abuse_reports." reports · ".abuse_users." users · ".abuse_usage." · ".abuse_isp.if(abuse_tor="yes", " · Tor", "").if(abuse_last_reported!="-", " · last ".abuse_last_reported, ""), abuse_status)
-| eval GreyNoise=case(gn_status="ok" AND gn_riot="yes", "RIOT known service · ".gn_name, gn_status="ok", gn_classification." · ".gn_name." · last seen ".gn_last_seen, gn_status="not_found", "not observed scanning the internet", true(), gn_status)
+| eval GreyNoise=case(gn_status="ok" AND gn_riot="yes", "RIOT known service · ".gn_name, gn_status="ok", gn_classification." · ".gn_name." · last seen ".gn_last_seen, gn_status="not_found", "not observed scanning the internet", gn_status="pending" OR gn_status="rate_limited", "API reached limit (free plan: 48 new IPs per day) - checked on a later day", true(), gn_status)
 | eval Close="✖ Close", Events="🔍 all events"
 | table Close src suggestion suggestion_reason asn location VirusTotal AbuseIPDB GreyNoise "Decision aid (24h)" Events
 | rename src AS IP, asn AS owner</query>

@@ -338,6 +338,13 @@ class TestCommand(unittest.TestCase):
         r = self.run_()[0]
         self.assertEqual(r["abuse_status"], "ok")
 
+    def test_greynoise_waiting_or_429_reads_api_reached_limit(self):
+        macros = open(os.path.join(APP, "default", "macros.conf"), encoding="utf-8").read()
+        self.assertIn('gn_status="pending" OR gn_status="rate_limited", "API reached limit"', macros)
+        for v in ("imperva_ioc_block.xml", "imperva_ioc_history.xml"):
+            x = open(os.path.join(APP, "default", "data", "ui", "views", v), encoding="utf-8").read()
+            self.assertIn('"API reached limit (free plan: 48 new IPs per day)', x)
+
     def test_greynoise_keeps_results_7_days_and_warm_up_starts_with_recent_ips(self):
         conf = open(os.path.join(APP, "default", "imperva.conf"), encoding="utf-8").read()
         gn = conf[conf.index("[greynoise]"):]
