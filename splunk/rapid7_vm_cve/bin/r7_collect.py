@@ -49,10 +49,10 @@ class _Base(Script):
                 ew.log("ERROR", "%s failed: %s" % (name, e))
             run = {"collector": self.KIND, "status": status, "events": count, "run_id": run_id,
                    "api_calls": calls, "duration_s": round(time.time() - started, 1), "error": err}
-            ew.write_event(Event(data=json.dumps(run), sourcetype="rapid7:vm:run", index=index, stanza=name))
+            ew.write_event(Event(data=json.dumps(run) + "\n", sourcetype="rapid7:vm:run", index=index, stanza=name))
 
     def write(self, ew, index, sourcetype, obj, when=None):
-        ew.write_event(Event(data=json.dumps(obj, sort_keys=True), sourcetype=sourcetype, index=index,
+        ew.write_event(Event(data=json.dumps(obj, sort_keys=True) + "\n", sourcetype=sourcetype, index=index,
                              time="%.3f" % (when if when else time.time())))
 
 

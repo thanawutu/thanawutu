@@ -282,6 +282,7 @@ class CollectorTests(ConsoleCase):
         os_rows = [s for s in sw if s["type"] == "Operating System"]
         self.assertEqual(len(os_rows), 2)
         self.assertTrue(all(e["run_id"] == "RUN1" for e in sites + sw))
+        self.assertTrue(all(e.data.endswith("\n") for e in ew.events))  # one event per line for Splunk
         self.assertEqual(n, len(ew.events))
 
     def test_vuln_content_stops_at_cutoff(self):
