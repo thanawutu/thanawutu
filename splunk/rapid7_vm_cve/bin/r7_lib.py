@@ -514,6 +514,7 @@ def load_settings(service):
         "page_size": "500", "threads": "4", "scan_template_id": "", "max_servers_per_job": "50",
         "max_job_hours": "12", "stale_days": "7", "rescan_capability": "rapid7_cve_rescan",
         "vuln_content_first_days": "30", "vuln_content_overlap_days": "2", "vuln_content_max_pages": "400",
+        "credential_app": "", "credential_realm": "",
     }
     try:
         stanza = service.confs[CONF]["settings"]
@@ -529,16 +530,32 @@ def truthy(v):
     return str(v).strip().lower() in ("1", "true", "yes", "t", "y", "on")
 
 
-def get_password(service, username):
+def get_password(service, username, cred_app="", cred_realm=""):
+    """Clear password from Splunk's password store.
+
+    By default the credential stored in this app under realm rapid7_vm_cve.
+    With cred_app/cred_realm set, reuse a credential another app already stores
+    (e.g. the existing Rapid7 InsightVM app) without copying it.
+    """
     if not username:
         raise Rapid7Error("Rapid7 username is not set in rapid7_cve.conf [settings]")
-    for sp in service.storage_passwords:
-        try:
-            if sp.content.get("realm") == REALM and sp.content.get("username") == username:
-                return sp.content.get("clear_password")
-        except Exception:
+    app = cred_app or APP
+    realm = cred_realm if cred_app else (cred_realm or REALM)
+    resp = service.get("storage/passwords", owner="-", app=app, output_mode="json", count=0)
+    raw = resp.body.read()
+    data = json.loads(raw.decode("utf-8") if isinstance(raw, bytes) else raw)
+    for e in data.get("entry") or []:
+        c = e.get("content") or {}
+        if c.get("username") != username:
             continue
-    raise Rapid7Error("No password stored for realm=%s username=%s (see README, step 3)" % (REALM, username))
+        if realm and c.get("realm") != realm:
+            continue
+        acl = e.get("acl") or {}
+        if cred_app and acl.get("app") not in (None, app) and acl.get("sharing") != "global":
+            continue
+        return c.get("clear_password")
+    raise Rapid7Error("No password stored for app=%s realm=%s username=%s (see README, step 3)"
+                      % (app, realm or "(any)", username))
 
 
 def make_client(service, settings, role="collector"):
@@ -546,7 +563,8 @@ def make_client(service, settings, role="collector"):
     if role == "scan" and not user:
         user = settings["collector_username"]
     return Rapid7Client(
-        settings["console_url"], user, get_password(service, user),
+        settings["console_url"], user,
+        get_password(service, user, settings.get("credential_app", ""), settings.get("credential_realm", "")),
         verify_ssl=truthy(settings["verify_ssl"]), ca_bundle=settings["ca_bundle"],
         timeout=int(settings["request_timeout"]), use_system_proxy=truthy(settings["use_system_proxy"]))
 

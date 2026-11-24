@@ -429,3 +429,39 @@ class QueryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PasswordLookupTests(unittest.TestCase):
+    class Svc(object):
+        def __init__(self, entries):
+            self.entries, self.calls = entries, []
+
+        def get(self, path, **kw):
+            self.calls.append((path, kw))
+            body = json.dumps({"entry": self.entries}).encode()
+
+            class R(object):
+                class B(object):
+                    def read(self_inner):
+                        return body
+                body_ = B()
+            r = R()
+            r.body = R.B()
+            return r
+
+    def test_reuse_other_app_credential(self):
+        svc = self.Svc([
+            {"content": {"realm": "rapid7_insightvm_121", "username": "apisiem_va", "clear_password": "pw1"},
+             "acl": {"app": "rapid7_insightvm_app", "sharing": "app"}},
+            {"content": {"realm": "other", "username": "apisiem_va", "clear_password": "nope"},
+             "acl": {"app": "rapid7_insightvm_app", "sharing": "app"}}])
+        self.assertEqual(L.get_password(svc, "apisiem_va", "rapid7_insightvm_app", "rapid7_insightvm_121"), "pw1")
+        self.assertEqual(svc.calls[0][1]["app"], "rapid7_insightvm_app")
+
+    def test_own_realm_default(self):
+        svc = self.Svc([
+            {"content": {"realm": "rapid7_insightvm_121", "username": "u", "clear_password": "x"}, "acl": {}},
+            {"content": {"realm": "rapid7_vm_cve", "username": "u", "clear_password": "mine"}, "acl": {}}])
+        self.assertEqual(L.get_password(svc, "u"), "mine")
+        with self.assertRaises(L.Rapid7Error):
+            L.get_password(svc, "nobody-here")
