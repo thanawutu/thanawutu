@@ -1,0 +1,19 @@
+[settings]
+console_url = <string>
+verify_ssl = <bool>
+ca_bundle = <string>
+use_system_proxy = <bool>
+collector_username = <string>
+scan_username = <string>
+index = <string>
+request_timeout = <integer>
+page_size = <integer>
+threads = <integer>
+scan_template_id = <string>
+max_servers_per_job = <integer>
+max_job_hours = <integer>
+stale_days = <integer>
+rescan_capability = <string>
+vuln_content_first_days = <integer>
+vuln_content_overlap_days = <integer>
+vuln_content_max_pages = <integer>

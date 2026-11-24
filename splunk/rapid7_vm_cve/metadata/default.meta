@@ -1,0 +1,30 @@
+[]
+access = read : [ * ], write : [ admin, sc_admin ]
+export = none
+
+[commands]
+export = system
+
+[macros]
+export = system
+
+[props]
+export = system
+
+[transforms]
+export = system
+
+[collections/r7_saved_cves]
+access = read : [ * ], write : [ admin, sc_admin, rapid7_cve_analyst, rapid7_cve_rescan ]
+
+[collections/r7_scan_jobs]
+access = read : [ * ], write : [ admin, sc_admin, rapid7_cve_rescan ]
+
+[collections/r7_cmdb_changes]
+access = read : [ * ], write : [ admin, sc_admin ]
+
+[collections/r7_cmdb_prev]
+access = read : [ * ], write : [ admin, sc_admin ]
+
+[savedsearches]
+owner = nobody

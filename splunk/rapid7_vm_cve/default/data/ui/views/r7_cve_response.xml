@@ -1,0 +1,169 @@
+<form version="1.1" theme="dark" script="r7_actions.js">
+  <label>CVE response</label>
+  <description>Enter a CVE (saved or with a Rapid7 check). For a CVE that is not saved, also give the software and vulnerable versions. Lists affected servers with version, scan freshness against the announcement, Rapid7 result and verdict; preview and launch a rescan. INACTIVE and DECOMMISSION servers are hidden and never rescanned.</description>
+
+  <search id="servers">
+    <query><![CDATA[
+| r7cve cve=$cve|s$ software=$software|s$ ranges=$ranges|s$ announced=$announced|s$ env=$env|s$ app=$app|s$
+]]></query>
+  </search>
+
+  <fieldset submitButton="true" autoRun="false">
+    <input type="text" token="cve">
+      <label>CVE ID</label>
+      <default></default>
+    </input>
+    <input type="text" token="software">
+      <label>Software (if not saved), e.g. PHP or Apache*HTTP*</label>
+      <default></default>
+    </input>
+    <input type="text" token="ranges">
+      <label>Vulnerable versions, e.g. 8.1 &lt; 8.1.34 ; 8.2 &lt; 8.2.29</label>
+      <default></default>
+    </input>
+    <input type="text" token="announced">
+      <label>Announced (YYYY-MM-DD [HH:MM])</label>
+      <default></default>
+    </input>
+    <input type="dropdown" token="env">
+      <label>Environment</label>
+      <choice value="">All</choice>
+      <choice value="Prod">Prod (DC + DR)</choice>
+      <choice value="Prod · DC">Prod · DC</choice>
+      <choice value="Prod · DR">Prod · DR</choice>
+      <choice value="Non-prod">Non-prod (UAT + SIT + DEV)</choice>
+      <choice value="Non-prod · UAT">Non-prod · UAT</choice>
+      <choice value="Non-prod · SIT">Non-prod · SIT</choice>
+      <choice value="Non-prod · DEV">Non-prod · DEV</choice>
+      <default></default>
+    </input>
+    <input type="text" token="app">
+      <label>Application (CMDB appname, optional)</label>
+      <default></default>
+    </input>
+  </fieldset>
+
+  <row>
+    <panel>
+      <title>1 · Rapid7 check</title>
+      <table>
+        <search base="servers">
+          <query>| head 1 | eval vuln_ids=mvjoin(vuln_ids,", ") | table cve rapid7_check check_added severity cvss_v3 announced software ranges vuln_ids</query>
+        </search>
+        <option name="drilldown">none</option>
+        <format type="color" field="rapid7_check">
+          <colorPalette type="map">{"Yes":#53A051,"Not yet":#F8BE34}</colorPalette>
+        </format>
+      </table>
+    </panel>
+    <panel>
+      <title>Verdict now</title>
+      <table>
+        <search base="servers">
+          <query>| stats count as servers count(eval(env_group="Prod")) as prod count(eval(env_group="Non-prod")) as non_prod by verdict | sort verdict</query>
+        </search>
+        <option name="drilldown">none</option>
+        <format type="color" field="verdict">
+          <colorPalette type="map">{"Affected":#DC4E41,"Likely affected":#F8BE34,"Unknown":#5A9BD5,"Likely not affected":#53A051,"Not affected":#53A051}</colorPalette>
+        </format>
+      </table>
+    </panel>
+    <panel>
+      <title>Version data freshness</title>
+      <table>
+        <search base="servers">
+          <query>| stats count as servers by freshness | eval meaning=case(freshness="Fresh","scanned after announcement", freshness="OK","scanned shortly before", freshness="Stale","too old: rescan", freshness="None","no software data: fix credentials")</query>
+        </search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>2 · Servers: version, scan freshness, Rapid7 result, verdict</title>
+      <table>
+        <search base="servers">
+          <query>| eval appname=mvjoin(appname,", ") | table hostname ip env_label appname product version range_status last_scan freshness days_before_announced r7_result verdict action site_name | sort verdict env_label hostname</query>
+        </search>
+        <option name="count">25</option>
+        <option name="drilldown">none</option>
+        <format type="color" field="verdict">
+          <colorPalette type="map">{"Affected":#DC4E41,"Likely affected":#F8BE34,"Unknown":#5A9BD5,"Likely not affected":#53A051,"Not affected":#53A051}</colorPalette>
+        </format>
+        <format type="color" field="freshness">
+          <colorPalette type="map">{"Stale":#F8BE34,"None":#5A9BD5,"Fresh":#53A051}</colorPalette>
+        </format>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>3 · Rescan</title>
+      <input type="radio" token="only">
+        <label>Which servers</label>
+        <choice value="false">All that need a rescan (not yet confirmed "Not affected")</choice>
+        <choice value="true">Only the servers picked below</choice>
+        <default>false</default>
+        <change>
+          <unset token="preview_nonce"></unset>
+        </change>
+      </input>
+      <input type="multiselect" token="hosts">
+        <label>Servers (when "Only the servers picked below")</label>
+        <choice value="">(none)</choice>
+        <default></default>
+        <fieldForLabel>label</fieldForLabel>
+        <fieldForValue>asset_id</fieldForValue>
+        <search base="servers">
+          <query>| where verdict!="Not affected" | eval label=hostname." · ".env_label." · ".verdict | table asset_id label</query>
+        </search>
+        <delimiter>,</delimiter>
+      </input>
+      <html>
+        <p style="margin:8px 0">
+          <button class="btn" data-r7-set="preview_nonce" data-r7-value="nonce">Preview (dry run)</button>
+          <button class="btn btn-primary" data-r7-set="launch_nonce" data-r7-value="nonce" data-r7-confirm="Launch the Rapid7 rescan now? Prod servers are scanned immediately.">Run rescan</button>
+          <span style="margin-left:12px;color:#a9b4bf">Needs the rapid7_cve_rescan role. Max 50 servers per job. The poller starts the scan within about a minute; follow it on Scan jobs &amp; reports.</span>
+        </p>
+      </html>
+    </panel>
+  </row>
+
+  <row depends="$preview_nonce$">
+    <panel>
+      <title>Preview: nothing has been launched</title>
+      <table>
+        <search>
+          <query><![CDATA[
+| r7rescan cve=$cve|s$ software=$software|s$ ranges=$ranges|s$ announced=$announced|s$ env=$env|s$ app=$app|s$ hosts=$hosts|s$ only_hosts=$only$ scope=affected dryrun=true detail=true
+]]></query>
+        </search>
+        <option name="count">50</option>
+        <option name="drilldown">none</option>
+        <format type="color" field="action">
+          <colorPalette type="map">{"scan":#53A051,"skip":#708794}</colorPalette>
+        </format>
+      </table>
+    </panel>
+  </row>
+
+  <row depends="$launch_nonce$">
+    <panel>
+      <title>Rescan request</title>
+      <table>
+        <search>
+          <query><![CDATA[
+| r7rescan cve=$cve|s$ software=$software|s$ ranges=$ranges|s$ announced=$announced|s$ env=$env|s$ app=$app|s$ hosts=$hosts|s$ only_hosts=$only$ scope=affected dryrun=false request_id=$launch_nonce|s$ launched_from="CVE response"
+]]></query>
+        </search>
+        <option name="drilldown">cell</option>
+        <drilldown>
+          <link target="_blank">r7_scan_jobs?form.job=$row.job_id$</link>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+</form>

@@ -1,0 +1,156 @@
+<form version="1.1" theme="dark" script="r7_actions.js">
+  <label>Saved CVEs</label>
+  <description>A watchlist of CVEs you are tracking, saved with their announcement date and vulnerable version ranges. Re-run the query or rescan a group of servers (by environment and application) at any time, from here or with the Splunk search commands shown at the bottom.</description>
+
+  <fieldset submitButton="false" autoRun="true">
+    <input type="dropdown" token="closed" searchWhenChanged="true">
+      <label>Show closed</label>
+      <choice value="false">No</choice>
+      <choice value="true">Yes</choice>
+      <default>false</default>
+    </input>
+  </fieldset>
+
+  <row>
+    <panel>
+      <title>Watchlist (click a CVE to rescan by group)</title>
+      <table>
+        <search>
+          <query>| r7cvewatch action=list with_counts=true include_closed=$closed$ | table cve software ranges announced rapid7_check affected_now prod_dc prod_dr non_prod confirmed_affected unknown fixed_since_saved status saved_by saved_at | rename prod_dc as "Prod · DC" prod_dr as "Prod · DR" non_prod as "Non-prod"</query>
+        </search>
+        <option name="drilldown">row</option>
+        <drilldown>
+          <set token="cve">$row.cve$</set>
+          <unset token="preview_nonce"></unset>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Save a CVE</title>
+      <input type="text" token="new_cve">
+        <label>CVE ID</label>
+      </input>
+      <input type="text" token="new_announced">
+        <label>Announced (YYYY-MM-DD [HH:MM])</label>
+      </input>
+      <input type="text" token="new_software">
+        <label>Software (e.g. PHP, Apache*HTTP*)</label>
+      </input>
+      <input type="text" token="new_ranges">
+        <label>Vulnerable versions</label>
+      </input>
+      <html>
+        <p style="margin:8px 0">
+          <button class="btn btn-primary" data-r7-set="save_nonce" data-r7-value="nonce">Save CVE</button>
+        </p>
+      </html>
+      <table depends="$save_nonce$">
+        <search>
+          <query>| r7cvewatch action=add cve=$new_cve|s$ announced=$new_announced|s$ software=$new_software|s$ ranges=$new_ranges|s$ | eval nonce=$save_nonce|s$ | fields - nonce</query>
+        </search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+
+  <row depends="$cve$">
+    <panel>
+      <title>Rescan by group: $cve$</title>
+      <input type="multiselect" token="env">
+        <label>Environment</label>
+        <choice value="Prod · DC">Prod · DC</choice>
+        <choice value="Prod · DR">Prod · DR</choice>
+        <choice value="Non-prod · UAT">Non-prod · UAT</choice>
+        <choice value="Non-prod · SIT">Non-prod · SIT</choice>
+        <choice value="Non-prod · DEV">Non-prod · DEV</choice>
+        <default>Prod · DC,Prod · DR</default>
+        <delimiter>,</delimiter>
+        <change>
+          <unset token="preview_nonce"></unset>
+        </change>
+      </input>
+      <input type="dropdown" token="app">
+        <label>Application (CMDB appname)</label>
+        <choice value="">All applications</choice>
+        <default></default>
+        <fieldForLabel>appname</fieldForLabel>
+        <fieldForValue>appname</fieldForValue>
+        <search>
+          <query>| r7cve cve=$cve|s$ | mvexpand appname | stats count by appname | where appname!=""</query>
+        </search>
+        <change>
+          <unset token="preview_nonce"></unset>
+        </change>
+      </input>
+      <input type="dropdown" token="scope">
+        <label>Which servers</label>
+        <choice value="affected">Affected or unknown (skip "Not affected")</choice>
+        <choice value="all">All servers with the software</choice>
+        <default>affected</default>
+      </input>
+      <table>
+        <title>Servers in this group</title>
+        <search>
+          <query>| r7cve cve=$cve|s$ env=$env|s$ app=$app|s$ | stats count as servers by env_label verdict | sort env_label verdict</query>
+        </search>
+        <option name="drilldown">none</option>
+      </table>
+      <html>
+        <p style="margin:8px 0">
+          <button class="btn" data-r7-set="preview_nonce" data-r7-value="nonce">Preview (dry run)</button>
+          <button class="btn btn-primary" data-r7-set="launch_nonce" data-r7-value="nonce" data-r7-confirm="Launch the Rapid7 rescan for this group?">Rescan group</button>
+        </p>
+      </html>
+    </panel>
+  </row>
+
+  <row depends="$preview_nonce$">
+    <panel>
+      <title>Preview: nothing has been launched</title>
+      <table>
+        <search>
+          <query>| r7rescan cve=$cve|s$ env=$env|s$ app=$app|s$ scope=$scope$ dryrun=true</query>
+        </search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+
+  <row depends="$launch_nonce$">
+    <panel>
+      <title>Rescan request</title>
+      <table>
+        <search>
+          <query>| r7rescan cve=$cve|s$ env=$env|s$ app=$app|s$ scope=$scope$ dryrun=false request_id=$launch_nonce|s$ launched_from="Saved CVEs"</query>
+        </search>
+        <option name="drilldown">cell</option>
+        <drilldown>
+          <link target="_blank">r7_scan_jobs?form.job=$row.job_id$</link>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Test with Splunk search commands</title>
+      <html>
+        <table class="table">
+          <tr><th>Step</th><th>Command</th><th>Note</th></tr>
+          <tr><td>1 · Save the CVE</td><td><code>| r7cvewatch action=add cve=CVE-2026-20517 announced=2026-11-18 software="PHP" ranges="8.1 &lt; 8.1.34 ; 8.2 &lt; 8.2.29 ; 8.3 &lt; 8.3.27"</code></td><td>Done once.</td></tr>
+          <tr><td>2 · Query a group</td><td><code>| r7cve cve=CVE-2026-20517 env="Prod · DC,Prod · DR" app="Payments API"</code></td><td>Read only; nothing is sent to Rapid7.</td></tr>
+          <tr><td>3 · Preview the rescan</td><td><code>| r7rescan cve=CVE-2026-20517 env="Non-prod" app="Customer portal" dryrun=true</code></td><td>Sites, servers, skipped and why. Add <code>detail=true</code> for one row per server.</td></tr>
+          <tr><td>4 · Launch</td><td><code>| r7rescan cve=CVE-2026-20517 env="Non-prod" app="Customer portal" dryrun=false</code></td><td>Returns the job ID. Needs role rapid7_cve_rescan; max 50 servers.</td></tr>
+          <tr><td>5 · Follow the job</td><td><code>| r7scanstatus job=JOB-...</code></td><td>Scan status while running; before/after per server when finished.</td></tr>
+          <tr><td>Without a saved CVE</td><td><code>| r7cve software="Apache*HTTP*" ranges="&lt; 2.4.63" announced=2026-11-20</code></td><td>Version-only check for a CVE Rapid7 has no check for yet.</td></tr>
+          <tr><td>Version check in any search</td><td><code>... | r7vercheck ranges="&lt; 2.4.63" field=version</code></td><td>Adds range_status and in_range.</td></tr>
+        </table>
+        <p style="color:#a9b4bf">env= accepts a group (Prod, Non-prod) or a label (Prod · DC, Prod · DR, Non-prod · UAT / SIT / DEV), comma-separated.</p>
+      </html>
+    </panel>
+  </row>
+
+</form>

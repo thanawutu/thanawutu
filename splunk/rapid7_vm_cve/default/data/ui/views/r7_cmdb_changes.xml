@@ -1,0 +1,92 @@
+<form version="1.1" theme="dark">
+  <label>CMDB changes</label>
+  <description>Servers whose CMDB status, environment or device category changed. Built hourly by comparing cmdb_assets.csv with the previous snapshot (scheduled searches "Rapid7 CVE - CMDB change tracker" and "CMDB snapshot"). Mapping and coverage stay on the "CMDB and Rapid7 Asset Mapping" dashboard. INACTIVE and DECOMMISSION servers are hidden from the other pages of this app and never rescanned.</description>
+
+  <search id="changes">
+    <query><![CDATA[
+| inputlookup r7_cmdb_changes_lookup
+| eval detected_e=strptime(replace(detected,"Z",""),"%Y-%m-%dT%H:%M:%S")
+| where detected_e>=relative_time(now(),"$range$")
+| eval host=upper(host)
+| lookup cmdb_assets.csv host OUTPUT cmdb_status AS status_now cmdb_class AS cmdb_class_now cmdb_env AS cmdb_env_now device_category AS category_now
+| eval cmdb_class=cmdb_class_now, cmdb_env=cmdb_env_now
+| `r7_env_label`
+| eval change=case(change_type="environment","Environment changed", change_type="status_inactive","Status → INACTIVE / DECOMMISSION", change_type="status_active","Status → WORKING_ACTIVE", change_type="new_ci","New in CMDB", change_type="category","Device category changed", true(),"Status changed")
+]]></query>
+    <earliest>-90d</earliest>
+    <latest>now</latest>
+  </search>
+
+  <fieldset submitButton="false" autoRun="true">
+    <input type="dropdown" token="range" searchWhenChanged="true">
+      <label>Detected</label>
+      <choice value="-7d">Last 7 days</choice>
+      <choice value="-30d">Last 30 days</choice>
+      <choice value="-90d">Last 90 days</choice>
+      <default>-30d</default>
+    </input>
+    <input type="dropdown" token="change" searchWhenChanged="true">
+      <label>Change</label>
+      <choice value="*">All</choice>
+      <choice value="Environment changed">Environment changed</choice>
+      <choice value="Status → INACTIVE / DECOMMISSION">Status → INACTIVE / DECOMMISSION</choice>
+      <choice value="Status → WORKING_ACTIVE">Status → WORKING_ACTIVE</choice>
+      <choice value="New in CMDB">New in CMDB</choice>
+      <choice value="Device category changed">Device category changed</choice>
+      <default>*</default>
+    </input>
+  </fieldset>
+
+  <row>
+    <panel>
+      <table>
+        <title>Changes by type</title>
+        <search base="changes">
+          <query>| stats dc(host) as servers by change | sort - servers</query>
+        </search>
+        <option name="drilldown">row</option>
+        <drilldown>
+          <set token="form.change">$row.change$</set>
+        </drilldown>
+      </table>
+    </panel>
+    <panel>
+      <single>
+        <title>INACTIVE / DECOMMISSION but still answering Rapid7 (last 7 days)</title>
+        <search>
+          <query><![CDATA[
+`r7_latest(rapid7:vm:asset_site)` | dedup asset_id
+| `r7_cmdb_enrich`
+| search cmdb_status IN ("INACTIVE","DECOMMISSION")
+| eval ls=strptime(replace(last_scan,"Z",""),"%Y-%m-%dT%H:%M:%S")
+| where ls>=relative_time(now(),"-7d")
+| stats dc(asset_id) as servers
+]]></query>
+          <earliest>-3d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="useColors">1</option>
+        <option name="rangeValues">[0]</option>
+        <option name="rangeColors">["0x53a051","0xdc4e41"]</option>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <table>
+        <title>Change list</title>
+        <search base="changes">
+          <query>| search change="$change$" | table detected host change field from to status_now env_label category_now | sort - detected</query>
+        </search>
+        <option name="count">25</option>
+        <option name="drilldown">none</option>
+        <format type="color" field="change">
+          <colorPalette type="map">{"Environment changed":#F8BE34,"Status → INACTIVE / DECOMMISSION":#708794,"New in CMDB":#5A9BD5}</colorPalette>
+        </format>
+      </table>
+    </panel>
+  </row>
+</form>

@@ -1,0 +1,88 @@
+<form version="1.1" theme="dark" refresh="60">
+  <label>Scan jobs &amp; reports</label>
+  <description>Every rescan launched from CVE response, Inventory, Saved CVEs or the r7rescan command. The poller (scheduled search, every minute) starts the Rapid7 scans, checks their status until they finish, then re-reads software and findings and compares them with the snapshot saved at launch. This page refreshes every 60 s.</description>
+
+  <fieldset submitButton="false" autoRun="true">
+    <input type="text" token="job" searchWhenChanged="true">
+      <label>Job ID (or click a job)</label>
+      <default></default>
+    </input>
+  </fieldset>
+
+  <row>
+    <panel>
+      <title>Jobs</title>
+      <table>
+        <search>
+          <query>| r7scanstatus limit=100 | table job_id status reason launched_from launched_by servers rapid7_scans created finished result error</query>
+          <refresh>60s</refresh>
+        </search>
+        <option name="count">15</option>
+        <option name="drilldown">row</option>
+        <drilldown>
+          <set token="form.job">$row.job_id$</set>
+        </drilldown>
+        <format type="color" field="status">
+          <colorPalette type="map">{"Finished":#53A051,"Failed":#DC4E41,"Running":#5A9BD5,"Requested":#708794,"Collecting":#5A9BD5}</colorPalette>
+        </format>
+      </table>
+    </panel>
+  </row>
+
+  <row depends="$job$">
+    <panel>
+      <title>$job$: Rapid7 scans (status loop)</title>
+      <table>
+        <search>
+          <query>| r7scanstatus job=$job|s$ view=scans</query>
+          <refresh>60s</refresh>
+        </search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+
+  <row depends="$job$">
+    <panel>
+      <title>$job$: result summary</title>
+      <table>
+        <search>
+          <query>| r7scanstatus job=$job|s$ view=results | stats count as servers by cve_result version_change installed</query>
+          <refresh>60s</refresh>
+        </search>
+        <option name="drilldown">none</option>
+        <format type="color" field="cve_result">
+          <colorPalette type="map">{"CVE fixed":#53A051,"Not vulnerable":#53A051,"Still vulnerable":#DC4E41,"Newly found":#DC4E41,"Not verified":#F8BE34,"No Rapid7 check yet":#708794}</colorPalette>
+        </format>
+      </table>
+    </panel>
+  </row>
+
+  <row depends="$job$">
+    <panel>
+      <title>$job$: report (before / after per server)</title>
+      <table>
+        <search>
+          <query>| r7scanstatus job=$job|s$ view=results | table hostname ip env_label appname scan_login installed version_before last_scan_before version_after version_change range_status_after cve_before cve_after cve_result last_scan_after</query>
+          <refresh>60s</refresh>
+        </search>
+        <option name="count">50</option>
+        <option name="drilldown">none</option>
+        <format type="color" field="cve_result">
+          <colorPalette type="map">{"CVE fixed":#53A051,"Not vulnerable":#53A051,"Still vulnerable":#DC4E41,"Newly found":#DC4E41,"Not verified":#F8BE34,"No Rapid7 check yet":#708794}</colorPalette>
+        </format>
+        <format type="color" field="version_change">
+          <colorPalette type="map">{"Updated":#5A9BD5,"Removed":#53A051,"Downgraded":#DC4E41,"Unknown":#F8BE34}</colorPalette>
+        </format>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <html>
+        <p style="color:#a9b4bf"><b>CVE fixed</b>: Rapid7 found the CVE before, and this job's scan assessed the server, logged in (software data returned) and no longer finds it. <b>Not verified</b>: the server was not assessed by this job's scan, or the scan returned no software data (login failed), so the app does not call it fixed. <b>No Rapid7 check yet</b>: only the version comparison applies. Export any table with the Export button (CSV or PDF).</p>
+      </html>
+    </panel>
+  </row>
+</form>

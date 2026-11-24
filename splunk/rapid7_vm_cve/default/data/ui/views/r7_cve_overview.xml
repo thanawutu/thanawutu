@@ -1,0 +1,188 @@
+<form version="1.1" theme="dark">
+  <label>CVE impact overview</label>
+  <description>New Rapid7 checks (by date added) and how many of your Active servers they affect, by Prod (DC / DR) and Non-prod (UAT / SIT / DEV). Sources: rapid7:vm:vuln_content, rapid7:vm:asset_vuln, rapid7:vm:asset_site and your CMDB lookups.</description>
+
+  <search id="content">
+    <query><![CDATA[
+`r7_index` sourcetype="rapid7:vm:vuln_content" earliest=-8d
+| dedup vuln_id
+| eval added_e=strptime(substr(added,1,10),"%Y-%m-%d")
+| where added_e>=relative_time(now(),"-7d@d")
+| rename cves{} as cve
+| search $sev$
+| fields vuln_id cve title severity cvss_v3 published added modified added_e
+]]></query>
+    <earliest>-8d</earliest>
+    <latest>now</latest>
+  </search>
+
+  <search id="affected">
+    <query><![CDATA[
+`r7_latest(rapid7:vm:asset_vuln)` [search `r7_index` sourcetype="rapid7:vm:vuln_content" earliest=-8d | dedup vuln_id | eval added_e=strptime(substr(added,1,10),"%Y-%m-%d") | where added_e>=relative_time(now(),"-7d@d") | fields vuln_id | rename vuln_id as search | format]
+| rename vuln_ids{} as vuln_id
+| fields asset_id hostname ip vuln_id
+| mvexpand vuln_id
+| join type=inner vuln_id [search `r7_index` sourcetype="rapid7:vm:vuln_content" earliest=-8d | dedup vuln_id | eval added_e=strptime(substr(added,1,10),"%Y-%m-%d") | where added_e>=relative_time(now(),"-7d@d") | rename cves{} as cve | table vuln_id cve title severity cvss_v3]
+| `r7_cmdb_enrich`
+| where cmdb_status="WORKING_ACTIVE"
+| search env_label="$env$" $sev$
+| fields asset_id hostname ip vuln_id cve severity env_label env_group appname
+]]></query>
+    <earliest>-3d</earliest>
+    <latest>now</latest>
+  </search>
+
+  <fieldset submitButton="false" autoRun="true">
+    <input type="dropdown" token="env" searchWhenChanged="true">
+      <label>Environment</label>
+      <choice value="*">All</choice>
+      <choice value="Prod*">Prod (DC + DR)</choice>
+      <choice value="Prod · DC">Prod · DC</choice>
+      <choice value="Prod · DR">Prod · DR</choice>
+      <choice value="Non-prod*">Non-prod (UAT + SIT + DEV)</choice>
+      <choice value="Non-prod · UAT">Non-prod · UAT</choice>
+      <choice value="Non-prod · SIT">Non-prod · SIT</choice>
+      <choice value="Non-prod · DEV">Non-prod · DEV</choice>
+      <default>*</default>
+    </input>
+    <input type="dropdown" token="sev" searchWhenChanged="true">
+      <label>Severity</label>
+      <choice value="severity IN (&quot;Critical&quot;,&quot;Severe&quot;)">Critical + Severe</choice>
+      <choice value="severity=&quot;Critical&quot;">Critical</choice>
+      <choice value="severity=*">All</choice>
+      <default>severity IN ("Critical","Severe")</default>
+    </input>
+  </fieldset>
+
+  <row>
+    <panel>
+      <single>
+        <title>New CVEs (last 24 h)</title>
+        <search base="content">
+          <query>| where added_e>=relative_time(now(),"-1d@d") | mvexpand cve | stats dc(cve) as cves</query>
+        </search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>New CVEs (last 7 d)</title>
+        <search base="content">
+          <query>| mvexpand cve | stats dc(cve) as cves</query>
+        </search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>New CVEs affecting your servers (7 d)</title>
+        <search base="affected">
+          <query>| stats dc(cve) as cves</query>
+        </search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Prod servers affected (DC + DR)</title>
+        <search base="affected">
+          <query>| where env_group="Prod" | stats dc(asset_id) as servers</query>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="useColors">1</option>
+        <option name="rangeValues">[0]</option>
+        <option name="rangeColors">["0x53a051","0xdc4e41"]</option>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Non-prod servers affected (UAT + SIT + DEV)</title>
+        <search base="affected">
+          <query>| where env_group="Non-prod" | stats dc(asset_id) as servers</query>
+        </search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Software inventory coverage</title>
+        <search>
+          <query><![CDATA[
+`r7_latest(rapid7:vm:asset_site)` | dedup asset_id
+| stats count(eval(credentialed="true")) as with_sw count as total
+| eval coverage=round(with_sw/total*100,1)
+| fields coverage
+]]></query>
+          <earliest>-3d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="unit">%</option>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <table>
+        <title>New CVEs in Rapid7 (added in the last 7 days) and your affected servers</title>
+        <search>
+          <query><![CDATA[
+`r7_index` sourcetype="rapid7:vm:vuln_content" earliest=-8d
+| dedup vuln_id
+| eval added_e=strptime(substr(added,1,10),"%Y-%m-%d")
+| where added_e>=relative_time(now(),"-7d@d")
+| rename cves{} as cve
+| search $sev$
+| mvexpand cve
+| stats values(vuln_id) as rapid7_checks first(title) as title first(severity) as severity max(cvss_v3) as cvss_v3 min(published) as published min(added) as added max(modified) as modified by cve
+| join type=left cve
+    [search `r7_latest(rapid7:vm:asset_vuln)`
+     | rename vuln_ids{} as vuln_id | fields asset_id hostname ip vuln_id | mvexpand vuln_id
+     | join type=inner vuln_id [search `r7_index` sourcetype="rapid7:vm:vuln_content" earliest=-8d | dedup vuln_id | rename cves{} as cve | table vuln_id cve]
+     | `r7_cmdb_enrich` | where cmdb_status="WORKING_ACTIVE" | search env_label="$env$"
+     | mvexpand cve
+     | stats dc(asset_id) as your_servers dc(eval(if(env_label="Prod · DC",asset_id,null()))) as prod_dc dc(eval(if(env_label="Prod · DR",asset_id,null()))) as prod_dr dc(eval(if(env_group="Non-prod",asset_id,null()))) as non_prod by cve]
+| fillnull value=0 your_servers prod_dc prod_dr non_prod
+| sort - prod_dc - prod_dr - cvss_v3
+| table cve rapid7_checks title severity cvss_v3 published added modified your_servers prod_dc prod_dr non_prod
+| rename prod_dc as "Prod · DC" prod_dr as "Prod · DR" non_prod as "Non-prod"
+]]></query>
+          <earliest>-8d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">20</option>
+        <option name="drilldown">cell</option>
+        <drilldown>
+          <link target="_blank">r7_cve_response?form.cve=$row.cve$</link>
+        </drilldown>
+        <format type="color" field="severity">
+          <colorPalette type="map">{"Critical":#DC4E41,"Severe":#F8BE34,"Moderate":#708794}</colorPalette>
+        </format>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <table>
+        <title>Software inventory coverage by environment (servers with software data = credentialed scan or Insight Agent)</title>
+        <search>
+          <query><![CDATA[
+`r7_latest(rapid7:vm:asset_site)` | dedup asset_id
+| `r7_cmdb_enrich`
+| where cmdb_status="WORKING_ACTIVE" OR cmdb_status="NOT_IN_CMDB"
+| stats count as servers count(eval(credentialed="true")) as with_software_data by env_label
+| eval without=servers-with_software_data, coverage_pct=round(with_software_data/servers*100,1)
+| eval sort_order=case(env_label="Prod · DC",1, env_label="Prod · DR",2, like(env_label,"Non-prod%"),3, true(),4)
+| sort sort_order env_label | fields - sort_order
+]]></query>
+          <earliest>-3d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+</form>
