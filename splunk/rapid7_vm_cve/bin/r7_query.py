@@ -145,7 +145,8 @@ def _row(a, hit, spec, info, vuln_assets, findings_ok, announced, stale):
     else:
         vulnerable = False
     base = {
-        "version": version, "vendor": vendor, "ranges": spec.get("ranges") or "",
+        # the OS name lets range_status flag distro builds (back-ported fixes) as "Check advisory"
+        "version": version, "vendor": "%s %s" % (vendor or "", a.get("os") or ""), "ranges": spec.get("ranges") or "",
         "last_scan": a.get("last_scan"), "credentialed": L.truthy(a.get("credentialed")),
         "r7_vulnerable": vulnerable,
     }

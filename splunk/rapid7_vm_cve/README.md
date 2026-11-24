@@ -1,4 +1,4 @@
-# Rapid7 VM CVE Response (Splunk app 1.1.4)
+# Rapid7 VM CVE Response (Splunk app 1.1.5)
 
 CVE impact, software and OS inventory, rescans launched from Splunk with
 before/after results, saved CVEs and CMDB changes, for Rapid7 InsightVM.
@@ -60,7 +60,7 @@ re-runs a launch.
 
 ### 1. Heavy forwarder (SIEMFWDPR01): collectors
 
-1. Apps → Manage apps → Install app from file → `rapid7_vm_cve-1.1.4.tgz`.
+1. Apps → Manage apps → Install app from file → `rapid7_vm_cve-1.1.5.tgz`.
 2. Create `$SPLUNK_HOME/etc/apps/rapid7_vm_cve/local/rapid7_cve.conf`:
    ```
    [settings]
@@ -156,7 +156,7 @@ Environment labels come from the macro `r7_env_label`: Prod · DC = `cmdb_class`
 PROD, Prod · DR = DR, Non-prod · UAT / SIT / DEV = NONPROD split by `cmdb_env`.
 Edit the macro if your `cmdb_env` values differ.
 
-## Known limits in 1.1.4
+## Known limits in 1.1.5
 
 - Not yet run against your Rapid7 console or Splunk. Logic is covered by unit
   and end-to-end tests with simulated Rapid7 and splunkd.

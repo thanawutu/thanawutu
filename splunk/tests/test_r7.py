@@ -47,6 +47,12 @@ class VersionTests(unittest.TestCase):
         self.assertEqual(L.range_status("2.4.66", "< 2.4.63"), "Not in range")
         self.assertEqual(L.range_status("", "< 2.4.63"), "Unknown")
 
+    def test_distro_from_server_os(self):
+        self.assertEqual(L.range_status("8.7p1", "< 9.8", "OpenBSD Red Hat Enterprise Linux 9.4"), "Check advisory")
+        self.assertEqual(L.range_status("8.7p1", "< 9.8", "OpenBSD Ubuntu Linux 22.04"), "Check advisory")
+        self.assertEqual(L.range_status("8.7p1", "< 9.8", "OpenBSD Microsoft Windows Server 2019"), "In range")
+        self.assertEqual(L.range_status("9.9p1", "< 9.8", "OpenBSD Red Hat Enterprise Linux 9.4"), "Not in range")
+
     def test_software_match(self):
         self.assertTrue(L.software_matches("php", "PHP Group", "PHP"))
         self.assertTrue(L.software_matches("Apache*HTTP*", "Apache", "HTTP Server"))

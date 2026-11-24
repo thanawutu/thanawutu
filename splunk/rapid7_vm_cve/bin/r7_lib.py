@@ -106,9 +106,16 @@ def compare_versions(a, b):
     return 0
 
 
+_DISTROS = ("red hat", "redhat", "rhel", "canonical", "ubuntu", "debian", "oracle linux", "centos", "rocky",
+            "alma", "suse", "amazon linux", "fedora")
+
+
 def is_distro_build(version, vendor=""):
+    """True for distro-packaged builds, where fixes are often back-ported under an older
+    version number. vendor may also carry the server's OS name."""
     s = "%s %s" % (version or "", vendor or "")
-    return bool(_DISTRO_RE.search(s)) or "red hat" in s.lower() or "canonical" in s.lower()
+    low = s.lower()
+    return bool(_DISTRO_RE.search(s)) or any(d in low for d in _DISTROS)
 
 
 _OPS = {
