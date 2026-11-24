@@ -1,1 +1,1 @@
-vuln_id,title,platform,component,check_platform,severity,cvss_v3,published,added,modified,added_e,fresh_cve,cve_count,rollup,cves_str
+vuln_id,title,platform,component,check_platform,severity,cvss_v3,published,added,modified,added_e,published_e,fresh_cve,cve_count,rollup,cves_str

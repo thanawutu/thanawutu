@@ -1,6 +1,6 @@
 <form version="1.1" theme="dark">
   <label>CVE impact overview</label>
-  <description>New CVEs in Rapid7 (by date added; by default only CVEs published at most 90 days before Rapid7 added the check, so bulk re-adds of old checks are left out) with what they affect: software, vendor / platform, Rapid7 check platforms, and the OS and environments of your affected Active servers. Rollup checks (more than 20 CVEs) are left out unless included. Refreshed hourly by "Rapid7 CVE - recent checks lookup" (:20) and "recent hits lookup" (:30). Click a CVE to open it in CVE response.</description>
+  <description>New CVEs by announcement (published) date that Rapid7 already has a check for, with what they affect: software, vendor / platform, Rapid7 check platforms, and the OS and environments of your affected Active servers. Rollup checks (more than 20 CVEs) are left out unless included. Refreshed hourly by "Rapid7 CVE - recent checks lookup" (:20) and "recent hits lookup" (:30). Click a CVE to open it in CVE response.</description>
 
   <fieldset submitButton="false" autoRun="true">
     <input type="text" token="f_cve" searchWhenChanged="true">
@@ -39,33 +39,27 @@
       <default>severity IN ("Critical","Severe")</default>
     </input>
     <input type="dropdown" token="f_win" searchWhenChanged="true">
-      <label>Added (quick)</label>
+      <label>Published (quick)</label>
       <choice value="-1d@d">Last 24 hours</choice>
       <choice value="-7d@d">Last 7 days</choice>
       <choice value="-30d@d">Last 30 days</choice>
       <default>-7d@d</default>
     </input>
     <input type="text" token="f_addfrom" searchWhenChanged="true">
-      <label>Added from (YYYY-MM-DD, overrides quick)</label>
+      <label>Added to Rapid7 from (YYYY-MM-DD)</label>
       <default></default>
     </input>
     <input type="text" token="f_addto" searchWhenChanged="true">
-      <label>Added to (YYYY-MM-DD)</label>
+      <label>Added to Rapid7 to (YYYY-MM-DD)</label>
       <default></default>
     </input>
     <input type="text" token="f_pubfrom" searchWhenChanged="true">
-      <label>Published from (YYYY-MM-DD)</label>
+      <label>Published from (YYYY-MM-DD, overrides quick)</label>
       <default></default>
     </input>
     <input type="text" token="f_pubto" searchWhenChanged="true">
       <label>Published to (YYYY-MM-DD)</label>
       <default></default>
-    </input>
-    <input type="dropdown" token="f_fresh" searchWhenChanged="true">
-      <label>Which CVEs</label>
-      <choice value="fresh_cve=1">New CVEs (published ≤ 90 days before Rapid7 added the check)</choice>
-      <choice value="fresh_cve=*">Also old CVEs re-added by Rapid7</choice>
-      <default>fresh_cve=1</default>
     </input>
     <input type="dropdown" token="f_roll" searchWhenChanged="true">
       <label>Rollup checks (&gt; 20 CVEs)</label>
@@ -79,10 +73,10 @@
   <search id="cves">
     <query><![CDATA[
 | inputlookup r7_recent_checks.csv
-| search $f_sev$ $f_roll$ $f_fresh$
+| search $f_sev$ $f_roll$
 | eval a=substr(added,1,10), p=substr(published,1,10)
-| where ("$f_addfrom$"="" AND "$f_addto$"="" AND tonumber(added_e)>=relative_time(now(),"$f_win$")) OR (NOT ("$f_addfrom$"="" AND "$f_addto$"="") AND ("$f_addfrom$"="" OR a>="$f_addfrom$") AND ("$f_addto$"="" OR a<="$f_addto$"))
-| where ("$f_pubfrom$"="" OR p>="$f_pubfrom$") AND ("$f_pubto$"="" OR p<="$f_pubto$") AND coalesce(tonumber(cvss_v3),0)>=$f_cvss$
+| where ("$f_addfrom$"="" OR a>="$f_addfrom$") AND ("$f_addto$"="" OR a<="$f_addto$")
+| where (("$f_pubfrom$"="" AND "$f_pubto$"="" AND tonumber(published_e)>=relative_time(now(),"$f_win$")) OR (NOT ("$f_pubfrom$"="" AND "$f_pubto$"="") AND ("$f_pubfrom$"="" OR p>="$f_pubfrom$") AND ("$f_pubto$"="" OR p<="$f_pubto$"))) AND coalesce(tonumber(cvss_v3),0)>=$f_cvss$
 | eval cve=if(rollup=1, "ROLLUP:".vuln_id, split(cves_str,"|"))
 | mvexpand cve
 | where like(lower(cve), lower("%$f_cve$%")) AND like(lower(coalesce(title,"")), lower("%$f_title$%")) AND like(lower(coalesce(component,"")), lower("%$f_sw$%")) AND like(lower(coalesce(platform,"")." ".coalesce(check_platform,"")), lower("%$f_plat$%"))
@@ -103,10 +97,10 @@
   <search id="servers_kpi">
     <query><![CDATA[
 | inputlookup r7_recent_hits.csv
-| search cmdb_status="WORKING_ACTIVE" $f_sev$ $f_roll$ $f_fresh$
+| search cmdb_status="WORKING_ACTIVE" $f_sev$ $f_roll$
 | eval a=strftime(added_e,"%Y-%m-%d"), p=substr(published,1,10)
-| where ("$f_addfrom$"="" AND "$f_addto$"="" AND tonumber(added_e)>=relative_time(now(),"$f_win$")) OR (NOT ("$f_addfrom$"="" AND "$f_addto$"="") AND ("$f_addfrom$"="" OR a>="$f_addfrom$") AND ("$f_addto$"="" OR a<="$f_addto$"))
-| where ("$f_pubfrom$"="" OR p>="$f_pubfrom$") AND ("$f_pubto$"="" OR p<="$f_pubto$") AND coalesce(tonumber(cvss_v3),0)>=$f_cvss$
+| where ("$f_addfrom$"="" OR a>="$f_addfrom$") AND ("$f_addto$"="" OR a<="$f_addto$")
+| where (("$f_pubfrom$"="" AND "$f_pubto$"="" AND tonumber(published_e)>=relative_time(now(),"$f_win$")) OR (NOT ("$f_pubfrom$"="" AND "$f_pubto$"="") AND ("$f_pubfrom$"="" OR p>="$f_pubfrom$") AND ("$f_pubto$"="" OR p<="$f_pubto$"))) AND coalesce(tonumber(cvss_v3),0)>=$f_cvss$
 | where like(lower(cve), lower("%$f_cve$%")) AND like(lower(coalesce(title,"")), lower("%$f_title$%")) AND like(lower(coalesce(component,"")), lower("%$f_sw$%")) AND like(lower(coalesce(platform,"")." ".coalesce(check_platform,"")), lower("%$f_plat$%")) AND like(lower(coalesce(os,"")), lower("%$f_os$%"))
 | stats dc(eval(if(env_group="Prod",asset_id,null()))) as prod dc(eval(if(env_label="Prod · DC",asset_id,null()))) as dc dc(eval(if(env_label="Prod · DR",asset_id,null()))) as dr dc(eval(if(env_group="Non-prod",asset_id,null()))) as nonprod dc(eval(if(env_label="INFRA",asset_id,null()))) as infra
 ]]></query>
@@ -115,16 +109,16 @@
   <row>
     <panel>
       <single>
-        <title>New CVEs (last 24 h)</title>
+        <title>New CVEs published in the last 24 h</title>
         <search base="cves">
-          <query><![CDATA[| where rollup=0 AND added>=strftime(relative_time(now(),"-1d@d"),"%Y-%m-%d") | stats count]]></query>
+          <query><![CDATA[| where rollup=0 AND published>=strftime(relative_time(now(),"-1d@d"),"%Y-%m-%d") | stats count]]></query>
         </search>
         <option name="drilldown">none</option>
       </single>
     </panel>
     <panel>
       <single>
-        <title>New CVEs (shown)</title>
+        <title>New CVEs (shown, by published date)</title>
         <search base="cves">
           <query>| where rollup=0 | stats count</query>
         </search>
