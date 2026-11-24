@@ -51,8 +51,8 @@ class _Base(Script):
                    "api_calls": calls, "duration_s": round(time.time() - started, 1), "error": err}
             ew.write_event(Event(data=json.dumps(run) + "\n", sourcetype="rapid7:vm:run", index=index, stanza=name))
 
-    def write(self, ew, index, sourcetype, obj, when=None):
-        ew.write_event(Event(data=json.dumps(obj, sort_keys=True) + "\n", sourcetype=sourcetype, index=index,
+    def write(self, ew, index, sourcetype, obj, when=None, sort_keys=True):
+        ew.write_event(Event(data=json.dumps(obj, sort_keys=sort_keys) + "\n", sourcetype=sourcetype, index=index,
                              time="%.3f" % (when if when else time.time())))
 
 
@@ -146,12 +146,15 @@ class VulnContentCollector(_Base):
             prev = mod or prev
             cvss = v.get("cvss") or {}
             self.write(ew, index, "rapid7:vm:vuln_content", {
-                "vuln_id": v.get("id"), "title": v.get("title"), "cves": v.get("cves") or [],
+                # short fields first: Splunk's automatic JSON extraction stops after ~10 KB and some
+                # rollup checks list thousands of CVEs, so the long lists go last
+                "vuln_id": v.get("id"), "title": v.get("title"),
                 "severity": v.get("severity"), "severity_score": v.get("severityScore"),
                 "cvss_v3": (cvss.get("v3") or {}).get("score"), "cvss_v2": (cvss.get("v2") or {}).get("score"),
                 "published": v.get("published"), "added": v.get("added"), "modified": v.get("modified"),
-                "risk_score": v.get("riskScore"), "categories": v.get("categories") or [], "run_id": run_id,
-            }, when=calendar.timegm(mod.timetuple()) if mod else None)
+                "risk_score": v.get("riskScore"), "run_id": run_id, "cve_count": len(v.get("cves") or []),
+                "categories": v.get("categories") or [], "cves": v.get("cves") or [],
+            }, when=calendar.timegm(mod.timetuple()) if mod else None, sort_keys=False)
             n += 1
         if unsorted:
             ew.log("WARN", "vuln_content: API did not return results sorted by modified; read up to %d pages"

@@ -402,7 +402,7 @@ class QueryTests(unittest.TestCase):
                         {"asset_id": "3", "version": "8.3.27", "vendor": "PHP", "product": "PHP"},
                         {"asset_id": "4", "version": "8.1.20", "vendor": "PHP", "product": "PHP"}]
             if 'sourcetype="rapid7:vm:asset_vuln"' in spl:
-                return [{"asset_id": "1", "vuln_ids{}": ["php-cve-2026-20517", "other"]}]
+                return [{"asset_id": "1", "vuln_ids": ["php-cve-2026-20517", "other"]}]
             raise AssertionError("unexpected search: " + spl)
         L.oneshot = fake
 

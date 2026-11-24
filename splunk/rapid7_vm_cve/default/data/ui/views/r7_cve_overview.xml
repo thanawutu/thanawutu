@@ -4,11 +4,11 @@
 
   <search id="content">
     <query><![CDATA[
-`r7_index` sourcetype="rapid7:vm:vuln_content" earliest=-8d
+`r7_index` sourcetype="rapid7:vm:vuln_content" earliest=-8d | `r7_vc_fields`
 | dedup vuln_id
 | eval added_e=strptime(substr(added,1,10),"%Y-%m-%d")
 | where added_e>=relative_time(now(),"-7d@d")
-| rename cves{} as cve
+| rename cves as cve
 | search $sev$
 | fields vuln_id cve title severity cvss_v3 published added modified added_e
 ]]></query>
@@ -18,11 +18,11 @@
 
   <search id="affected">
     <query><![CDATA[
-`r7_latest(rapid7:vm:asset_vuln)` [search `r7_index` sourcetype="rapid7:vm:vuln_content" earliest=-8d | dedup vuln_id | eval added_e=strptime(substr(added,1,10),"%Y-%m-%d") | where added_e>=relative_time(now(),"-7d@d") | fields vuln_id | rename vuln_id as search | format]
-| rename vuln_ids{} as vuln_id
+`r7_latest(rapid7:vm:asset_vuln)` [search `r7_index` sourcetype="rapid7:vm:vuln_content" earliest=-8d | `r7_vc_fields` | dedup vuln_id | eval added_e=strptime(substr(added,1,10),"%Y-%m-%d") | where added_e>=relative_time(now(),"-7d@d") | fields vuln_id | rename vuln_id as search | format]
+| `r7_av_fields` | rename vuln_ids as vuln_id
 | fields asset_id hostname ip vuln_id
 | mvexpand vuln_id
-| join type=inner vuln_id [search `r7_index` sourcetype="rapid7:vm:vuln_content" earliest=-8d | dedup vuln_id | eval added_e=strptime(substr(added,1,10),"%Y-%m-%d") | where added_e>=relative_time(now(),"-7d@d") | rename cves{} as cve | table vuln_id cve title severity cvss_v3]
+| join type=inner vuln_id [search `r7_index` sourcetype="rapid7:vm:vuln_content" earliest=-8d | `r7_vc_fields` | dedup vuln_id | eval added_e=strptime(substr(added,1,10),"%Y-%m-%d") | where added_e>=relative_time(now(),"-7d@d") | rename cves as cve | table vuln_id cve title severity cvss_v3]
 | `r7_cmdb_enrich`
 | where cmdb_status="WORKING_ACTIVE"
 | search env_label="$env$" $sev$
@@ -129,18 +129,18 @@
         <title>New CVEs in Rapid7 (added in the last 7 days) and your affected servers</title>
         <search>
           <query><![CDATA[
-`r7_index` sourcetype="rapid7:vm:vuln_content" earliest=-8d
+`r7_index` sourcetype="rapid7:vm:vuln_content" earliest=-8d | `r7_vc_fields`
 | dedup vuln_id
 | eval added_e=strptime(substr(added,1,10),"%Y-%m-%d")
 | where added_e>=relative_time(now(),"-7d@d")
-| rename cves{} as cve
+| rename cves as cve
 | search $sev$
 | mvexpand cve
 | stats values(vuln_id) as rapid7_checks first(title) as title first(severity) as severity max(cvss_v3) as cvss_v3 min(published) as published min(added) as added max(modified) as modified by cve
 | join type=left cve
     [search `r7_latest(rapid7:vm:asset_vuln)`
-     | rename vuln_ids{} as vuln_id | fields asset_id hostname ip vuln_id | mvexpand vuln_id
-     | join type=inner vuln_id [search `r7_index` sourcetype="rapid7:vm:vuln_content" earliest=-8d | dedup vuln_id | rename cves{} as cve | table vuln_id cve]
+     | `r7_av_fields` | rename vuln_ids as vuln_id | fields asset_id hostname ip vuln_id | mvexpand vuln_id
+     | join type=inner vuln_id [search `r7_index` sourcetype="rapid7:vm:vuln_content" earliest=-8d | `r7_vc_fields` | dedup vuln_id | rename cves as cve | table vuln_id cve]
      | `r7_cmdb_enrich` | where cmdb_status="WORKING_ACTIVE" | search env_label="$env$"
      | mvexpand cve
      | stats dc(asset_id) as your_servers dc(eval(if(env_label="Prod · DC",asset_id,null()))) as prod_dc dc(eval(if(env_label="Prod · DR",asset_id,null()))) as prod_dr dc(eval(if(env_group="Non-prod",asset_id,null()))) as non_prod by cve]

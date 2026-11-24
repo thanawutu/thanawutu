@@ -29,7 +29,7 @@ def cve_info(service, index, cve):
         return {"has_check": False, "vuln_ids": [], "check_added": "", "severity": "", "cvss_v3": "",
                 "title": "", "published": ""}
     spl = ('search index=%s sourcetype="rapid7:vm:vuln_content" %s '
-           '| where mvfind(\'cves{}\', "^%s$")>=0 '
+           '| `r7_vc_fields` | where mvfind(cves, "^%s$")>=0 '
            '| stats latest(title) as title latest(severity) as severity max(cvss_v3) as cvss_v3 '
            'min(added) as added min(published) as published max(modified) as modified by vuln_id'
            % (L.spl_quote(index), L.spl_quote(cve), cve.replace('"', "")))
@@ -78,12 +78,12 @@ def finding_assets(service, index, vuln_ids):
     if not run_id:
         return set(), False
     terms = " OR ".join(L.spl_quote(v) for v in vuln_ids)
-    spl = ('search index=%s sourcetype="rapid7:vm:asset_vuln" run_id=%s (%s) | table asset_id vuln_ids{}'
+    spl = ('search index=%s sourcetype="rapid7:vm:asset_vuln" run_id=%s (%s) | `r7_av_fields` | table asset_id vuln_ids'
            % (L.spl_quote(index), L.spl_quote(run_id), terms))
     hit = set()
     wanted = set(vuln_ids)
     for r in L.oneshot(service, spl, earliest="-3d"):
-        if wanted & set(L.as_list(r.get("vuln_ids{}"))):
+        if wanted & set(L.as_list(r.get("vuln_ids"))):
             hit.add(r.get("asset_id"))
     return hit, True
 

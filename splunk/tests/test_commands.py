@@ -116,7 +116,7 @@ def search_results(spl):
         return [{"asset_id": a, "version": v, "vendor": "PHP", "product": "PHP"}
                 for a, v in (("1", "8.1.27"), ("2", "8.1.20"), ("3", "8.2.20"), ("4", "8.3.27"), ("5", "8.1.20"))]
     if 'sourcetype="rapid7:vm:asset_vuln"' in spl:
-        return [{"asset_id": "1", "vuln_ids{}": ["php-cve-2026-20517"]}]
+        return [{"asset_id": "1", "vuln_ids": ["php-cve-2026-20517"]}]
     return []
 
 
