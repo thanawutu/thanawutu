@@ -1,0 +1,275 @@
+<form version="1.1" theme="dark" script="r7_actions.js">
+  <label>Impacted assets</label>
+  <description>Server by server: which CVEs are still open (Rapid7 still finds them), how many are Critical / Severe / new, when the server was last scanned, and what was fixed recently. Click a server for its open CVEs. Active servers only (INACTIVE / DECOMMISSION hidden). Refreshed hourly by "Rapid7 CVE - asset summary" from the daily findings collector.</description>
+
+  <fieldset submitButton="false" autoRun="true">
+    <input type="text" token="f_host" searchWhenChanged="true">
+      <label>Hostname or IP</label>
+      <default></default>
+    </input>
+    <input type="text" token="f_app" searchWhenChanged="true">
+      <label>Application</label>
+      <default></default>
+    </input>
+    <input type="dropdown" token="f_env" searchWhenChanged="true">
+      <label>Environment</label>
+      <choice value="*">All</choice>
+      <choice value="Prod*">Prod (DC + DR)</choice>
+      <choice value="Prod · DC">Prod · DC</choice>
+      <choice value="Prod · DR">Prod · DR</choice>
+      <choice value="Non-prod*">Non-prod (UAT + SIT + DEV)</choice>
+      <choice value="INFRA">INFRA</choice>
+      <choice value="UNKNOWN">UNKNOWN</choice>
+      <default>*</default>
+    </input>
+    <input type="text" token="f_os" searchWhenChanged="true">
+      <label>OS</label>
+      <default></default>
+    </input>
+    <input type="text" token="f_cve" searchWhenChanged="true">
+      <label>CVE ID</label>
+      <default></default>
+      <change>
+        <condition value="">
+          <set token="cve_join"> </set>
+        </condition>
+        <condition>
+          <set token="cve_join">| join type=inner asset_id [search `r7_latest(rapid7:vm:asset_vuln)` [| inputlookup r7_vuln_catalog_lookup | search cves_str="*$value$*" | fields vuln_id | rename vuln_id as search | format] | fields asset_id]</set>
+        </condition>
+      </change>
+    </input>
+    <input type="text" token="f_sw" searchWhenChanged="true">
+      <label>Software</label>
+      <default></default>
+      <change>
+        <condition value="">
+          <set token="sw_join"> </set>
+        </condition>
+        <condition>
+          <set token="sw_join">| join type=inner asset_id [search `r7_latest(rapid7:vm:software)` product="*$value$*" | stats count by asset_id | fields asset_id]</set>
+        </condition>
+      </change>
+    </input>
+    <input type="dropdown" token="f_sev" searchWhenChanged="true">
+      <label>Has open</label>
+      <choice value="open&gt;0">Any open CVE</choice>
+      <choice value="critical&gt;0">Critical</choice>
+      <choice value="severe&gt;0">Severe</choice>
+      <choice value="cvss9&gt;0">CVSS 9.0+</choice>
+      <choice value="cvss7&gt;0">CVSS 7.0+</choice>
+      <choice value="new_30d&gt;0">New CVE (last 30 d)</choice>
+      <default>open&gt;0</default>
+    </input>
+  </fieldset>
+
+  <init>
+    <set token="cve_join"> </set>
+    <set token="sw_join"> </set>
+  </init>
+
+  <search id="assets">
+    <query><![CDATA[
+| inputlookup r7_asset_summary.csv
+| search cmdb_status="WORKING_ACTIVE" env_label="$f_env$"
+| where $f_sev$
+| where (like(lower(hostname), lower("%$f_host$%")) OR like(ip, "%$f_host$%")) AND like(lower(coalesce(appname,"")), lower("%$f_app$%")) AND like(lower(coalesce(os,"")), lower("%$f_os$%"))
+$cve_join$
+$sw_join$
+| join type=left asset_id
+    [search `r7_index` sourcetype="rapid7:vm:scan_result" cve_result="CVE fixed" earliest=-30d | stats dc(cve) as fixed_30d by asset_id]
+| fillnull value=0 fixed_30d
+| eval ls=strptime(replace(last_scan,"Z",""),"%Y-%m-%dT%H:%M:%S"), days_since_scan=round((now()-ls)/86400,0)
+| eval scan_data=case(isnull(ls),"None", days_since_scan>7,"Stale: rescan to verify", true(),"OK")
+| sort - critical - open
+]]></query>
+    <earliest>-30d</earliest>
+    <latest>now</latest>
+  </search>
+
+  <row>
+    <panel>
+      <single>
+        <title>Servers with open CVEs</title>
+        <search base="assets"><query>| stats count</query></search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Open CVE findings (server × check)</title>
+        <search base="assets"><query>| stats sum(open) as n</query></search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Critical open</title>
+        <search base="assets"><query>| stats sum(critical) as n</query></search>
+        <option name="colorMode">block</option>
+        <option name="useColors">1</option>
+        <option name="rangeValues">[0]</option>
+        <option name="rangeColors">["0x53a051","0xdc4e41"]</option>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Stale scan data (&gt; 7 days)</title>
+        <search base="assets"><query>| where days_since_scan&gt;7 OR isnull(days_since_scan) | stats count</query></search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>CVEs fixed in last 30 days (verified by rescan)</title>
+        <search base="assets"><query>| stats sum(fixed_30d) as n</query></search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Servers with open CVEs (click a server for its open CVEs)</title>
+      <table>
+        <search base="assets">
+          <query>| table hostname ip env_label appname os open critical severe moderate new_30d cvss9 last_scan days_since_scan scan_data fixed_30d asset_id | rename new_30d as "new (30 d)" cvss9 as "CVSS 9+" fixed_30d as "fixed (30 d)"</query>
+        </search>
+        <option name="count">20</option>
+        <option name="drilldown">row</option>
+        <drilldown>
+          <set token="asset">$row.asset_id$</set>
+          <set token="asset_name">$row.hostname$</set>
+        </drilldown>
+        <format type="color" field="scan_data">
+          <colorPalette type="map">{"Stale: rescan to verify":#F8BE34,"None":#5A9BD5,"OK":#53A051}</colorPalette>
+        </format>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Rescan servers to verify fixes</title>
+      <input type="multiselect" token="r_hosts">
+        <label>Servers</label>
+        <choice value="">(none)</choice>
+        <default></default>
+        <fieldForLabel>label</fieldForLabel>
+        <fieldForValue>asset_id</fieldForValue>
+        <search base="assets">
+          <query>| eval label=hostname." · ".env_label." · ".open." open" | table asset_id label</query>
+        </search>
+        <delimiter>,</delimiter>
+      </input>
+      <html>
+        <p style="margin:8px 0">
+          <button class="btn" data-r7-set="preview_nonce" data-r7-value="nonce">Preview (dry run)</button>
+          <button class="btn btn-primary" data-r7-set="launch_nonce" data-r7-value="nonce" data-r7-confirm="Request a rescan of the selected servers?">Rescan selected</button>
+          <span style="margin-left:12px;color:#a9b4bf">Requests are recorded now; scans start once the 1.1.7 executor on the forwarder is installed.</span>
+        </p>
+      </html>
+    </panel>
+  </row>
+
+  <row depends="$preview_nonce$">
+    <panel>
+      <title>Preview: nothing has been launched</title>
+      <table>
+        <search>
+          <query>| r7rescan hosts=$r_hosts|s$ only_hosts=true dryrun=true detail=true</query>
+        </search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+
+  <row depends="$launch_nonce$">
+    <panel>
+      <title>Rescan request</title>
+      <table>
+        <search>
+          <query>| r7rescan hosts=$r_hosts|s$ only_hosts=true dryrun=false request_id=$launch_nonce|s$ launched_from="Impacted assets" reason="Verify fixes"</query>
+        </search>
+        <option name="drilldown">cell</option>
+        <drilldown>
+          <link target="_blank">r7_scan_jobs?form.job=$row.job_id$</link>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <row depends="$asset$">
+    <panel>
+      <title>Open CVEs on $asset_name$ (not fixed)</title>
+      <input type="text" token="d_cve" searchWhenChanged="true">
+        <label>CVE ID</label>
+        <default></default>
+      </input>
+      <input type="text" token="d_sw" searchWhenChanged="true">
+        <label>Software</label>
+        <default></default>
+      </input>
+      <input type="dropdown" token="d_sev" searchWhenChanged="true">
+        <label>Severity</label>
+        <choice value="*">All</choice>
+        <choice value="Critical">Critical</choice>
+        <choice value="Severe">Severe</choice>
+        <choice value="Moderate">Moderate</choice>
+        <default>*</default>
+      </input>
+      <input type="dropdown" token="d_cvss" searchWhenChanged="true">
+        <label>CVSS v3</label>
+        <choice value="0">Any</choice>
+        <choice value="7">7.0+</choice>
+        <choice value="9">9.0+</choice>
+        <default>0</default>
+      </input>
+      <table>
+        <search>
+          <query><![CDATA[
+`r7_latest(rapid7:vm:asset_vuln)` asset_id="$asset$"
+| `r7_av_fields`
+| fields asset_id vuln_ids
+| mvexpand vuln_ids
+| lookup r7_vuln_catalog_lookup vuln_id AS vuln_ids OUTPUT title component severity cvss_v3 published added cve_count cves_str
+| eval cve=if(tonumber(cve_count)>20, "ROLLUP (".cve_count." CVEs)", replace(cves_str,"\|",", "))
+| search severity="$d_sev$"
+| where like(lower(coalesce(cve,"")), lower("%$d_cve$%")) AND like(lower(coalesce(component,"")), lower("%$d_sw$%")) AND coalesce(tonumber(cvss_v3),0)>=$d_cvss$
+| eval published=substr(published,1,10), added=substr(added,1,10)
+| table cve title component severity cvss_v3 published added vuln_ids
+| rename component as software vuln_ids as rapid7_check
+| sort - cvss_v3
+]]></query>
+          <earliest>-3d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">25</option>
+        <option name="drilldown">cell</option>
+        <drilldown>
+          <link target="_blank">r7_cve_response?form.cve=$row.cve$&amp;form.software=$row.software$</link>
+        </drilldown>
+        <format type="color" field="severity">
+          <colorPalette type="map">{"Critical":#DC4E41,"Severe":#F8BE34,"Moderate":#708794}</colorPalette>
+        </format>
+      </table>
+      <html>
+        <p style="color:#a9b4bf">First-found date, days open and Rapid7's fix for this server are added in 1.1.7. A CVE leaves this list only when a scan that logged in no longer finds it.</p>
+      </html>
+    </panel>
+  </row>
+
+  <row depends="$asset$">
+    <panel>
+      <title>Fixed recently on $asset_name$ (verified by rescan)</title>
+      <table>
+        <search>
+          <query>`r7_index` sourcetype="rapid7:vm:scan_result" asset_id="$asset$" cve_result="CVE fixed" | table _time job_id cve software version_before version_after version_change | sort - _time</query>
+          <earliest>-90d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+</form>

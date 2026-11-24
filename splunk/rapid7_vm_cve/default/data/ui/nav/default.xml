@@ -1,9 +1,11 @@
 <nav search_view="search" color="#1f2f42">
   <view name="r7_cve_overview" default="true" />
   <view name="r7_cve_response" />
+  <view name="r7_impacted_assets" />
   <view name="r7_inventory" />
   <view name="r7_scan_jobs" />
   <view name="r7_cmdb_changes" />
+  <view name="r7_asset_management" />
   <view name="r7_saved_cves" />
   <view name="search" />
 </nav>

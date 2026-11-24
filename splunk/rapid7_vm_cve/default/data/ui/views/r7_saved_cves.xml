@@ -3,6 +3,38 @@
   <description>A watchlist of CVEs you are tracking, saved with their announcement date and vulnerable version ranges. Re-run the query or rescan a group of servers (by environment and application) at any time, from here or with the Splunk search commands shown at the bottom.</description>
 
   <fieldset submitButton="false" autoRun="true">
+    <input type="text" token="w_cve" searchWhenChanged="true">
+      <label>CVE ID</label>
+      <default></default>
+    </input>
+    <input type="text" token="w_sw" searchWhenChanged="true">
+      <label>Software</label>
+      <default></default>
+    </input>
+    <input type="text" token="w_plat" searchWhenChanged="true">
+      <label>Vendor / platform</label>
+      <default></default>
+    </input>
+    <input type="text" token="w_os" searchWhenChanged="true">
+      <label>OS (affected servers)</label>
+      <default></default>
+    </input>
+    <input type="dropdown" token="w_cvss" searchWhenChanged="true">
+      <label>CVSS v3</label>
+      <choice value="0">Any</choice>
+      <choice value="4">4.0+</choice>
+      <choice value="7">7.0+</choice>
+      <choice value="9">9.0+</choice>
+      <default>0</default>
+    </input>
+    <input type="text" token="w_pub" searchWhenChanged="true">
+      <label>Published from (YYYY-MM-DD)</label>
+      <default></default>
+    </input>
+    <input type="text" token="w_add" searchWhenChanged="true">
+      <label>Added to Rapid7 from (YYYY-MM-DD)</label>
+      <default></default>
+    </input>
     <input type="dropdown" token="closed" searchWhenChanged="true">
       <label>Show closed</label>
       <choice value="false">No</choice>
@@ -16,7 +48,7 @@
       <title>Watchlist (click a CVE to rescan by group)</title>
       <table>
         <search>
-          <query>| r7cvewatch action=list with_counts=true include_closed=$closed$ | table cve software ranges announced rapid7_check affected_now prod_dc prod_dr non_prod confirmed_affected unknown fixed_since_saved status saved_by saved_at | rename prod_dc as "Prod · DC" prod_dr as "Prod · DR" non_prod as "Non-prod"</query>
+          <query>| r7cvewatch action=list with_counts=true include_closed=$closed$ | where like(lower(cve), lower("%$w_cve$%")) AND like(lower(coalesce(software,"")), lower("%$w_sw$%")) AND like(lower(coalesce(platform,"")), lower("%$w_plat$%")) AND like(lower(coalesce(os_list,"")), lower("%$w_os$%")) AND coalesce(tonumber(cvss_v3),0)&gt;=$w_cvss$ AND ("$w_pub$"="" OR published&gt;="$w_pub$") AND ("$w_add$"="" OR added&gt;="$w_add$") | table cve software ranges platform severity cvss_v3 published added announced rapid7_check affected_now prod_dc prod_dr non_prod confirmed_affected unknown fixed_since_saved os_list status saved_by saved_at | rename platform as "vendor / platform" prod_dc as "Prod · DC" prod_dr as "Prod · DR" non_prod as "Non-prod" os_list as "affected servers' OS"</query>
         </search>
         <option name="drilldown">row</option>
         <drilldown>

@@ -1,6 +1,6 @@
 <form version="1.1" theme="dark">
   <label>CMDB changes</label>
-  <description>Servers whose CMDB status, environment or device category changed. Built hourly by comparing cmdb_assets.csv with the previous snapshot (scheduled searches "Rapid7 CVE - CMDB change tracker" and "CMDB snapshot"). Mapping and coverage stay on the "CMDB and Rapid7 Asset Mapping" dashboard. INACTIVE and DECOMMISSION servers are hidden from the other pages of this app and never rescanned.</description>
+  <description>Search by hostname, OS and detected date (this tab has no CVE data). Servers whose CMDB status, environment or device category changed. Built hourly by comparing cmdb_assets.csv with the previous snapshot (scheduled searches "Rapid7 CVE - CMDB change tracker" and "CMDB snapshot"). Mapping and coverage stay on the "CMDB and Rapid7 Asset Mapping" dashboard. INACTIVE and DECOMMISSION servers are hidden from the other pages of this app and never rescanned.</description>
 
   <search id="changes">
     <query><![CDATA[
@@ -24,6 +24,18 @@
       <choice value="-30d">Last 30 days</choice>
       <choice value="-90d">Last 90 days</choice>
       <default>-30d</default>
+    </input>
+    <input type="text" token="c_host" searchWhenChanged="true">
+      <label>Hostname</label>
+      <default></default>
+    </input>
+    <input type="text" token="c_os" searchWhenChanged="true">
+      <label>OS</label>
+      <default></default>
+    </input>
+    <input type="text" token="c_from" searchWhenChanged="true">
+      <label>Detected from (YYYY-MM-DD)</label>
+      <default></default>
     </input>
     <input type="dropdown" token="change" searchWhenChanged="true">
       <label>Change</label>
@@ -79,7 +91,7 @@
       <table>
         <title>Change list</title>
         <search base="changes">
-          <query>| search change="$change$" | table detected host change field from to status_now env_label category_now | sort - detected</query>
+          <query>| search change="$change$" | where like(lower(host), lower("%$c_host$%")) AND ("$c_from$"="" OR substr(detected,1,10)&gt;="$c_from$") | join type=left host [search `r7_latest(rapid7:vm:asset_site)` earliest=-3d | dedup asset_id | eval host=upper(replace(hostname,"\..*$$","")) | stats first(os) as os by host] | where like(lower(coalesce(os,"")), lower("%$c_os$%")) | table detected host os change field from to status_now env_label category_now | sort - detected</query>
         </search>
         <option name="count">25</option>
         <option name="drilldown">none</option>

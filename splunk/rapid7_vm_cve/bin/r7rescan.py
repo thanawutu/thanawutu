@@ -63,9 +63,15 @@ class R7Rescan(GeneratingCommand):
         max_servers = int(settings["max_servers_per_job"])
         self.include_inactive = True
         self.include_nodata = bool(self.hosts)
-        spec = resolve_spec(svc, self)
-        spec["include_inactive"] = True
-        rows, info = Q.build_rows(svc, settings, spec)
+        if not (self.cve or self.software) and L.split_csv(self.hosts):
+            # plain rescan of named servers (Impacted assets, Asset management): no CVE or software
+            spec = {"cve": "", "software": "", "ranges": "", "env": [], "app": ""}
+            rows = Q.host_rows(svc, settings, L.split_csv(self.hosts))
+            info = {"has_check": False, "vuln_ids": [], "announced": ""}
+        else:
+            spec = resolve_spec(svc, self)
+            spec["include_inactive"] = True
+            rows, info = Q.build_rows(svc, settings, spec)
 
         wanted = set(x.lower() for x in L.split_csv(self.hosts))
         selected, skipped = [], []
@@ -120,7 +126,7 @@ class R7Rescan(GeneratingCommand):
             "cve": spec.get("cve") or "", "software": spec.get("software") or "", "ranges": spec.get("ranges") or "",
             "announced": info.get("announced") or "", "has_check": info["has_check"],
             "vuln_ids": info.get("vuln_ids") or [],
-            "reason": self.reason or (spec.get("cve") or "%s %s" % (spec.get("software"), spec.get("ranges"))),
+            "reason": self.reason or spec.get("cve") or ("%s %s" % (spec.get("software"), spec.get("ranges"))).strip() or "Rescan of selected servers",
             "launched_by": user, "launched_from": self.launched_from or "Search", "created": now, "updated": now,
             "scope": self.scope, "env": spec.get("env") or [], "app": spec.get("app") or "",
             "template_id": settings.get("scan_template_id") or "",

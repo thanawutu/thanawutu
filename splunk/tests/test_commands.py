@@ -97,6 +97,11 @@ class FakeSplunkd(BaseHTTPRequestHandler):
 
 
 def search_results(spl):
+    if "inputlookup r7_vuln_catalog_lookup" in spl:
+        return [{"vuln_id": "php-cve-2026-20517", "title": "Red Hat: CVE-2026-20517: PHP: issue", "severity": "Critical",
+                 "cvss_v3": "9.8", "added": "2026-11-19", "published": "2026-11-18", "cves_str": "CVE-2026-20517"},
+                {"vuln_id": "other-check", "title": "x", "severity": "Severe", "cvss_v3": "5", "added": "2026-11-19",
+                 "published": "2026-11-18", "cves_str": "CVE-2026-205170"}]
     if "rapid7:vm:vuln_content" in spl:
         return [{"vuln_id": "php-cve-2026-20517", "title": "PHP issue", "severity": "Critical", "cvss_v3": "9.8",
                  "added": "2026-11-19", "published": "2026-11-18"}]
@@ -233,6 +238,41 @@ class CommandTests(unittest.TestCase):
         self.assertEqual(errors, [], err)
         self.assertEqual(sorted(r["rapid7_site"] for r in rows), ["Site1", "Site2"])
         self.assertTrue(all(r["scan_status"] == "waiting for poller" for r in rows))
+
+
+    def test_4_catalog_lookup_exact_cve(self):
+        self.run_cmd("r7cvewatch", ["action=add", "cve=CVE-2026-20517", "announced=2026-11-18", "software=PHP",
+                                    "ranges=8.1 < 8.1.34"])
+        FakeSplunkd.searches[:] = []
+        rows, errors, err = self.run_cmd("r7cve", ["cve=CVE-2026-20517"])
+        self.assertEqual(errors, [], err)
+        self.assertEqual(rows[0]["vuln_ids"], "php-cve-2026-20517")  # CVE-2026-205170 not matched as a prefix
+        self.assertFalse(any("rapid7:vm:vuln_content" in q for q in FakeSplunkd.searches))  # catalog was enough
+
+    def test_5_plain_host_rescan(self):
+        rows, errors, err = self.run_cmd("r7rescan", ["hosts=PRDWEB01,OLDWEB,NOPE", "only_hosts=true", "dryrun=true",
+                                                      "detail=true"])
+        self.assertEqual(errors, [], err)
+        acts = dict((r["hostname"], (r["action"], r["reason"])) for r in rows)
+        self.assertEqual(acts["PRDWEB01"][0], "scan")
+        self.assertEqual(acts["OLDWEB"], ("skip", "INACTIVE in CMDB"))
+        self.assertEqual(acts["nope"][0], "skip")
+
+    def test_6_asset_fix_requests(self):
+        rows, errors, err = self.run_cmd("r7assetaction", ["action=request", "hosts=PPRAPI02, PRDAPP31",
+                                                           "issue=Environment differs", "note=Move to PROD site",
+                                                           "request_id=RQ1"])
+        self.assertEqual(errors, [], err)
+        rid = rows[0]["id"]
+        self.assertEqual((rows[0]["status"], rows[0]["assets"]), ("Open", "2"))
+        rows, errors, err = self.run_cmd("r7assetaction", ["action=request", "hosts=PPRAPI02", "request_id=RQ1"])
+        self.assertIn("Already recorded", rows[0]["message"])
+        rows, errors, err = self.run_cmd("r7assetaction", ["action=request", "hosts="])
+        self.assertTrue(errors and "at least one asset" in errors[0][1])
+        rows, errors, err = self.run_cmd("r7assetaction", ["action=done", "id=" + rid, "note=moved by R7 team"])
+        self.assertEqual(rows[0]["status"], "Done")
+        rows, errors, err = self.run_cmd("r7assetaction", ["action=list"])
+        self.assertTrue(any(r["id"] == rid and r["status"] == "Done" for r in rows))
 
 
 if __name__ == "__main__":

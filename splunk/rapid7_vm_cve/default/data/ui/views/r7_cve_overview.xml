@@ -1,42 +1,108 @@
 <form version="1.1" theme="dark">
   <label>CVE impact overview</label>
-  <description>New Rapid7 checks (by date added) and how many of your Active servers they affect: Prod (DC / DR), Non-prod (UAT / SIT / DEV) and INFRA. Rollup checks that list more than 20 CVEs are left out unless you include them. Figures come from lookups refreshed hourly by "Rapid7 CVE - recent checks lookup" (:20) and "recent hits lookup" (:30).</description>
+  <description>New CVEs in Rapid7 (by date added) with what they affect: software, vendor / platform, Rapid7 check platforms, and the OS and environments of your affected Active servers. Rollup checks (more than 20 CVEs) are left out unless included. Refreshed hourly by "Rapid7 CVE - recent checks lookup" (:20) and "recent hits lookup" (:30). Click a CVE to open it in CVE response.</description>
 
   <fieldset submitButton="false" autoRun="true">
-    <input type="dropdown" token="env" searchWhenChanged="true">
-      <label>Environment</label>
-      <choice value="*">All</choice>
-      <choice value="Prod*">Prod (DC + DR)</choice>
-      <choice value="Prod · DC">Prod · DC</choice>
-      <choice value="Prod · DR">Prod · DR</choice>
-      <choice value="Non-prod*">Non-prod (UAT + SIT + DEV)</choice>
-      <choice value="Non-prod · UAT">Non-prod · UAT</choice>
-      <choice value="Non-prod · SIT">Non-prod · SIT</choice>
-      <choice value="Non-prod · DEV">Non-prod · DEV</choice>
-      <choice value="INFRA">INFRA</choice>
-      <default>*</default>
+    <input type="text" token="f_cve" searchWhenChanged="true">
+      <label>CVE ID</label>
+      <default></default>
     </input>
-    <input type="dropdown" token="sev" searchWhenChanged="true">
+    <input type="text" token="f_title" searchWhenChanged="true">
+      <label>Title contains</label>
+      <default></default>
+    </input>
+    <input type="text" token="f_sw" searchWhenChanged="true">
+      <label>Software</label>
+      <default></default>
+    </input>
+    <input type="text" token="f_plat" searchWhenChanged="true">
+      <label>Vendor / platform</label>
+      <default></default>
+    </input>
+    <input type="text" token="f_os" searchWhenChanged="true">
+      <label>OS (your servers)</label>
+      <default></default>
+    </input>
+    <input type="dropdown" token="f_cvss" searchWhenChanged="true">
+      <label>CVSS v3 score</label>
+      <choice value="0">Any</choice>
+      <choice value="4">4.0 or higher</choice>
+      <choice value="7">7.0 or higher</choice>
+      <choice value="9">9.0 or higher</choice>
+      <default>0</default>
+    </input>
+    <input type="dropdown" token="f_sev" searchWhenChanged="true">
       <label>Severity</label>
       <choice value="severity IN (&quot;Critical&quot;,&quot;Severe&quot;)">Critical + Severe</choice>
       <choice value="severity=&quot;Critical&quot;">Critical</choice>
       <choice value="severity=*">All</choice>
       <default>severity IN ("Critical","Severe")</default>
     </input>
-    <input type="dropdown" token="rollup" searchWhenChanged="true">
-      <label>Rollup checks (more than 20 CVEs)</label>
+    <input type="dropdown" token="f_win" searchWhenChanged="true">
+      <label>Added (quick)</label>
+      <choice value="-1d@d">Last 24 hours</choice>
+      <choice value="-7d@d">Last 7 days</choice>
+      <choice value="-30d@d">Last 30 days</choice>
+      <default>-7d@d</default>
+    </input>
+    <input type="text" token="f_addfrom" searchWhenChanged="true">
+      <label>Added from (YYYY-MM-DD, overrides quick)</label>
+      <default></default>
+    </input>
+    <input type="text" token="f_addto" searchWhenChanged="true">
+      <label>Added to (YYYY-MM-DD)</label>
+      <default></default>
+    </input>
+    <input type="text" token="f_pubfrom" searchWhenChanged="true">
+      <label>Published from (YYYY-MM-DD)</label>
+      <default></default>
+    </input>
+    <input type="text" token="f_pubto" searchWhenChanged="true">
+      <label>Published to (YYYY-MM-DD)</label>
+      <default></default>
+    </input>
+    <input type="dropdown" token="f_roll" searchWhenChanged="true">
+      <label>Rollup checks (&gt; 20 CVEs)</label>
       <choice value="rollup=0">Leave out</choice>
       <choice value="rollup=*">Include</choice>
       <default>rollup=0</default>
     </input>
   </fieldset>
 
-  <search id="hits">
+  <!-- one row per CVE, all searches applied -->
+  <search id="cves">
+    <query><![CDATA[
+| inputlookup r7_recent_checks.csv
+| search $f_sev$ $f_roll$
+| eval a=substr(added,1,10), p=substr(published,1,10)
+| where ("$f_addfrom$"="" AND "$f_addto$"="" AND tonumber(added_e)>=relative_time(now(),"$f_win$")) OR (NOT ("$f_addfrom$"="" AND "$f_addto$"="") AND ("$f_addfrom$"="" OR a>="$f_addfrom$") AND ("$f_addto$"="" OR a<="$f_addto$"))
+| where ("$f_pubfrom$"="" OR p>="$f_pubfrom$") AND ("$f_pubto$"="" OR p<="$f_pubto$") AND coalesce(tonumber(cvss_v3),0)>=$f_cvss$
+| eval cve=if(rollup=1, "ROLLUP:".vuln_id, split(cves_str,"|"))
+| mvexpand cve
+| where like(lower(cve), lower("%$f_cve$%")) AND like(lower(coalesce(title,"")), lower("%$f_title$%")) AND like(lower(coalesce(component,"")), lower("%$f_sw$%")) AND like(lower(coalesce(platform,"")." ".coalesce(check_platform,"")), lower("%$f_plat$%"))
+| stats values(vuln_id) as rapid7_checks values(check_platform) as check_platforms first(title) as title first(component) as software first(platform) as platform first(severity) as severity max(cvss_v3) as cvss_v3 min(p) as published min(a) as added max(rollup) as rollup by cve
+| join type=left cve
+    [| inputlookup r7_recent_hits.csv
+     | search cmdb_status="WORKING_ACTIVE"
+     | stats dc(asset_id) as your_servers dc(eval(if(env_label="Prod · DC",asset_id,null()))) as prod_dc dc(eval(if(env_label="Prod · DR",asset_id,null()))) as prod_dr dc(eval(if(env_group="Non-prod",asset_id,null()))) as non_prod dc(eval(if(env_label="INFRA",asset_id,null()))) as infra values(os) as os_list by cve]
+| fillnull value=0 your_servers prod_dc prod_dr non_prod infra
+| eval os_list=mvjoin(os_list, "; ")
+| where like(lower(coalesce(os_list,"")), lower("%$f_os$%"))
+| eval sortp=prod_dc+prod_dr
+| sort - sortp - your_servers - cvss_v3
+| fields - sortp
+]]></query>
+  </search>
+
+  <search id="servers_kpi">
     <query><![CDATA[
 | inputlookup r7_recent_hits.csv
-| search cmdb_status="WORKING_ACTIVE" env_label="$env$" $sev$ $rollup$
-| where added_e>=relative_time(now(),"-7d@d")
-| stats dc(eval(if(like(cve,"ROLLUP:%"),null(),cve))) as cves dc(eval(if(env_group="Prod",asset_id,null()))) as prod dc(eval(if(env_group="Non-prod",asset_id,null()))) as nonprod dc(eval(if(env_label="INFRA",asset_id,null()))) as infra
+| search cmdb_status="WORKING_ACTIVE" $f_sev$ $f_roll$
+| eval a=strftime(added_e,"%Y-%m-%d"), p=substr(published,1,10)
+| where ("$f_addfrom$"="" AND "$f_addto$"="" AND tonumber(added_e)>=relative_time(now(),"$f_win$")) OR (NOT ("$f_addfrom$"="" AND "$f_addto$"="") AND ("$f_addfrom$"="" OR a>="$f_addfrom$") AND ("$f_addto$"="" OR a<="$f_addto$"))
+| where ("$f_pubfrom$"="" OR p>="$f_pubfrom$") AND ("$f_pubto$"="" OR p<="$f_pubto$") AND coalesce(tonumber(cvss_v3),0)>=$f_cvss$
+| where like(lower(cve), lower("%$f_cve$%")) AND like(lower(coalesce(title,"")), lower("%$f_title$%")) AND like(lower(coalesce(component,"")), lower("%$f_sw$%")) AND like(lower(coalesce(platform,"")." ".coalesce(check_platform,"")), lower("%$f_plat$%")) AND like(lower(coalesce(os,"")), lower("%$f_os$%"))
+| stats dc(eval(if(env_group="Prod",asset_id,null()))) as prod dc(eval(if(env_label="Prod · DC",asset_id,null()))) as dc dc(eval(if(env_label="Prod · DR",asset_id,null()))) as dr dc(eval(if(env_group="Non-prod",asset_id,null()))) as nonprod dc(eval(if(env_label="INFRA",asset_id,null()))) as infra
 ]]></query>
   </search>
 
@@ -44,38 +110,26 @@
     <panel>
       <single>
         <title>New CVEs (last 24 h)</title>
-        <search>
-          <query><![CDATA[
-| inputlookup r7_recent_checks.csv
-| search $sev$ rollup=0
-| where added_e>=relative_time(now(),"-1d@d")
-| eval cve=split(cves_str,"|") | mvexpand cve | where cve!=""
-| stats dc(cve) as cves
-]]></query>
+        <search base="cves">
+          <query><![CDATA[| where rollup=0 AND added>=strftime(relative_time(now(),"-1d@d"),"%Y-%m-%d") | stats count]]></query>
         </search>
         <option name="drilldown">none</option>
       </single>
     </panel>
     <panel>
       <single>
-        <title>New CVEs (last 7 d)</title>
-        <search>
-          <query><![CDATA[
-| inputlookup r7_recent_checks.csv
-| search $sev$ rollup=0
-| where added_e>=relative_time(now(),"-7d@d")
-| eval cve=split(cves_str,"|") | mvexpand cve | where cve!=""
-| stats dc(cve) as cves
-]]></query>
+        <title>New CVEs (shown)</title>
+        <search base="cves">
+          <query>| where rollup=0 | stats count</query>
         </search>
         <option name="drilldown">none</option>
       </single>
     </panel>
     <panel>
       <single>
-        <title>New CVEs affecting your servers (7 d)</title>
-        <search base="hits">
-          <query>| fields cves</query>
+        <title>Affecting your servers</title>
+        <search base="cves">
+          <query>| where your_servers&gt;0 | stats count</query>
         </search>
         <option name="drilldown">none</option>
       </single>
@@ -83,7 +137,7 @@
     <panel>
       <single>
         <title>Prod servers affected (DC + DR)</title>
-        <search base="hits">
+        <search base="servers_kpi">
           <query>| fields prod</query>
         </search>
         <option name="colorMode">block</option>
@@ -95,8 +149,8 @@
     </panel>
     <panel>
       <single>
-        <title>Non-prod servers affected (UAT + SIT + DEV)</title>
-        <search base="hits">
+        <title>Non-prod servers affected</title>
+        <search base="servers_kpi">
           <query>| fields nonprod</query>
         </search>
         <option name="drilldown">none</option>
@@ -105,7 +159,7 @@
     <panel>
       <single>
         <title>INFRA servers affected</title>
-        <search base="hits">
+        <search base="servers_kpi">
           <query>| fields infra</query>
         </search>
         <option name="drilldown">none</option>
@@ -133,29 +187,18 @@
   <row>
     <panel>
       <table>
-        <title>New CVEs in Rapid7 (added in the last 7 days) and your affected Active servers</title>
-        <search>
+        <title>New CVEs (click a CVE to open it in CVE response)</title>
+        <search base="cves">
           <query><![CDATA[
-| inputlookup r7_recent_checks.csv
-| search $sev$ $rollup$
-| where added_e>=relative_time(now(),"-7d@d")
-| eval cve=if(rollup=1, "ROLLUP:".vuln_id, split(cves_str,"|"))
-| mvexpand cve
-| stats values(vuln_id) as rapid7_checks first(title) as title first(severity) as severity max(cvss_v3) as cvss_v3 min(published) as published min(added) as added max(modified) as modified max(cve_count) as cves_in_check by cve
-| join type=left cve
-    [| inputlookup r7_recent_hits.csv
-     | search cmdb_status="WORKING_ACTIVE" env_label="$env$"
-     | stats dc(asset_id) as your_servers dc(eval(if(env_label="Prod · DC",asset_id,null()))) as prod_dc dc(eval(if(env_label="Prod · DR",asset_id,null()))) as prod_dr dc(eval(if(env_group="Non-prod",asset_id,null()))) as non_prod dc(eval(if(env_label="INFRA",asset_id,null()))) as infra by cve]
-| fillnull value=0 your_servers prod_dc prod_dr non_prod infra
-| sort - prod_dc - prod_dr - your_servers - cvss_v3
-| table cve rapid7_checks title severity cvss_v3 published added modified your_servers prod_dc prod_dr non_prod infra
-| rename prod_dc as "Prod · DC" prod_dr as "Prod · DR" non_prod as "Non-prod" infra as "INFRA"
+| eval check_platforms=mvjoin(check_platforms,", "), rapid7_checks=mvjoin(rapid7_checks,", ")
+| table cve title software platform check_platforms os_list severity cvss_v3 published added your_servers prod_dc prod_dr non_prod infra rapid7_checks
+| rename platform as "vendor / platform" check_platforms as "Rapid7 check platforms" os_list as "your servers' OS" prod_dc as "Prod · DC" prod_dr as "Prod · DR" non_prod as "Non-prod" infra as "INFRA"
 ]]></query>
         </search>
-        <option name="count">20</option>
-        <option name="drilldown">cell</option>
+        <option name="count">25</option>
+        <option name="drilldown">row</option>
         <drilldown>
-          <link target="_blank">r7_cve_response?form.cve=$row.cve$</link>
+          <link target="_blank">r7_cve_response?form.cve=$row.cve$&amp;form.software=$row.software$</link>
         </drilldown>
         <format type="color" field="severity">
           <colorPalette type="map">{"Critical":#DC4E41,"Severe":#F8BE34,"Moderate":#708794}</colorPalette>
@@ -193,7 +236,7 @@
         <search>
           <query><![CDATA[
 | rest /servicesNS/-/rapid7_vm_cve/saved/searches splunk_server=local
-| search title IN ("Rapid7 CVE - recent checks lookup","Rapid7 CVE - recent hits lookup")
+| search title IN ("Rapid7 CVE - recent checks lookup","Rapid7 CVE - recent hits lookup","Rapid7 CVE - vuln catalog","Rapid7 CVE - asset summary")
 | table title cron_schedule next_scheduled_time
 | append [| inputlookup r7_recent_checks.csv | stats count as rows | eval title="r7_recent_checks.csv (checks added in 30 days)"]
 | append [| inputlookup r7_recent_hits.csv | stats count as rows | eval title="r7_recent_hits.csv (server × CVE findings)"]

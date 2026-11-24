@@ -113,6 +113,10 @@ class R7CveWatch(GeneratingCommand):
                     "confirmed_affected": sum(1 for r in open_rows if r["verdict"] == "Affected"),
                     "unknown": sum(1 for r in open_rows if r["verdict"] == "Unknown"),
                     "fixed_since_saved": fixed.get(d.get("cve"), 0),
+                    "severity": info.get("severity", ""), "cvss_v3": info.get("cvss_v3", ""),
+                    "published": (info.get("published") or "")[:10], "added": (info.get("check_added") or "")[:10],
+                    "platform": info.get("platform", ""),
+                    "os_list": "; ".join(sorted(set(r["os"] for r in open_rows if r.get("os")))[:5]),
                 })
                 if self.autoclose and d.get("status") == "Open" and not open_rows and info["has_check"]:
                     d["status"], d["closed_at"] = "Closed", L.iso(L.utcnow())

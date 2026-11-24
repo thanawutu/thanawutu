@@ -1,14 +1,14 @@
 <form version="1.1" theme="dark" script="r7_actions.js">
   <label>CVE response</label>
-  <description>Enter a CVE (saved or with a Rapid7 check). For a CVE that is not saved, also give the software and vulnerable versions. Lists affected servers with version, scan freshness against the announcement, Rapid7 result and verdict; preview and launch a rescan. INACTIVE and DECOMMISSION servers are hidden and never rescanned.</description>
+  <description>The latest new CVEs are at the top (click one to fill in the CVE). Enter a CVE (saved or with a Rapid7 check). For a CVE that is not saved, also give the software and vulnerable versions. Lists affected servers with version, scan freshness against the announcement, Rapid7 result and verdict; preview and launch a rescan. INACTIVE and DECOMMISSION servers are hidden and never rescanned.</description>
 
-  <search id="servers">
+  <search id="servers" depends="$ready$">
     <query><![CDATA[
 | r7cve cve=$cve|s$ software=$software|s$ ranges=$ranges|s$ announced=$announced|s$ env=$env|s$ app=$app|s$
 ]]></query>
   </search>
 
-  <fieldset submitButton="true" autoRun="false">
+  <fieldset submitButton="true" autoRun="true">
     <input type="text" token="cve">
       <label>CVE ID</label>
       <default></default>
@@ -43,7 +43,105 @@
     </input>
   </fieldset>
 
+  <!-- shows the panels only when a CVE or software is given, instead of an error -->
+  <search>
+    <query>| makeresults | eval ok=if(len(trim("$cve$"))&gt;0 OR len(trim("$software$"))&gt;0, 1, 0)</query>
+    <done>
+      <condition match="'result.ok' == 1">
+        <set token="ready">1</set>
+      </condition>
+      <condition>
+        <unset token="ready"></unset>
+      </condition>
+    </done>
+  </search>
+
   <row>
+    <panel>
+      <title>Latest 10 new CVEs in Rapid7 (newest first, refreshes every hour; click a CVE to fill in the CVE ID)</title>
+      <input type="text" token="l_cve" searchWhenChanged="true">
+        <label>CVE ID</label>
+        <default></default>
+      </input>
+      <input type="text" token="l_sw" searchWhenChanged="true">
+        <label>Software</label>
+        <default></default>
+      </input>
+      <input type="text" token="l_plat" searchWhenChanged="true">
+        <label>Vendor / platform</label>
+        <default></default>
+      </input>
+      <input type="text" token="l_os" searchWhenChanged="true">
+        <label>OS (your servers)</label>
+        <default></default>
+      </input>
+      <input type="dropdown" token="l_cvss" searchWhenChanged="true">
+        <label>CVSS v3</label>
+        <choice value="0">Any</choice>
+        <choice value="4">4.0+</choice>
+        <choice value="7">7.0+</choice>
+        <choice value="9">9.0+</choice>
+        <default>0</default>
+      </input>
+      <input type="text" token="l_pub" searchWhenChanged="true">
+        <label>Published from (YYYY-MM-DD)</label>
+        <default></default>
+      </input>
+      <input type="text" token="l_add" searchWhenChanged="true">
+        <label>Added from (YYYY-MM-DD)</label>
+        <default></default>
+      </input>
+      <table>
+        <search>
+          <query><![CDATA[
+| inputlookup r7_recent_checks.csv
+| where rollup=0
+| eval a=substr(added,1,10), p=substr(published,1,10), cve=split(cves_str,"|")
+| mvexpand cve
+| stats min(a) as added min(p) as published first(title) as title first(component) as software first(platform) as platform first(severity) as severity max(cvss_v3) as cvss_v3 by cve
+| join type=left cve
+    [| inputlookup r7_recent_hits.csv
+     | search cmdb_status="WORKING_ACTIVE"
+     | stats dc(eval(if(env_label="Prod · DC",asset_id,null()))) as prod_dc dc(eval(if(env_label="Prod · DR",asset_id,null()))) as prod_dr dc(eval(if(env_group="Non-prod",asset_id,null()))) as non_prod dc(eval(if(env_label="INFRA",asset_id,null()))) as infra values(os) as os_list by cve]
+| fillnull value=0 prod_dc prod_dr non_prod infra
+| eval os_list=mvjoin(os_list,"; ")
+| where like(lower(cve), lower("%$l_cve$%")) AND like(lower(coalesce(software,"")), lower("%$l_sw$%")) AND like(lower(coalesce(platform,"")), lower("%$l_plat$%")) AND like(lower(coalesce(os_list,"")), lower("%$l_os$%")) AND coalesce(tonumber(cvss_v3),0)>=$l_cvss$ AND ("$l_pub$"="" OR published>="$l_pub$") AND ("$l_add$"="" OR added>="$l_add$")
+| eval new=if(added>=strftime(relative_time(now(),"-1d@d"),"%Y-%m-%d"),"NEW","")
+| sort - added - cvss_v3
+| head 10
+| table new added cve title software platform os_list severity cvss_v3 published prod_dc prod_dr non_prod infra
+| rename platform as "vendor / platform" os_list as "your servers' OS" prod_dc as "Prod · DC" prod_dr as "Prod · DR" non_prod as "Non-prod" infra as "INFRA"
+]]></query>
+          <refresh>1h</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">row</option>
+        <drilldown>
+          <set token="form.cve">$row.cve$</set>
+          <set token="cve">$row.cve$</set>
+          <set token="form.software">$row.software$</set>
+          <set token="software">$row.software$</set>
+        </drilldown>
+        <format type="color" field="new">
+          <colorPalette type="map">{"NEW":#F2A07B}</colorPalette>
+        </format>
+        <format type="color" field="severity">
+          <colorPalette type="map">{"Critical":#DC4E41,"Severe":#F8BE34,"Moderate":#708794}</colorPalette>
+        </format>
+      </table>
+    </panel>
+  </row>
+
+  <row rejects="$ready$">
+    <panel>
+      <html>
+        <p style="padding:10px 14px;border:1px solid #2b4a6b;background:#13202d;color:#9fd1ff;border-radius:4px">Enter a CVE ID (or click one in the latest CVEs above), or the software and vulnerable versions, then Submit. The panels below appear once a CVE or software is given.</p>
+      </html>
+    </panel>
+  </row>
+
+  <row depends="$ready$">
     <panel>
       <title>1 · Rapid7 check</title>
       <table>
@@ -79,12 +177,30 @@
     </panel>
   </row>
 
-  <row>
+  <row depends="$ready$">
     <panel>
       <title>2 · Servers: version, scan freshness, Rapid7 result, verdict</title>
+      <input type="text" token="s_host" searchWhenChanged="true">
+        <label>Hostname or IP</label>
+        <default></default>
+      </input>
+      <input type="text" token="s_os" searchWhenChanged="true">
+        <label>OS</label>
+        <default></default>
+      </input>
+      <input type="dropdown" token="s_verdict" searchWhenChanged="true">
+        <label>Verdict</label>
+        <choice value="*">All</choice>
+        <choice value="Affected">Affected</choice>
+        <choice value="Likely affected">Likely affected</choice>
+        <choice value="Unknown">Unknown</choice>
+        <choice value="Likely not affected">Likely not affected</choice>
+        <choice value="Not affected">Not affected</choice>
+        <default>*</default>
+      </input>
       <table>
         <search base="servers">
-          <query>| eval appname=mvjoin(appname,", ") | table hostname ip env_label appname product version range_status last_scan freshness days_before_announced r7_result verdict action site_name | sort verdict env_label hostname</query>
+          <query><![CDATA[| where (like(lower(hostname), lower("%$s_host$%")) OR like(ip, "%$s_host$%")) AND like(lower(coalesce(os,"")), lower("%$s_os$%")) | search verdict="$s_verdict$" | eval appname=mvjoin(appname,", ") | table hostname ip env_label appname os product version range_status last_scan freshness days_before_announced r7_result verdict action site_name | sort verdict env_label hostname]]></query>
         </search>
         <option name="count">25</option>
         <option name="drilldown">none</option>
@@ -98,7 +214,7 @@
     </panel>
   </row>
 
-  <row>
+  <row depends="$ready$">
     <panel>
       <title>3 · Rescan</title>
       <input type="radio" token="only">
@@ -125,7 +241,7 @@
         <p style="margin:8px 0">
           <button class="btn" data-r7-set="preview_nonce" data-r7-value="nonce">Preview (dry run)</button>
           <button class="btn btn-primary" data-r7-set="launch_nonce" data-r7-value="nonce" data-r7-confirm="Launch the Rapid7 rescan now? Prod servers are scanned immediately.">Run rescan</button>
-          <span style="margin-left:12px;color:#a9b4bf">Needs the rapid7_cve_rescan role. Max 50 servers per job. The poller starts the scan within about a minute; follow it on Scan jobs &amp; reports.</span>
+          <span style="margin-left:12px;color:#a9b4bf">Needs the rapid7_cve_rescan role. Max 50 servers per job. Requests are recorded now; the scans start once the 1.1.7 executor on the forwarder is installed. Follow them on Scan jobs &amp; reports.</span>
         </p>
       </html>
     </panel>

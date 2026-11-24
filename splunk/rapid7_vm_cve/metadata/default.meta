@@ -28,3 +28,9 @@ access = read : [ * ], write : [ admin, sc_admin ]
 
 [savedsearches]
 owner = nobody
+
+[collections/r7_asset_actions]
+access = read : [ * ], write : [ admin, sc_admin, rapid7_cve_analyst, rapid7_cve_rescan, rapid7_cve_asset_admin ]
+
+[collections/r7_vuln_catalog]
+access = read : [ * ], write : [ admin, sc_admin ]

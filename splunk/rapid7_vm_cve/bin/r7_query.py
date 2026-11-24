@@ -27,13 +27,22 @@ def cve_info(service, index, cve):
     """Rapid7 vulnerability checks that reference the CVE."""
     if not cve:
         return {"has_check": False, "vuln_ids": [], "check_added": "", "severity": "", "cvss_v3": "",
-                "title": "", "published": ""}
+                "title": "", "published": "", "platform": ""}
     spl = ('search index=%s sourcetype="rapid7:vm:vuln_content" %s '
            '| `r7_vc_fields` | where mvfind(cves, "^%s$")>=0 '
            '| stats latest(title) as title latest(severity) as severity max(cvss_v3) as cvss_v3 '
            'min(added) as added min(published) as published max(modified) as modified by vuln_id'
            % (L.spl_quote(index), L.spl_quote(cve), cve.replace('"', "")))
-    rows = L.oneshot(service, spl, earliest="-400d")
+    rows = []
+    try:
+        rows = L.oneshot(service, '| inputlookup r7_vuln_catalog_lookup | search cves_str=%s '
+                                  '| table vuln_id title severity cvss_v3 added published cves_str'
+                                  % L.spl_quote("*%s*" % cve.replace('"', "")), earliest="0")
+        rows = [r for r in rows if cve in str(r.get("cves_str") or "").split("|")]  # exact CVE, not a prefix
+    except Exception:
+        rows = []
+    if not rows:
+        rows = L.oneshot(service, spl, earliest="-400d")
     ids = [r["vuln_id"] for r in rows if r.get("vuln_id")]
     added = sorted([r.get("added") for r in rows if r.get("added")])
     pub = sorted([r.get("published") for r in rows if r.get("published")])
@@ -45,6 +54,7 @@ def cve_info(service, index, cve):
         "severity": max(sev, key=lambda s: order.get(s, 0)) if sev else "",
         "cvss_v3": max([r.get("cvss_v3") or "" for r in rows] or [""]),
         "title": rows[0].get("title", "") if rows else "",
+        "platform": (rows[0].get("title", "").split(":")[0] if rows else ""),
     }
 
 
@@ -167,3 +177,23 @@ def _row(a, hit, spec, info, vuln_assets, findings_ok, announced, stale):
         "verdict": v["verdict"], "action": v["action"],
         "rescan_blocked": status in L.BLOCKED_STATUSES,
     }
+
+
+def host_rows(service, settings, hosts):
+    """Rows for a plain rescan of named servers (no CVE / software): asset_id, hostname or IP."""
+    wanted = set(h.lower() for h in hosts)
+    run_id = latest_run(service, settings["index"], "rapid7:vm:asset_site")
+    rows = []
+    for aid, a in asset_table(service, settings["index"], run_id).items():
+        keys = set(x.lower() for x in (aid, a.get("hostname") or "", a.get("ip") or "", a.get("cmdb_host") or "") if x)
+        if not keys & wanted:
+            continue
+        status = a.get("cmdb_status") or "NOT_IN_CMDB"
+        rows.append({
+            "asset_id": aid, "hostname": a.get("hostname") or "", "ip": a.get("ip") or "", "cmdb_host": a.get("cmdb_host") or "",
+            "cmdb_status": status, "env_label": a.get("env_label") or "UNKNOWN", "env_group": a.get("env_group") or "UNKNOWN",
+            "appname": a.get("appname") or "", "site_id": a.get("site_id") or "", "site_name": a.get("site_name") or "",
+            "installed": False, "version": "", "r7_vulnerable": None, "last_scan": a.get("last_scan") or "",
+            "verdict": "Rescan requested", "os": a.get("os") or "",
+        })
+    return rows

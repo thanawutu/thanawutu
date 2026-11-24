@@ -1,6 +1,6 @@
 <form version="1.1" theme="dark" script="r7_actions.js">
   <label>Software &amp; OS inventory</label>
-  <description>For a new CVE that Rapid7 has no check for yet: pick the software, OS or network device OS, enter the vulnerable versions from the announcement, and see each Active server's current version (latest VA result), scan freshness and version history. Versions compare segment by segment as numbers. Distro builds (RHEL, Ubuntu) are flagged "Check advisory" because fixes are often backported.</description>
+  <description>Search by software, vendor, OS, version and hostname. This tab has no CVE data (search CVEs on CVE impact overview or CVE response). For a new CVE that Rapid7 has no check for yet: pick the software, OS or network device OS, enter the vulnerable versions from the announcement, and see each Active server's current version (latest VA result), scan freshness and version history. Versions compare segment by segment as numbers. Distro builds (RHEL, Ubuntu) are flagged "Check advisory" because fixes are often backported.</description>
 
   <search id="latest_sw">
     <query><![CDATA[
@@ -28,7 +28,7 @@
       <fieldForLabel>label</fieldForLabel>
       <fieldForValue>product</fieldForValue>
       <search base="latest_sw">
-        <query>| search kind="$kind$" | stats dc(asset_id) as devices dc(version) as versions first(vendor) as vendor by product | sort - devices | eval label=product." (".vendor.") · ".devices." devices · ".versions." versions"</query>
+        <query>| search kind="$kind$" | where like(lower(product), lower("%$q_sw$%")) AND like(lower(coalesce(vendor,"")), lower("%$q_vendor$%")) | stats dc(asset_id) as devices dc(version) as versions first(vendor) as vendor by product | sort - devices | eval label=product." (".vendor.") · ".devices." devices · ".versions." versions"</query>
       </search>
     </input>
     <input type="text" token="ranges" searchWhenChanged="true">
@@ -37,6 +37,26 @@
     </input>
     <input type="text" token="announced" searchWhenChanged="true">
       <label>Announced (YYYY-MM-DD)</label>
+      <default></default>
+    </input>
+    <input type="text" token="q_sw" searchWhenChanged="true">
+      <label>Software (narrows the product list)</label>
+      <default></default>
+    </input>
+    <input type="text" token="q_vendor" searchWhenChanged="true">
+      <label>Vendor / platform</label>
+      <default></default>
+    </input>
+    <input type="text" token="q_os" searchWhenChanged="true">
+      <label>OS</label>
+      <default></default>
+    </input>
+    <input type="text" token="q_ver" searchWhenChanged="true">
+      <label>Version</label>
+      <default></default>
+    </input>
+    <input type="text" token="q_host" searchWhenChanged="true">
+      <label>Hostname or IP</label>
       <default></default>
     </input>
     <input type="dropdown" token="env" searchWhenChanged="true">
@@ -73,10 +93,11 @@
           <query><![CDATA[
 `r7_latest(rapid7:vm:software)` product="$product$"
 | stats first(version) as version first(vendor) as vendor first(cpe) as cpe by asset_id
-| join type=left asset_id [search `r7_latest(rapid7:vm:asset_site)` | dedup asset_id | fields asset_id hostname ip last_scan site_name]
+| join type=left asset_id [search `r7_latest(rapid7:vm:asset_site)` | dedup asset_id | fields asset_id hostname ip os last_scan site_name]
 | `r7_cmdb_enrich`
 | where cmdb_status="WORKING_ACTIVE" OR cmdb_status="NOT_IN_CMDB"
 | search env_label="$env$"
+| where (like(lower(hostname), lower("%$q_host$%")) OR like(ip, "%$q_host$%")) AND like(lower(coalesce(os,"")), lower("%$q_os$%")) AND like(lower(coalesce(version,"")), lower("%$q_ver$%"))
 | r7vercheck ranges="$ranges$"
 | eval ls=strptime(replace(last_scan,"Z",""),"%Y-%m-%dT%H:%M:%S"), an=if("$announced$"="", now(), strptime("$announced$","%Y-%m-%d"))
 | eval days_before=round((an-ls)/86400,0), freshness=case(isnull(ls),"None", days_before<=0,"Fresh", days_before<=7,"OK", true(),"Stale: rescan")
@@ -88,7 +109,7 @@
      | stats list(h) as history by asset_id
      | eval history=mvjoin(history," → ")]
 | eval appname=mvjoin(appname,", ")
-| table hostname ip env_label appname device_category version vendor range_status last_scan days_before freshness history site_name asset_id
+| table hostname ip os env_label appname device_category version vendor range_status last_scan days_before freshness history site_name asset_id
 | sort - in_range env_label hostname
 ]]></query>
           <earliest>-90d</earliest>

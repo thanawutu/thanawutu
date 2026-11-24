@@ -60,6 +60,7 @@ def summary(j):
         "rapid7_scans": "%d/%d finished" % (done, len(scans)), "created": j.get("created"),
         "finished": j.get("finished", ""), "error": j.get("error", ""),
         "result": ", ".join("%d %s" % (n, k) for k, n in sorted(counts.items())) if counts else "",
+        "hosts": " ".join("%s %s" % (t.get("hostname") or "", t.get("ip") or "") for t in (j.get("targets") or [])),
     }
 
 

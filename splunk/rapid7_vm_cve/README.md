@@ -1,4 +1,4 @@
-# Rapid7 VM CVE Response (Splunk app 1.1.5)
+# Rapid7 VM CVE Response (Splunk app 1.1.6)
 
 CVE impact, software and OS inventory, rescans launched from Splunk with
 before/after results, saved CVEs and CMDB changes, for Rapid7 InsightVM.
@@ -6,6 +6,23 @@ before/after results, saved CVEs and CMDB changes, for Rapid7 InsightVM.
 It is a companion to your existing Rapid7 collector app (v1.0, sites / assets /
 scans). It does not change or replace it, and it reads the same `index=rapid7`
 and the CMDB lookups used by the "CMDB and Rapid7 Asset Mapping" dashboard.
+
+## What's new in 1.1.6
+
+- **CVE impact overview** focused on new CVEs: search by CVE, title, software, vendor / platform, OS, CVSS,
+  severity, published and added dates; software, platform, Rapid7 check platforms and your servers' OS per CVE.
+- **CVE response**: latest 10 new CVEs at the top (newest first, hourly), a hint instead of errors when no CVE
+  is given, and search boxes for the server list.
+- **Impacted assets** (new tab): open CVEs per server, search by host / IP, application, environment, OS, CVE
+  and software, open-CVE list per server, fixes verified by rescan.
+- **Asset management** (new tab): replaces "CMDB and Rapid7 Asset Mapping" with the same searches, in sections,
+  plus fix requests for the Rapid7 team (`| r7assetaction`). The 343 issue is renamed "In a Rapid7 site, not in CMDB".
+- **Search boxes on every tab.**
+- New scheduled searches: "Rapid7 CVE - vuln catalog" (daily, KV store) and "Rapid7 CVE - asset summary" (hourly).
+- Rescan and asset requests are recorded; they are carried out by the forwarder executor in 1.1.7.
+
+Keep the scheduled reports "CMDB servers", "Merge_MDB master, Rapid7 fallback", "Rapid7 host context lookup"
+and the DB Connect CMDB load enabled: Asset management reads the lookups they build.
 
 ## What is inside
 
@@ -60,7 +77,7 @@ re-runs a launch.
 
 ### 1. Heavy forwarder (SIEMFWDPR01): collectors
 
-1. Apps → Manage apps → Install app from file → `rapid7_vm_cve-1.1.5.tgz`.
+1. Apps → Manage apps → Install app from file → `rapid7_vm_cve-1.1.6.tgz`.
 2. Create `$SPLUNK_HOME/etc/apps/rapid7_vm_cve/local/rapid7_cve.conf`:
    ```
    [settings]
@@ -156,7 +173,7 @@ Environment labels come from the macro `r7_env_label`: Prod · DC = `cmdb_class`
 PROD, Prod · DR = DR, Non-prod · UAT / SIT / DEV = NONPROD split by `cmdb_env`.
 Edit the macro if your `cmdb_env` values differ.
 
-## Known limits in 1.1.5
+## Known limits in 1.1.6
 
 - Not yet run against your Rapid7 console or Splunk. Logic is covered by unit
   and end-to-end tests with simulated Rapid7 and splunkd.
