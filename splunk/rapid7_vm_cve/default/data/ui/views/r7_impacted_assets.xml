@@ -230,8 +230,7 @@ $sw_join$
           <query><![CDATA[
 `r7_latest(rapid7:vm:asset_vuln)` asset_id="$asset$"
 | `r7_av_fields`
-| fields asset_id vuln_ids
-| mvexpand vuln_ids
+| stats count by vuln_ids
 | lookup r7_vuln_catalog_lookup vuln_id AS vuln_ids OUTPUT title component severity cvss_v3 published added cve_count cves_str
 | eval cve=if(tonumber(cve_count)>20, "ROLLUP (".cve_count." CVEs)", replace(cves_str,"\|",", "))
 | search severity="$d_sev$"

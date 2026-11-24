@@ -1,4 +1,4 @@
-# Rapid7 VM CVE Response (Splunk app 1.1.8)
+# Rapid7 VM CVE Response (Splunk app 1.1.9)
 
 CVE impact, software and OS inventory, rescans launched from Splunk with
 before/after results, saved CVEs and CMDB changes, for Rapid7 InsightVM.
@@ -6,6 +6,11 @@ before/after results, saved CVEs and CMDB changes, for Rapid7 InsightVM.
 It is a companion to your existing Rapid7 collector app (v1.0, sites / assets /
 scans). It does not change or replace it, and it reads the same `index=rapid7`
 and the CMDB lookups used by the "CMDB and Rapid7 Asset Mapping" dashboard.
+
+## What's new in 1.1.9
+
+- The hits lookup, the asset summary and the server detail split findings with `stats ... by` instead of
+  `mvexpand`, which copied each server's large findings event onto every row and hit the 500 MB mvexpand limit.
 
 ## What's new in 1.1.8
 
@@ -91,7 +96,7 @@ re-runs a launch.
 
 ### 1. Heavy forwarder (SIEMFWDPR01): collectors
 
-1. Apps → Manage apps → Install app from file → `rapid7_vm_cve-1.1.8.tgz`.
+1. Apps → Manage apps → Install app from file → `rapid7_vm_cve-1.1.9.tgz`.
 2. Create `$SPLUNK_HOME/etc/apps/rapid7_vm_cve/local/rapid7_cve.conf`:
    ```
    [settings]
@@ -187,7 +192,7 @@ Environment labels come from the macro `r7_env_label`: Prod · DC = `cmdb_class`
 PROD, Prod · DR = DR, Non-prod · UAT / SIT / DEV = NONPROD split by `cmdb_env`.
 Edit the macro if your `cmdb_env` values differ.
 
-## Known limits in 1.1.8
+## Known limits in 1.1.9
 
 - Not yet run against your Rapid7 console or Splunk. Logic is covered by unit
   and end-to-end tests with simulated Rapid7 and splunkd.
