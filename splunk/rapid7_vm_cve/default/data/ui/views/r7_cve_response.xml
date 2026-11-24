@@ -95,7 +95,7 @@
         <search>
           <query><![CDATA[
 | inputlookup r7_recent_checks.csv
-| where rollup=0
+| where rollup=0 AND fresh_cve=1
 | eval a=substr(added,1,10), p=substr(published,1,10), cve=split(cves_str,"|")
 | mvexpand cve
 | stats min(a) as added min(p) as published first(title) as title first(component) as software first(platform) as platform first(severity) as severity max(cvss_v3) as cvss_v3 by cve

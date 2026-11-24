@@ -1,6 +1,6 @@
 <form version="1.1" theme="dark">
   <label>CVE impact overview</label>
-  <description>New CVEs in Rapid7 (by date added) with what they affect: software, vendor / platform, Rapid7 check platforms, and the OS and environments of your affected Active servers. Rollup checks (more than 20 CVEs) are left out unless included. Refreshed hourly by "Rapid7 CVE - recent checks lookup" (:20) and "recent hits lookup" (:30). Click a CVE to open it in CVE response.</description>
+  <description>New CVEs in Rapid7 (by date added; by default only CVEs published at most 90 days before Rapid7 added the check, so bulk re-adds of old checks are left out) with what they affect: software, vendor / platform, Rapid7 check platforms, and the OS and environments of your affected Active servers. Rollup checks (more than 20 CVEs) are left out unless included. Refreshed hourly by "Rapid7 CVE - recent checks lookup" (:20) and "recent hits lookup" (:30). Click a CVE to open it in CVE response.</description>
 
   <fieldset submitButton="false" autoRun="true">
     <input type="text" token="f_cve" searchWhenChanged="true">
@@ -61,6 +61,12 @@
       <label>Published to (YYYY-MM-DD)</label>
       <default></default>
     </input>
+    <input type="dropdown" token="f_fresh" searchWhenChanged="true">
+      <label>Which CVEs</label>
+      <choice value="fresh_cve=1">New CVEs (published ≤ 90 days before Rapid7 added the check)</choice>
+      <choice value="fresh_cve=*">Also old CVEs re-added by Rapid7</choice>
+      <default>fresh_cve=1</default>
+    </input>
     <input type="dropdown" token="f_roll" searchWhenChanged="true">
       <label>Rollup checks (&gt; 20 CVEs)</label>
       <choice value="rollup=0">Leave out</choice>
@@ -73,7 +79,7 @@
   <search id="cves">
     <query><![CDATA[
 | inputlookup r7_recent_checks.csv
-| search $f_sev$ $f_roll$
+| search $f_sev$ $f_roll$ $f_fresh$
 | eval a=substr(added,1,10), p=substr(published,1,10)
 | where ("$f_addfrom$"="" AND "$f_addto$"="" AND tonumber(added_e)>=relative_time(now(),"$f_win$")) OR (NOT ("$f_addfrom$"="" AND "$f_addto$"="") AND ("$f_addfrom$"="" OR a>="$f_addfrom$") AND ("$f_addto$"="" OR a<="$f_addto$"))
 | where ("$f_pubfrom$"="" OR p>="$f_pubfrom$") AND ("$f_pubto$"="" OR p<="$f_pubto$") AND coalesce(tonumber(cvss_v3),0)>=$f_cvss$
@@ -97,7 +103,7 @@
   <search id="servers_kpi">
     <query><![CDATA[
 | inputlookup r7_recent_hits.csv
-| search cmdb_status="WORKING_ACTIVE" $f_sev$ $f_roll$
+| search cmdb_status="WORKING_ACTIVE" $f_sev$ $f_roll$ $f_fresh$
 | eval a=strftime(added_e,"%Y-%m-%d"), p=substr(published,1,10)
 | where ("$f_addfrom$"="" AND "$f_addto$"="" AND tonumber(added_e)>=relative_time(now(),"$f_win$")) OR (NOT ("$f_addfrom$"="" AND "$f_addto$"="") AND ("$f_addfrom$"="" OR a>="$f_addfrom$") AND ("$f_addto$"="" OR a<="$f_addto$"))
 | where ("$f_pubfrom$"="" OR p>="$f_pubfrom$") AND ("$f_pubto$"="" OR p<="$f_pubto$") AND coalesce(tonumber(cvss_v3),0)>=$f_cvss$
