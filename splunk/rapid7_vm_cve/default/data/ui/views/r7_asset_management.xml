@@ -85,7 +85,7 @@ index=rapid7 sourcetype=rapid7:vm:asset earliest=-5h
 | eval days_since=round((now()-last_assessed)/86400,0)
 | eval last_assessed=strftime(last_assessed,"%F")
 | table ip r7_hostname r7_os r7_site last_assessed days_since critical severe
-| eval suggested_action=if(days_since>90, "Not seen for ".days_since." days: confirm retired, then delete from Rapid7 (1.1.7)", "Register in CMDB (export for the CMDB team)")
+| eval suggested_action=if(days_since>90, "Not seen for ".days_since." days: confirm retired, then delete from Rapid7 (1.2.0)", "Register in CMDB (export for the CMDB team)")
 ]]></query>
     <earliest>-5h</earliest>
     <latest>now</latest>
@@ -436,7 +436,7 @@ index=rapid7 sourcetype=rapid7:vm:asset earliest=-5h
       <html>
         <p style="margin:8px 0">
           <button class="btn btn-primary" data-r7-set="req_nonce" data-r7-value="nonce" data-r7-confirm="Create the fix request for the selected assets?">Create fix request</button>
-          <span style="margin-left:12px;color:#a9b4bf">Export any table with its Export button (CSV) for the CMDB team. Delete and tag in Rapid7, with a second approver, come in 1.1.7.</span>
+          <span style="margin-left:12px;color:#a9b4bf">Export any table with its Export button (CSV) for the CMDB team. Delete and tag in Rapid7, with a second approver, come in 1.2.0.</span>
         </p>
       </html>
       <table depends="$req_nonce$">

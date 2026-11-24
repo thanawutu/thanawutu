@@ -262,7 +262,7 @@ def needs_rescan(verdict_value):
     return verdict_value not in ("Not affected",)
 
 
-def compare_result(before, after, has_check):
+def compare_result(before, after, has_check, software_selected=True, cve_selected=True):
     """Before/after comparison after a rescan.
 
     before/after keys: installed (bool|None), version, r7_vulnerable (bool|None)
@@ -274,7 +274,10 @@ def compare_result(before, after, has_check):
     assessed = bool(after.get("assessed"))
     cred = bool(after.get("credentialed"))
 
-    if not assessed:
+    if not software_selected:
+        installed = "—"
+        change = "—"
+    elif not assessed:
         installed = "Unknown"
         change = "Unknown"
     elif not cred:
@@ -299,7 +302,10 @@ def compare_result(before, after, has_check):
     cb = cve_state(before.get("r7_vulnerable")) if has_check else "—"
     ca = cve_state(after.get("r7_vulnerable")) if (has_check and assessed) else ("—" if not has_check else "Not checked")
 
-    if not has_check:
+    if not cve_selected:
+        # plain rescan (servers only): report whether the scan reached and logged in to the server
+        result = "Rescanned" if (assessed and cred) else ("Rescanned, no login" if assessed else "Not verified")
+    elif not has_check:
         result = "No Rapid7 check yet"
     elif not assessed:
         result = "Not verified"

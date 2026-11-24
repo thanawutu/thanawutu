@@ -256,7 +256,8 @@ class CommandTests(unittest.TestCase):
         acts = dict((r["hostname"], (r["action"], r["reason"])) for r in rows)
         self.assertEqual(acts["PRDWEB01"][0], "scan")
         self.assertEqual(acts["OLDWEB"], ("skip", "INACTIVE in CMDB"))
-        self.assertEqual(acts["nope"][0], "skip")
+        self.assertEqual(acts["NOPE"][0], "skip")
+        self.assertIn("latest Rapid7 asset data", acts["NOPE"][1])
 
     def test_6_asset_fix_requests(self):
         rows, errors, err = self.run_cmd("r7assetaction", ["action=request", "hosts=PPRAPI02, PRDAPP31",

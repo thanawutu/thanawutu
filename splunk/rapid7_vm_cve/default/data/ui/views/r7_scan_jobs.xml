@@ -78,7 +78,7 @@
         </search>
         <option name="drilldown">none</option>
         <format type="color" field="cve_result">
-          <colorPalette type="map">{"CVE fixed":#53A051,"Not vulnerable":#53A051,"Still vulnerable":#DC4E41,"Newly found":#DC4E41,"Not verified":#F8BE34,"No Rapid7 check yet":#708794}</colorPalette>
+          <colorPalette type="map">{"CVE fixed":#53A051,"Not vulnerable":#53A051,"Still vulnerable":#DC4E41,"Newly found":#DC4E41,"Not verified":#F8BE34,"No Rapid7 check yet":#708794,"Rescanned":#53A051,"Rescanned, no login":#F8BE34}</colorPalette>
         </format>
       </table>
     </panel>
@@ -95,7 +95,7 @@
         <option name="count">50</option>
         <option name="drilldown">none</option>
         <format type="color" field="cve_result">
-          <colorPalette type="map">{"CVE fixed":#53A051,"Not vulnerable":#53A051,"Still vulnerable":#DC4E41,"Newly found":#DC4E41,"Not verified":#F8BE34,"No Rapid7 check yet":#708794}</colorPalette>
+          <colorPalette type="map">{"CVE fixed":#53A051,"Not vulnerable":#53A051,"Still vulnerable":#DC4E41,"Newly found":#DC4E41,"Not verified":#F8BE34,"No Rapid7 check yet":#708794,"Rescanned":#53A051,"Rescanned, no login":#F8BE34}</colorPalette>
         </format>
         <format type="color" field="version_change">
           <colorPalette type="map">{"Updated":#5A9BD5,"Removed":#53A051,"Downgraded":#DC4E41,"Unknown":#F8BE34}</colorPalette>
@@ -107,7 +107,7 @@
   <row>
     <panel>
       <html>
-        <p style="color:#a9b4bf"><b>CVE fixed</b>: Rapid7 found the CVE before, and this job's scan assessed the server, logged in (software data returned) and no longer finds it. <b>Not verified</b>: the server was not assessed by this job's scan, or the scan returned no software data (login failed), so the app does not call it fixed. <b>No Rapid7 check yet</b>: only the version comparison applies. Export any table with the Export button (CSV or PDF).</p>
+        <p style="color:#a9b4bf"><b>CVE fixed</b>: Rapid7 found the CVE before, and this job's scan assessed the server, logged in (software data returned) and no longer finds it. <b>Not verified</b>: the server was not assessed by this job's scan, or the scan returned no software data (login failed), so the app does not call it fixed. <b>No Rapid7 check yet</b>: only the version comparison applies. <b>Rescanned</b> / <b>Rescanned, no login</b>: a server-only rescan (no CVE chosen) reached the server, with or without a working login. Export any table with the Export button (CSV or PDF).</p>
       </html>
     </panel>
   </row>

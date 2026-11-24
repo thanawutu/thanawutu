@@ -76,6 +76,14 @@ class VerdictTests(unittest.TestCase):
         r = self.v(r7_vulnerable=False, version="8.1.34")
         self.assertEqual((r["r7_result"], r["verdict"]), ("Not vulnerable", "Not affected"))
 
+    def test_plain_rescan_result(self):
+        ok = L.compare_result({}, {"assessed": True, "credentialed": True}, False, software_selected=False, cve_selected=False)
+        self.assertEqual((ok["installed"], ok["version_change"], ok["cve_result"]), ("—", "—", "Rescanned"))
+        nl = L.compare_result({}, {"assessed": True, "credentialed": False}, False, software_selected=False, cve_selected=False)
+        self.assertEqual(nl["cve_result"], "Rescanned, no login")
+        na = L.compare_result({}, {"assessed": False, "credentialed": True}, False, software_selected=False, cve_selected=False)
+        self.assertEqual(na["cve_result"], "Not verified")
+
     def test_scan_before_check_added_uses_version(self):
         r = self.v(last_scan="2026-11-15T21:30:00Z")
         self.assertEqual(r["r7_result"], "Not run: scan before check added")

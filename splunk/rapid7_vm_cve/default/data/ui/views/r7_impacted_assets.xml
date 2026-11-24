@@ -166,7 +166,7 @@ $sw_join$
         <p style="margin:8px 0">
           <button class="btn" data-r7-set="preview_nonce" data-r7-value="nonce">Preview (dry run)</button>
           <button class="btn btn-primary" data-r7-set="launch_nonce" data-r7-value="nonce" data-r7-confirm="Request a rescan of the selected servers?">Rescan selected</button>
-          <span style="margin-left:12px;color:#a9b4bf">Requests are recorded now; scans start once the 1.1.7 executor on the forwarder is installed.</span>
+          <span style="margin-left:12px;color:#a9b4bf">Requests are recorded now; scans start once the 1.2.0 executor on the forwarder is installed.</span>
         </p>
       </html>
     </panel>
@@ -253,7 +253,7 @@ $sw_join$
         </format>
       </table>
       <html>
-        <p style="color:#a9b4bf">First-found date, days open and Rapid7's fix for this server are added in 1.1.7. A CVE leaves this list only when a scan that logged in no longer finds it.</p>
+        <p style="color:#a9b4bf">First-found date, days open and Rapid7's fix for this server are added in 1.2.0. A CVE leaves this list only when a scan that logged in no longer finds it.</p>
       </html>
     </panel>
   </row>

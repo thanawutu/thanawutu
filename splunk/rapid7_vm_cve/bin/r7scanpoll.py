@@ -129,13 +129,14 @@ class R7ScanPoll(GeneratingCommand):
             after = {"installed": bool(match), "version": versions[0] if versions else "",
                      "r7_vulnerable": vuln, "assessed": assessed, "credentialed": len(sw) > 0}
             before = t.get("before") or {}
-            cmp_ = L.compare_result(before, after, has_check)
+            cmp_ = L.compare_result(before, after, has_check, software_selected=bool(job.get("software")),
+                                    cve_selected=bool(job.get("cve")))
             last = L.asset_last_scan(asset)
             rs = L.range_status(after["version"], job.get("ranges")) if (after["version"] and job.get("ranges")) else ""
             results.append(dict(cmp_, asset_id=aid, hostname=t.get("hostname"), ip=t.get("ip"),
                                 env_label=t.get("env_label"), appname=t.get("appname"),
                                 version_before=before.get("version") or "", last_scan_before=before.get("last_scan") or "",
-                                version_after=after["version"] or ("not installed" if after["credentialed"] and assessed else ""),
+                                version_after=after["version"] or ("not installed" if job.get("software") and after["credentialed"] and assessed else ""),
                                 all_versions_after=versions, range_status_after=rs,
                                 scan_login="OK" if after["credentialed"] else "No software data (login failed?)",
                                 assessed_by_this_job=assessed, last_scan_after=L.iso(last)))

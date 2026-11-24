@@ -1,4 +1,4 @@
-# Rapid7 VM CVE Response (Splunk app 1.1.9)
+# Rapid7 VM CVE Response (Splunk app 1.1.10)
 
 CVE impact, software and OS inventory, rescans launched from Splunk with
 before/after results, saved CVEs and CMDB changes, for Rapid7 InsightVM.
@@ -6,6 +6,20 @@ before/after results, saved CVEs and CMDB changes, for Rapid7 InsightVM.
 It is a companion to your existing Rapid7 collector app (v1.0, sites / assets /
 scans). It does not change or replace it, and it reads the same `index=rapid7`
 and the CMDB lookups used by the "CMDB and Rapid7 Asset Mapping" dashboard.
+
+## What's new in 1.1.10
+
+Tested as a whole before release, on Splunk 9.4 with data the size of production (1,655 assets,
+91,297 checks, 623,395 findings) and a simulated Rapid7 console: every scheduled search, every
+dashboard panel (default and filled-in search boxes), the three collectors, the full rescan cycle
+(Requested → Running → Finished, including "CVE fixed" and "Not verified") and the CMDB change tracker.
+
+- A rescan of servers only (no CVE or software, from Impacted assets or Asset management) now reports
+  **Rescanned** or **Rescanned, no login** instead of "No Rapid7 check yet" and "Not installed".
+- A server that is not in the latest asset data is reported with that reason, using the name you typed.
+- Skipped servers in a rescan preview no longer show "Rescan requested".
+- Text on the pages now refers to 1.2.0 for the forwarder executor, Rapid7 fixes and first-found dates;
+  CMDB changes points to the Asset management tab.
 
 ## What's new in 1.1.9
 
@@ -96,7 +110,7 @@ re-runs a launch.
 
 ### 1. Heavy forwarder (SIEMFWDPR01): collectors
 
-1. Apps → Manage apps → Install app from file → `rapid7_vm_cve-1.1.9.tgz`.
+1. Apps → Manage apps → Install app from file → `rapid7_vm_cve-1.1.10.tgz`.
 2. Create `$SPLUNK_HOME/etc/apps/rapid7_vm_cve/local/rapid7_cve.conf`:
    ```
    [settings]
@@ -192,7 +206,7 @@ Environment labels come from the macro `r7_env_label`: Prod · DC = `cmdb_class`
 PROD, Prod · DR = DR, Non-prod · UAT / SIT / DEV = NONPROD split by `cmdb_env`.
 Edit the macro if your `cmdb_env` values differ.
 
-## Known limits in 1.1.9
+## Known limits in 1.1.10
 
 - Not yet run against your Rapid7 console or Splunk. Logic is covered by unit
   and end-to-end tests with simulated Rapid7 and splunkd.

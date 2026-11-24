@@ -90,9 +90,12 @@ class R7Rescan(GeneratingCommand):
             elif (self.scope or "affected") == "affected" and not wanted and not L.needs_rescan(r["verdict"]):
                 reason = "Already %s" % r["verdict"].lower()
             (skipped if reason else selected).append(dict(r, skip_reason=reason))
+        plain = not (self.cve or self.software)
+        typed = dict((x.lower(), x) for x in L.split_csv(self.hosts))
         for missing in sorted(wanted - found):
-            skipped.append({"hostname": missing, "site_name": "", "site_id": "", "env_label": "",
-                            "skip_reason": "Not found in Rapid7 data for this CVE/software"})
+            skipped.append({"hostname": typed.get(missing, missing), "site_name": "", "site_id": "", "env_label": "",
+                            "skip_reason": ("Not found in the latest Rapid7 asset data (software collector, last 3 days)" if plain
+                                            else "Not found in Rapid7 data for this CVE/software")})
 
         groups = L.group_by_site(selected)
 
@@ -156,7 +159,7 @@ class R7Rescan(GeneratingCommand):
             for s in skipped:
                 yield {"action": "skip", "hostname": s.get("hostname"), "ip": s.get("ip", ""),
                        "env_label": s.get("env_label", ""), "site_name": s.get("site_name", ""),
-                       "verdict": s.get("verdict", ""), "reason": s.get("skip_reason"), "template": ""}
+                       "verdict": "" if s.get("verdict") == "Rescan requested" else s.get("verdict", ""), "reason": s.get("skip_reason"), "template": ""}
             return
         by_site = {}
         for s in skipped:

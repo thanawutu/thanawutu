@@ -1,6 +1,6 @@
 <form version="1.1" theme="dark">
   <label>CMDB changes</label>
-  <description>Search by hostname, OS and detected date (this tab has no CVE data). Servers whose CMDB status, environment or device category changed. Built hourly by comparing cmdb_assets.csv with the previous snapshot (scheduled searches "Rapid7 CVE - CMDB change tracker" and "CMDB snapshot"). Mapping and coverage stay on the "CMDB and Rapid7 Asset Mapping" dashboard. INACTIVE and DECOMMISSION servers are hidden from the other pages of this app and never rescanned.</description>
+  <description>Search by hostname, OS and detected date (this tab has no CVE data). Servers whose CMDB status, environment or device category changed. Built hourly by comparing cmdb_assets.csv with the previous snapshot (scheduled searches "Rapid7 CVE - CMDB change tracker" and "CMDB snapshot"). Mapping, mismatches and coverage are on the Asset management tab. INACTIVE and DECOMMISSION servers are hidden from the other pages of this app and never rescanned.</description>
 
   <search id="changes">
     <query><![CDATA[

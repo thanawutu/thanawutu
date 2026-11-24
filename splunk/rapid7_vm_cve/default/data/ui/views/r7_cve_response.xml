@@ -241,7 +241,7 @@
         <p style="margin:8px 0">
           <button class="btn" data-r7-set="preview_nonce" data-r7-value="nonce">Preview (dry run)</button>
           <button class="btn btn-primary" data-r7-set="launch_nonce" data-r7-value="nonce" data-r7-confirm="Launch the Rapid7 rescan now? Prod servers are scanned immediately.">Run rescan</button>
-          <span style="margin-left:12px;color:#a9b4bf">Needs the rapid7_cve_rescan role. Max 50 servers per job. Requests are recorded now; the scans start once the 1.1.7 executor on the forwarder is installed. Follow them on Scan jobs &amp; reports.</span>
+          <span style="margin-left:12px;color:#a9b4bf">Needs the rapid7_cve_rescan role. Max 50 servers per job. Requests are recorded now; the scans start once the 1.2.0 executor on the forwarder is installed. Follow them on Scan jobs &amp; reports.</span>
         </p>
       </html>
     </panel>
