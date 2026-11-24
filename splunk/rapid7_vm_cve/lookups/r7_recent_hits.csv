@@ -1,1 +1,1 @@
-asset_id,hostname,ip,vuln_id,cve,title,severity,cvss_v3,rollup,added_e,cmdb_status,env_label,env_group,appname
+asset_id,hostname,ip,os,vuln_id,cve,title,component,platform,severity,cvss_v3,rollup,added_e,cmdb_status,env_label,env_group,appname
