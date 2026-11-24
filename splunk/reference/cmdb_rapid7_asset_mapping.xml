@@ -1,0 +1,431 @@
+<form version="1.1" theme="dark">
+  <label>CMDB and Rapid7 Asset Mapping</label>
+  <description>CMDB is the master inventory. Shows which CMDB assets Rapid7 knows and has assessed, VA coverage by device type and environment, CMDB and Rapid7 mismatches, decommissioned devices still answering scans, and Rapid7 assets missing from CMDB. Sources: cmdb_assets.csv, asset_context.csv, rapid7_host_context.csv (rebuilt every 4 hours) and the latest Rapid7 asset snapshot (index=rapid7, last 5 hours).</description>
+
+  <!-- ============ Base search: one row per CMDB host, mapped to Rapid7 ============ -->
+  <search id="map_base">
+    <query><![CDATA[
+| inputlookup cmdb_assets.csv
+| makemv tokenizer="([^\r\n]+)" ip
+| makemv tokenizer="([^\r\n]+)" vendor
+| makemv tokenizer="([^\r\n]+)" app_id
+| makemv tokenizer="([^\r\n]+)" appname
+| search cmdb_status="$status$" cmdb_class="$envc$" $cat$
+| mvexpand ip
+| join type=left ip
+    [search index=rapid7 sourcetype=rapid7:vm:asset earliest=-5h
+     | stats max(last_assessed_epoch) as last_assessed latest(hostname) as r7_hostname latest(os) as r7_os max(vuln_critical) as critical max(vuln_severe) as severe max(risk_score) as risk by ip]
+| lookup rapid7_host_context.csv host OUTPUT env AS r7_site_env
+| lookup rapid7_host_context.csv ip OUTPUTNEW env AS r7_site_env
+| stats values(ip) as ip values(vendor) as vendor values(app_id) as app_id values(appname) as appname first(device_category) as device_category first(va_scannable) as va_scannable first(cmdb_status) as cmdb_status first(cmdb_env) as cmdb_env first(cmdb_class) as cmdb_class max(last_assessed) as last_assessed values(r7_hostname) as r7_hostname values(r7_os) as r7_os max(critical) as critical max(severe) as severe max(risk) as risk values(r7_site_env) as r7_site_env by host
+| eval days_since=round((now()-last_assessed)/86400,0)
+| eval mapping_status=case(
+    isnotnull(last_assessed) AND days_since<=30, "1 Mapped - assessed 30d",
+    isnotnull(last_assessed),                    "2 Mapped - stale >30d",
+    isnotnull(r7_site_env),                      "3 Site only - never scanned",
+    true(),                                      "4 Not in Rapid7")
+| eval kpi_group=case(
+    in(device_category,"SERVER","VENDOR_APPLIANCE"), "Server",
+    device_category="NETWORK",                      "Network",
+    device_category="HYPERVISOR",                   "Hypervisor",
+    true(),                                         "Out of scope")
+| eval last_assessed_date=strftime(last_assessed,"%F")
+| fields host device_category kpi_group va_scannable cmdb_status cmdb_env cmdb_class vendor app_id appname ip r7_hostname r7_os r7_site_env last_assessed last_assessed_date days_since critical severe risk mapping_status
+]]></query>
+    <earliest>-24h</earliest>
+    <latest>now</latest>
+  </search>
+
+  <!-- ============ Base search: CMDB vs Rapid7 mismatch issues ============ -->
+  <search id="mm_base">
+    <query><![CDATA[
+| inputlookup asset_context.csv
+| eval r7c=mvindex(r7_class,0)
+| eval has_ip=if(match(ip,"\d{1,3}(\.\d{1,3}){3}"), 1, 0)
+| eval issue=case(
+    in_cmdb=0 AND isnotnull(r7_env),
+        "In Rapid7, not in CMDB",
+    cmdb_class="DECOMMISSIONED" AND isnotnull(r7_env),
+        "Decommissioned in CMDB, still a Rapid7 site",
+    in(cmdb_class,"PROD","DR","NONPROD") AND in(r7c,"PROD","DR","NONPROD","PREPROD") AND cmdb_class!=r7c,
+        "Environment differs",
+    cmdb_status="WORKING_ACTIVE" AND isnull(r7_env) AND va_scannable="agent",
+        "Cloud auto-scaling or container, verify agent coverage",
+    cmdb_status="WORKING_ACTIVE" AND isnull(r7_env) AND va_scannable="yes" AND has_ip=0,
+        "Scannable server, no Rapid7 site, no IP in CMDB",
+    cmdb_status="WORKING_ACTIVE" AND isnull(r7_env) AND va_scannable="yes",
+        "Scannable server, no Rapid7 site",
+    cmdb_status="WORKING_ACTIVE" AND isnull(r7_env) AND va_scannable="review",
+        "Unknown device type, classify in CMDB")
+| where isnotnull(issue)
+| eval action=case(
+    issue="In Rapid7, not in CMDB",                                  "Register in CMDB, or confirm retired and remove the Rapid7 site",
+    issue="Decommissioned in CMDB, still a Rapid7 site",             "Remove the Rapid7 site. If the host still answers, escalate to the owner",
+    issue="Environment differs",                                     "Confirm the environment with the app owner, then rename the site or fix CMDB",
+    issue="Cloud auto-scaling or container, verify agent coverage",  "Confirm Insight Agent or AWS connector coverage",
+    issue="Scannable server, no Rapid7 site, no IP in CMDB",         "Add the IP address to the CMDB record",
+    issue="Scannable server, no Rapid7 site",                        "Add to a Rapid7 site and scan schedule",
+    issue="Unknown device type, classify in CMDB",                   "Set LineOfBusiness or an application relationship in CMDB")
+| table issue action host device_category va_scannable cmdb_status cmdb_env r7_env r7c vendor app_id appname ip
+]]></query>
+    <earliest>-24h</earliest>
+    <latest>now</latest>
+  </search>
+
+  <!-- ============ Base search: Rapid7 assets not in CMDB (asset level) ============ -->
+  <search id="r7only_base">
+    <query><![CDATA[
+index=rapid7 sourcetype=rapid7:vm:asset earliest=-5h
+| stats max(last_assessed_epoch) as last_assessed latest(hostname) as r7_hostname latest(os) as r7_os values(site_name) as r7_site max(vuln_critical) as critical max(vuln_severe) as severe by ip
+| lookup cmdb_ip_map.csv ip OUTPUT host AS cmdb_host_by_ip
+| eval r7_host=upper(replace(r7_hostname,"\..*$$",""))
+| lookup cmdb_assets.csv host AS r7_host OUTPUT cmdb_status AS cmdb_status_by_name
+| where isnull(cmdb_host_by_ip) AND isnull(cmdb_status_by_name)
+| eval days_since=round((now()-last_assessed)/86400,0)
+| eval last_assessed=strftime(last_assessed,"%F")
+| table ip r7_hostname r7_os r7_site last_assessed days_since critical severe
+]]></query>
+    <earliest>-5h</earliest>
+    <latest>now</latest>
+  </search>
+
+  <!-- ============ Base search: decommissioned in CMDB, still answering Rapid7 (30d) ============ -->
+  <search id="zombie_base">
+    <query><![CDATA[
+| inputlookup cmdb_assets.csv
+| makemv tokenizer="([^\r\n]+)" ip
+| mvexpand ip
+| eval ip=trim(ip)
+| eventstats values(cmdb_status) as ip_statuses by ip
+| where cmdb_status="DECOMMISSION" AND isnull(mvfind(ip_statuses,"^WORKING_ACTIVE$$"))
+| join type=inner ip
+    [search index=rapid7 sourcetype=rapid7:vm:asset earliest=-5h
+     | stats max(last_assessed_epoch) as last_assessed latest(hostname) as r7_hostname latest(os) as r7_os max(vuln_critical) as critical max(vuln_severe) as severe by ip]
+| eval days_since=round((now()-last_assessed)/86400,0)
+| where days_since<=30
+| eval r7_hostname=if(r7_hostname="null" OR r7_hostname="", null(), r7_hostname)
+| eval r7_host=upper(replace(r7_hostname,"\..*$$",""))
+| eval same_name=if(isnotnull(r7_host) AND replace(r7_host,"[^A-Z0-9]","")=replace(upper(host),"[^A-Z0-9]",""), "yes", "no")
+| eval priority=case(
+    same_name="yes" AND in(device_category,"SERVER","VENDOR_APPLIANCE"), "P1 - server still running",
+    same_name="yes",                                                    "P2 - infra device, same name",
+    isnull(r7_host),                                                    "P3 - no hostname, identify",
+    true(),                                                             "P3 - replaced or IP reused, update CMDB")
+| stats values(ip) as ip values(r7_hostname) as r7_hostname values(r7_os) as r7_os min(days_since) as days_since max(critical) as critical max(severe) as severe by priority host device_category
+| sort priority - critical
+]]></query>
+    <earliest>-5h</earliest>
+    <latest>now</latest>
+  </search>
+
+  <fieldset submitButton="false" autoRun="true">
+    <input type="dropdown" token="status" searchWhenChanged="true">
+      <label>CMDB status</label>
+      <choice value="WORKING_ACTIVE">Active</choice>
+      <choice value="INACTIVE">Inactive</choice>
+      <choice value="DECOMMISSION">Decommissioned</choice>
+      <choice value="*">All</choice>
+      <default>WORKING_ACTIVE</default>
+    </input>
+    <input type="multiselect" token="cat" searchWhenChanged="true">
+      <label>Device category</label>
+      <choice value="*">All</choice>
+      <choice value="SERVER">SERVER</choice>
+      <choice value="VENDOR_APPLIANCE">VENDOR_APPLIANCE</choice>
+      <choice value="NETWORK">NETWORK</choice>
+      <choice value="HYPERVISOR">HYPERVISOR</choice>
+      <choice value="HARDWARE_APPLIANCE">HARDWARE_APPLIANCE</choice>
+      <choice value="CLOUD_EPHEMERAL">CLOUD_EPHEMERAL</choice>
+      <choice value="UNKNOWN">UNKNOWN</choice>
+      <default>*</default>
+      <valuePrefix>device_category="</valuePrefix>
+      <valueSuffix>"</valueSuffix>
+      <delimiter> OR </delimiter>
+      <prefix>(</prefix>
+      <suffix>)</suffix>
+    </input>
+    <input type="dropdown" token="envc" searchWhenChanged="true">
+      <label>Environment (CMDB)</label>
+      <choice value="*">All</choice>
+      <choice value="PROD">PROD</choice>
+      <choice value="DR">DR</choice>
+      <choice value="NONPROD">NONPROD</choice>
+      <choice value="INFRA">INFRA</choice>
+      <choice value="UNKNOWN">UNKNOWN</choice>
+      <choice value="INACTIVE">INACTIVE</choice>
+      <choice value="DECOMMISSIONED">DECOMMISSIONED</choice>
+      <default>*</default>
+    </input>
+    <input type="dropdown" token="gap_group" searchWhenChanged="true">
+      <label>Gap list scope</label>
+      <choice value="Server">Server (SERVER + VENDOR_APPLIANCE)</choice>
+      <choice value="Network">Network</choice>
+      <choice value="Hypervisor">Hypervisor</choice>
+      <choice value="Out of scope">Out of scope</choice>
+      <default>Server</default>
+    </input>
+  </fieldset>
+
+  <!-- ============ Row 1: KPIs ============ -->
+  <row>
+    <panel>
+      <single>
+        <title>CMDB assets in scope</title>
+        <search base="map_base">
+          <query>| stats count</query>
+        </search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Server VA coverage, 30 days (target 98%)</title>
+        <search base="map_base">
+          <query><![CDATA[| where kpi_group="Server" | eval ok=if(mapping_status="1 Mapped - assessed 30d",1,0) | stats avg(ok) as coverage | eval coverage=round(coverage*100,1)]]></query>
+        </search>
+        <option name="unit">%</option>
+        <option name="colorMode">block</option>
+        <option name="useColors">1</option>
+        <option name="rangeValues">[95,98]</option>
+        <option name="rangeColors">["0xdc4e41","0xf8be34","0x53a051"]</option>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Network VA coverage, 30 days</title>
+        <search base="map_base">
+          <query><![CDATA[| where kpi_group="Network" | eval ok=if(mapping_status="1 Mapped - assessed 30d",1,0) | stats avg(ok) as coverage | eval coverage=round(coverage*100,1)]]></query>
+        </search>
+        <option name="unit">%</option>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Hypervisor VA coverage, 30 days</title>
+        <search base="map_base">
+          <query><![CDATA[| where kpi_group="Hypervisor" | eval ok=if(mapping_status="1 Mapped - assessed 30d",1,0) | stats avg(ok) as coverage | eval coverage=round(coverage*100,1)]]></query>
+        </search>
+        <option name="unit">%</option>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Rapid7 assets not in CMDB</title>
+        <search base="r7only_base">
+          <query>| stats count</query>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="useColors">1</option>
+        <option name="rangeValues">[0]</option>
+        <option name="rangeColors">["0x53a051","0xf8be34"]</option>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Decommissioned servers still running (P1)</title>
+        <search base="zombie_base">
+          <query><![CDATA[| where like(priority,"P1%") | stats dc(host) as hosts]]></query>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="useColors">1</option>
+        <option name="rangeValues">[0]</option>
+        <option name="rangeColors">["0x53a051","0xdc4e41"]</option>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+  </row>
+
+  <!-- ============ Row 2: Coverage by category and environment ============ -->
+  <row>
+    <panel>
+      <chart>
+        <title>Mapping status by device category</title>
+        <search base="map_base">
+          <query><![CDATA[| stats count(eval(mapping_status="1 Mapped - assessed 30d")) as "Assessed 30d" count(eval(mapping_status="2 Mapped - stale >30d")) as "Stale >30d" count(eval(mapping_status="3 Site only - never scanned")) as "Site only, never scanned" count(eval(mapping_status="4 Not in Rapid7")) as "Not in Rapid7" by device_category | eval total='Assessed 30d'+'Stale >30d'+'Site only, never scanned'+'Not in Rapid7' | sort - total | fields - total]]></query>
+        </search>
+        <option name="charting.chart">bar</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.fieldColors">{"Assessed 30d":"0x53a051","Stale >30d":"0xf8be34","Site only, never scanned":"0xf1813f","Not in Rapid7":"0xdc4e41"}</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="charting.drilldown">none</option>
+        <option name="height">340</option>
+      </chart>
+    </panel>
+    <panel>
+      <chart>
+        <title>Server VA coverage by CMDB environment</title>
+        <search base="map_base">
+          <query><![CDATA[| where kpi_group="Server" | stats count(eval(mapping_status="1 Mapped - assessed 30d")) as "Assessed 30d" count(eval(mapping_status="2 Mapped - stale >30d")) as "Stale >30d" count(eval(mapping_status="3 Site only - never scanned")) as "Site only, never scanned" count(eval(mapping_status="4 Not in Rapid7")) as "Not in Rapid7" by cmdb_class]]></query>
+        </search>
+        <option name="charting.chart">bar</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.fieldColors">{"Assessed 30d":"0x53a051","Stale >30d":"0xf8be34","Site only, never scanned":"0xf1813f","Not in Rapid7":"0xdc4e41"}</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="charting.drilldown">none</option>
+        <option name="height">340</option>
+      </chart>
+    </panel>
+  </row>
+
+  <!-- ============ Row 3: KPI table ============ -->
+  <row>
+    <panel>
+      <table>
+        <title>VA coverage KPI by group</title>
+        <search base="map_base">
+          <query><![CDATA[| stats count as cmdb_assets count(eval(mapping_status!="4 Not in Rapid7")) as known_to_rapid7 count(eval(isnotnull(last_assessed))) as scanned count(eval(mapping_status="1 Mapped - assessed 30d")) as assessed_30d sum(critical) as critical_findings by kpi_group | eval coverage_pct=if(kpi_group="Out of scope", null(), round(assessed_30d/cmdb_assets*100,1)) | eval target=if(kpi_group="Server","98%","-") | eval vs_target=case(kpi_group="Server" AND coverage_pct>=98,"Met", kpi_group="Server","Below target", kpi_group="Out of scope","Not assessed (agent or none)", true(),"No target") | eval sort_order=case(kpi_group="Server",1, kpi_group="Network",2, kpi_group="Hypervisor",3, true(),4) | sort sort_order | table kpi_group cmdb_assets known_to_rapid7 scanned assessed_30d coverage_pct target vs_target critical_findings]]></query>
+        </search>
+        <option name="drilldown">none</option>
+        <format type="color" field="vs_target">
+          <colorPalette type="map">{"Met":#53A051,"Below target":#DC4E41}</colorPalette>
+        </format>
+      </table>
+    </panel>
+  </row>
+
+  <!-- ============ Row 4: Coverage gap list ============ -->
+  <row>
+    <panel>
+      <table>
+        <title>Coverage gaps: $gap_group$ assets not assessed in the last 30 days</title>
+        <search base="map_base">
+          <query><![CDATA[| where kpi_group="$gap_group$" AND mapping_status!="1 Mapped - assessed 30d" | eval action=case(mapping_status="2 Mapped - stale >30d","Check scan schedule, credentials or reachability", mapping_status="3 Site only - never scanned","In a Rapid7 site but never scanned: check reachability and engine", true(),"Add to a Rapid7 site and scan schedule") | table mapping_status action host device_category cmdb_class app_id appname vendor ip r7_site_env last_assessed_date days_since | sort mapping_status host]]></query>
+        </search>
+        <option name="count">15</option>
+        <option name="drilldown">none</option>
+        <format type="color" field="mapping_status">
+          <colorPalette type="map">{"2 Mapped - stale >30d":#F8BE34,"3 Site only - never scanned":#F1813F,"4 Not in Rapid7":#DC4E41}</colorPalette>
+        </format>
+      </table>
+    </panel>
+  </row>
+
+  <!-- ============ Row 5: Mismatch issues ============ -->
+  <row>
+    <panel>
+      <table>
+        <title>CMDB vs Rapid7 mismatch issues (click a row for details)</title>
+        <search base="mm_base">
+          <query>| stats count by issue | sort - count</query>
+        </search>
+        <option name="drilldown">row</option>
+        <drilldown>
+          <set token="issue">$row.issue$</set>
+        </drilldown>
+      </table>
+    </panel>
+    <panel depends="$issue$">
+      <table>
+        <title>Details: $issue$</title>
+        <search base="mm_base">
+          <query><![CDATA[| search issue="$issue$" | table action host device_category va_scannable cmdb_status cmdb_env r7_env r7c vendor app_id appname ip | sort host]]></query>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+
+  <!-- ============ Row 6: Decommissioned still answering ============ -->
+  <row>
+    <panel>
+      <chart>
+        <title>Decommissioned in CMDB, still answering Rapid7 (last 30 days)</title>
+        <search base="zombie_base">
+          <query>| stats dc(host) as hosts by priority | sort priority</query>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.fieldColors">{"P1 - server still running":"0xdc4e41","P2 - infra device, same name":"0xf1813f","P3 - no hostname, identify":"0x708794","P3 - replaced or IP reused, update CMDB":"0xf8be34"}</option>
+        <option name="charting.drilldown">none</option>
+        <option name="height">320</option>
+      </chart>
+    </panel>
+    <panel>
+      <table>
+        <title>Decommissioned devices still answering: details</title>
+        <search base="zombie_base">
+          <query>| table priority host device_category ip r7_hostname r7_os days_since critical severe</query>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <format type="color" field="priority">
+          <colorPalette type="map">{"P1 - server still running":#DC4E41,"P2 - infra device, same name":#F1813F}</colorPalette>
+        </format>
+      </table>
+    </panel>
+  </row>
+
+  <!-- ============ Row 7: Rapid7 assets not in CMDB ============ -->
+  <row>
+    <panel>
+      <table>
+        <title>Rapid7 assets not found in CMDB (by IP or hostname)</title>
+        <search base="r7only_base">
+          <query>| sort - critical</query>
+        </search>
+        <option name="count">15</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+
+  <!-- ============ Row 8: Data sources and freshness ============ -->
+  <row>
+    <panel>
+      <title>Data sources and freshness</title>
+      <html>
+        <p>This dashboard reads lookups built by the scheduled reports below (every 4 hours at :20, :30 and :40) and the latest Rapid7 asset snapshot (index=rapid7, last 5 hours). Figures are as of each source's <b>last run</b>, not live.</p>
+      </html>
+      <table>
+        <search>
+          <query><![CDATA[
+| rest /servicesNS/-/-/saved/searches splunk_server=local
+| search title IN ("Rapid7 host context lookup","CMDB servers","Merge_MDB master, Rapid7 fallback")
+| eval produces=case(
+    title="Rapid7 host context lookup", "rapid7_host_context.csv",
+    title="CMDB servers",               "cmdb_assets.csv, cmdb_ip_map.csv",
+    true(),                             "asset_context.csv, asset_context_by_ip.csv")
+| eval data_time_range=if(title="Merge_MDB master, Rapid7 fallback", "lookups only", coalesce('dispatch.earliest_time',"")." to ".coalesce('dispatch.latest_time',"now"))
+| rename cron_schedule as schedule
+| table title produces schedule data_time_range
+| join type=left title
+    [search index=_internal sourcetype=scheduler earliest=-24h savedsearch_name IN ("Rapid7 host context lookup","CMDB servers","Merge_MDB master, Rapid7 fallback")
+     | stats latest(_time) as last_run_epoch latest(status) as status latest(result_count) as rows by savedsearch_name
+     | rename savedsearch_name as title]
+| append
+    [search index=cmdb sourcetype=mssql_inventory_Asset earliest=-48h
+     | stats max(_time) as last_run_epoch count as rows
+     | eval title="CMDB load (DB Connect)", produces="index=cmdb sourcetype=mssql_inventory_Asset", schedule="daily", data_time_range="latest daily load", status="loaded"]
+| append
+    [search index=rapid7 sourcetype=rapid7:vm:run collector IN ("sites","assets","scans") earliest=-24h
+     | stats latest(_time) as last_run_epoch latest(status) as status latest(events) as rows by collector
+     | eval title="Rapid7 collector: ".collector
+     | eval produces="index=rapid7 sourcetype=rapid7:vm:".case(collector="sites","site", collector="assets","asset", true(),"scan")
+     | eval schedule=if(collector="scans","every 30 min","every 4 h")
+     | eval data_time_range=if(collector="scans","last 30 days of scans","current snapshot")
+     | fields title produces schedule data_time_range last_run_epoch status rows]
+| append
+    [| makeresults
+     | eval title="This dashboard", produces="queries on page load", schedule="on open", data_time_range="lookups + Rapid7 asset snapshot (last 5 h)", last_run_epoch=now(), status="queried"
+     | fields title produces schedule data_time_range last_run_epoch status]
+| eval age_hours=round((now()-last_run_epoch)/3600,1)
+| eval last_run=strftime(last_run_epoch,"%F %T")
+| rename title as "source (scheduled report or feed)"
+| table "source (scheduled report or feed)" produces schedule data_time_range last_run age_hours rows status
+]]></query>
+          <earliest>-24h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <format type="color" field="status">
+          <colorPalette type="map">{"success":#53A051,"loaded":#53A051,"queried":#53A051,"error":#DC4E41,"skipped":#F8BE34}</colorPalette>
+        </format>
+      </table>
+    </panel>
+  </row>
+
+</form>
