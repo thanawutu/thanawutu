@@ -28,7 +28,7 @@
       <fieldForLabel>label</fieldForLabel>
       <fieldForValue>product</fieldForValue>
       <search base="latest_sw">
-        <query>| search kind="$kind$" | where like(lower(product), lower("%$q_sw$%")) AND like(lower(coalesce(vendor,"")), lower("%$q_vendor$%")) | stats dc(asset_id) as devices dc(version) as versions first(vendor) as vendor by product | sort - devices | eval label=product." (".vendor.") · ".devices." devices · ".versions." versions"</query>
+        <query>| search kind="$kind$" | where like(lower(product), lower("%$q_sw$%")) AND like(lower(coalesce(vendor,"")), lower("%$q_vendor$%")) | stats dc(asset_id) as devices dc(version) as versions first(vendor) as vendor by product | sort 0 - devices | eval label=product." (".vendor.") · ".devices." devices · ".versions." versions"</query>
       </search>
     </input>
     <input type="text" token="ranges" searchWhenChanged="true">
@@ -75,7 +75,7 @@
       <title>Versions of $product$</title>
       <table>
         <search base="latest_sw">
-          <query>| search kind="$kind$" product="$product$" | stats dc(asset_id) as devices first(vendor) as vendor by version | r7vercheck ranges="$ranges$" | sort - in_range - devices | table version devices range_status vendor</query>
+          <query>| search kind="$kind$" product="$product$" | stats dc(asset_id) as devices first(vendor) as vendor by version | r7vercheck ranges="$ranges$" | sort 0 - in_range - devices | table version devices range_status vendor</query>
         </search>
         <option name="drilldown">none</option>
         <format type="color" field="range_status">
@@ -110,7 +110,7 @@
      | eval history=mvjoin(history," → ")]
 | eval appname=mvjoin(appname,", ")
 | table hostname ip os env_label appname device_category version vendor range_status last_scan days_before freshness history site_name asset_id
-| sort - in_range env_label hostname
+| sort 0 - in_range env_label hostname
 ]]></query>
           <earliest>-90d</earliest>
           <latest>now</latest>
@@ -143,9 +143,9 @@
       </input>
       <html>
         <p style="margin:8px 0">
-          <button class="btn" data-r7-set="preview_nonce" data-r7-value="nonce">Preview (dry run)</button>
-          <button class="btn btn-primary" data-r7-set="launch_nonce" data-r7-value="nonce" data-r7-confirm="Launch the Rapid7 rescan for the selected devices?">Rescan selected</button>
-          <span style="margin-left:12px;color:#a9b4bf">INACTIVE / DECOMMISSION devices are skipped. Results appear on Scan jobs &amp; reports.</span>
+          <button class="btn" data-r7-set="preview_nonce" data-r7-value="nonce" data-r7-require="hosts">Preview (dry run)</button>
+          <button class="btn btn-primary" data-r7-set="launch_nonce" data-r7-value="nonce" data-r7-unset="job_id" data-r7-require="hosts" data-r7-confirm="Launch the Rapid7 rescan for the selected devices?">Rescan selected</button>
+          <span style="margin-left:12px;color:#a9b4bf">INACTIVE / DECOMMISSION devices are skipped. Progress appears below after you launch.</span>
         </p>
       </html>
     </panel>
@@ -173,12 +173,59 @@
           <query><![CDATA[
 | r7rescan software=$product|s$ ranges=$ranges|s$ announced=$announced|s$ hosts=$hosts|s$ only_hosts=true scope=all dryrun=false request_id=$launch_nonce|s$ launched_from="Inventory" reason=$product|s$
 ]]></query>
+          <done>
+            <condition match="$job.resultCount$ &gt; 0">
+              <set token="job_id">$result.job_id$</set>
+            </condition>
+            <condition>
+              <unset token="job_id"></unset>
+            </condition>
+          </done>
         </search>
         <option name="drilldown">cell</option>
         <drilldown>
-          <link target="_blank">r7_scan_jobs?form.job=$row.job_id$</link>
+          <link>r7_scan_jobs?form.job=$row.job_id$</link>
         </drilldown>
       </table>
+    </panel>
+  </row>
+  <row depends="$job_id$">
+    <panel>
+      <title>Rescan progress: $job_id$ (refreshes every 30 seconds)</title>
+      <table>
+        <search>
+          <query>| r7scanstatus | search job_id=$job_id|s$ | table job_id status rapid7_scans servers created finished result</query>
+          <earliest>-24h</earliest>
+          <latest>now</latest>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="drilldown">cell</option>
+        <drilldown>
+          <link>r7_scan_jobs?form.job=$row.job_id$</link>
+        </drilldown>
+        <format type="color" field="status">
+          <colorPalette type="map">{"Requested":#5A9BD5,"Running":#F8BE34,"Collecting":#F8BE34,"Finished":#53A051,"Failed":#DC4E41,"Cancelled":#708794}</colorPalette>
+        </format>
+      </table>
+      <table>
+        <title>Per Rapid7 scan while running; per server (before / after) once finished</title>
+        <search>
+          <query>| r7scanstatus job=$job_id|s$ view=auto</query>
+          <earliest>-24h</earliest>
+          <latest>now</latest>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="count">50</option>
+        <option name="drilldown">none</option>
+        <format type="color" field="cve_result">
+          <colorPalette type="map">{"CVE fixed":#53A051,"Not vulnerable":#53A051,"Rescanned":#53A051,"Still vulnerable":#DC4E41,"Newly found":#DC4E41,"Not verified":#F8BE34,"Rescanned, no login":#F8BE34,"No Rapid7 check yet":#708794}</colorPalette>
+        </format>
+      </table>
+      <html>
+        <p style="color:#a9b4bf"><b>Requested</b>: recorded, waiting for the executor (installed in 1.2.0). <b>Running</b>: Rapid7 is scanning. <b>Finished</b>: the before / after result for each server is shown above. Click the job ID for the full report on Scan jobs &amp; reports.</p>
+      </html>
     </panel>
   </row>
 </form>

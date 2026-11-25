@@ -107,21 +107,23 @@
 | eval os_list=mvjoin(os_list,"; ")
 | where like(lower(cve), lower("%$l_cve$%")) AND like(lower(coalesce(software,"")), lower("%$l_sw$%")) AND like(lower(coalesce(platform,"")), lower("%$l_plat$%")) AND like(lower(coalesce(os_list,"")), lower("%$l_os$%")) AND coalesce(tonumber(cvss_v3),0)>=$l_cvss$ AND ("$l_pub$"="" OR published>="$l_pub$") AND ("$l_add$"="" OR added>="$l_add$")
 | eval new=if(added>=strftime(relative_time(now(),"-1d@d"),"%Y-%m-%d"),"NEW","")
-| sort - added - cvss_v3
+| sort 0 - added - cvss_v3
 | head 10
-| table new added cve title software platform os_list severity cvss_v3 published prod_dc prod_dr non_prod infra
+| eval sw_link=if(match(coalesce(software,""), "^[A-Za-z]+-\d{4}[-:]\d+"), "", software)
+| table new added cve title software platform os_list severity cvss_v3 published prod_dc prod_dr non_prod infra sw_link
 | rename platform as "vendor / platform" os_list as "your servers' OS" prod_dc as "Prod · DC" prod_dr as "Prod · DR" non_prod as "Non-prod" infra as "INFRA"
 ]]></query>
           <refresh>1h</refresh>
           <refreshType>delay</refreshType>
         </search>
+        <fields>["new","added","cve","title","software","vendor / platform","your servers' OS","severity","cvss_v3","published","Prod · DC","Prod · DR","Non-prod","INFRA"]</fields>
         <option name="count">10</option>
         <option name="drilldown">row</option>
         <drilldown>
           <set token="form.cve">$row.cve$</set>
           <set token="cve">$row.cve$</set>
-          <set token="form.software">$row.software$</set>
-          <set token="software">$row.software$</set>
+          <set token="form.software">$row.sw_link$</set>
+          <set token="software">$row.sw_link$</set>
         </drilldown>
         <format type="color" field="new">
           <colorPalette type="map">{"NEW":#F2A07B}</colorPalette>
@@ -158,7 +160,7 @@
       <title>Verdict now</title>
       <table>
         <search base="servers">
-          <query>| stats count as servers count(eval(env_group="Prod")) as prod count(eval(env_group="Non-prod")) as non_prod by verdict | sort verdict</query>
+          <query>| stats count as servers count(eval(env_group="Prod")) as prod count(eval(env_group="Non-prod")) as non_prod by verdict | sort 0 verdict</query>
         </search>
         <option name="drilldown">none</option>
         <format type="color" field="verdict">
@@ -200,7 +202,7 @@
       </input>
       <table>
         <search base="servers">
-          <query><![CDATA[| where (like(lower(hostname), lower("%$s_host$%")) OR like(ip, "%$s_host$%")) AND like(lower(coalesce(os,"")), lower("%$s_os$%")) | search verdict="$s_verdict$" | eval appname=mvjoin(appname,", ") | table hostname ip env_label appname os product version range_status last_scan freshness days_before_announced r7_result verdict action site_name | sort verdict env_label hostname]]></query>
+          <query><![CDATA[| where (like(lower(hostname), lower("%$s_host$%")) OR like(ip, "%$s_host$%")) AND like(lower(coalesce(os,"")), lower("%$s_os$%")) | search verdict="$s_verdict$" | eval appname=mvjoin(appname,", ") | table hostname ip env_label appname os product version range_status last_scan freshness days_before_announced r7_result verdict action site_name | sort 0 verdict env_label hostname]]></query>
         </search>
         <option name="count">25</option>
         <option name="drilldown">none</option>
@@ -239,9 +241,9 @@
       </input>
       <html>
         <p style="margin:8px 0">
-          <button class="btn" data-r7-set="preview_nonce" data-r7-value="nonce">Preview (dry run)</button>
-          <button class="btn btn-primary" data-r7-set="launch_nonce" data-r7-value="nonce" data-r7-confirm="Launch the Rapid7 rescan now? Prod servers are scanned immediately.">Run rescan</button>
-          <span style="margin-left:12px;color:#a9b4bf">Needs the rapid7_cve_rescan role. Max 50 servers per job. Requests are recorded now; the scans start once the 1.2.0 executor on the forwarder is installed. Follow them on Scan jobs &amp; reports.</span>
+          <button class="btn" data-r7-set="preview_nonce" data-r7-value="nonce" data-r7-require="hosts" data-r7-require-when="only=true">Preview (dry run)</button>
+          <button class="btn btn-primary" data-r7-set="launch_nonce" data-r7-value="nonce" data-r7-unset="job_id" data-r7-require="hosts" data-r7-require-when="only=true" data-r7-confirm="Launch the Rapid7 rescan now? Prod servers are scanned immediately.">Run rescan</button>
+          <span style="margin-left:12px;color:#a9b4bf">Needs the rapid7_cve_rescan role. Max 50 servers per job. Requests are recorded now; the scans start once the 1.2.0 executor on the forwarder is installed. Progress appears below after you launch.</span>
         </p>
       </html>
     </panel>
@@ -273,12 +275,59 @@
           <query><![CDATA[
 | r7rescan cve=$cve|s$ software=$software|s$ ranges=$ranges|s$ announced=$announced|s$ env=$env|s$ app=$app|s$ hosts=$hosts|s$ only_hosts=$only$ scope=affected dryrun=false request_id=$launch_nonce|s$ launched_from="CVE response"
 ]]></query>
+          <done>
+            <condition match="$job.resultCount$ &gt; 0">
+              <set token="job_id">$result.job_id$</set>
+            </condition>
+            <condition>
+              <unset token="job_id"></unset>
+            </condition>
+          </done>
         </search>
         <option name="drilldown">cell</option>
         <drilldown>
-          <link target="_blank">r7_scan_jobs?form.job=$row.job_id$</link>
+          <link>r7_scan_jobs?form.job=$row.job_id$</link>
         </drilldown>
       </table>
+    </panel>
+  </row>
+  <row depends="$job_id$">
+    <panel>
+      <title>Rescan progress: $job_id$ (refreshes every 30 seconds)</title>
+      <table>
+        <search>
+          <query>| r7scanstatus | search job_id=$job_id|s$ | table job_id status rapid7_scans servers created finished result</query>
+          <earliest>-24h</earliest>
+          <latest>now</latest>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="drilldown">cell</option>
+        <drilldown>
+          <link>r7_scan_jobs?form.job=$row.job_id$</link>
+        </drilldown>
+        <format type="color" field="status">
+          <colorPalette type="map">{"Requested":#5A9BD5,"Running":#F8BE34,"Collecting":#F8BE34,"Finished":#53A051,"Failed":#DC4E41,"Cancelled":#708794}</colorPalette>
+        </format>
+      </table>
+      <table>
+        <title>Per Rapid7 scan while running; per server (before / after) once finished</title>
+        <search>
+          <query>| r7scanstatus job=$job_id|s$ view=auto</query>
+          <earliest>-24h</earliest>
+          <latest>now</latest>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="count">50</option>
+        <option name="drilldown">none</option>
+        <format type="color" field="cve_result">
+          <colorPalette type="map">{"CVE fixed":#53A051,"Not vulnerable":#53A051,"Rescanned":#53A051,"Still vulnerable":#DC4E41,"Newly found":#DC4E41,"Not verified":#F8BE34,"Rescanned, no login":#F8BE34,"No Rapid7 check yet":#708794}</colorPalette>
+        </format>
+      </table>
+      <html>
+        <p style="color:#a9b4bf"><b>Requested</b>: recorded, waiting for the executor (installed in 1.2.0). <b>Running</b>: Rapid7 is scanning. <b>Finished</b>: the before / after result for each server is shown above. Click the job ID for the full report on Scan jobs &amp; reports.</p>
+      </html>
     </panel>
   </row>
 

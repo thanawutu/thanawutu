@@ -80,7 +80,7 @@ $sw_join$
 | fillnull value=0 fixed_30d
 | eval ls=strptime(replace(last_scan,"Z",""),"%Y-%m-%dT%H:%M:%S"), days_since_scan=round((now()-ls)/86400,0)
 | eval scan_data=case(isnull(ls),"None", days_since_scan>7,"Stale: rescan to verify", true(),"OK")
-| sort - critical - open
+| sort 0 - critical - open
 ]]></query>
     <earliest>-30d</earliest>
     <latest>now</latest>
@@ -164,8 +164,8 @@ $sw_join$
       </input>
       <html>
         <p style="margin:8px 0">
-          <button class="btn" data-r7-set="preview_nonce" data-r7-value="nonce">Preview (dry run)</button>
-          <button class="btn btn-primary" data-r7-set="launch_nonce" data-r7-value="nonce" data-r7-confirm="Request a rescan of the selected servers?">Rescan selected</button>
+          <button class="btn" data-r7-set="preview_nonce" data-r7-value="nonce" data-r7-require="r_hosts">Preview (dry run)</button>
+          <button class="btn btn-primary" data-r7-set="launch_nonce" data-r7-value="nonce" data-r7-unset="job_id" data-r7-require="r_hosts" data-r7-confirm="Request a rescan of the selected servers?">Rescan selected</button>
           <span style="margin-left:12px;color:#a9b4bf">Requests are recorded now; scans start once the 1.2.0 executor on the forwarder is installed.</span>
         </p>
       </html>
@@ -190,12 +190,59 @@ $sw_join$
       <table>
         <search>
           <query>| r7rescan hosts=$r_hosts|s$ only_hosts=true dryrun=false request_id=$launch_nonce|s$ launched_from="Impacted assets" reason="Verify fixes"</query>
+          <done>
+            <condition match="$job.resultCount$ &gt; 0">
+              <set token="job_id">$result.job_id$</set>
+            </condition>
+            <condition>
+              <unset token="job_id"></unset>
+            </condition>
+          </done>
         </search>
         <option name="drilldown">cell</option>
         <drilldown>
-          <link target="_blank">r7_scan_jobs?form.job=$row.job_id$</link>
+          <link>r7_scan_jobs?form.job=$row.job_id$</link>
         </drilldown>
       </table>
+    </panel>
+  </row>
+  <row depends="$job_id$">
+    <panel>
+      <title>Rescan progress: $job_id$ (refreshes every 30 seconds)</title>
+      <table>
+        <search>
+          <query>| r7scanstatus | search job_id=$job_id|s$ | table job_id status rapid7_scans servers created finished result</query>
+          <earliest>-24h</earliest>
+          <latest>now</latest>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="drilldown">cell</option>
+        <drilldown>
+          <link>r7_scan_jobs?form.job=$row.job_id$</link>
+        </drilldown>
+        <format type="color" field="status">
+          <colorPalette type="map">{"Requested":#5A9BD5,"Running":#F8BE34,"Collecting":#F8BE34,"Finished":#53A051,"Failed":#DC4E41,"Cancelled":#708794}</colorPalette>
+        </format>
+      </table>
+      <table>
+        <title>Per Rapid7 scan while running; per server (before / after) once finished</title>
+        <search>
+          <query>| r7scanstatus job=$job_id|s$ view=auto</query>
+          <earliest>-24h</earliest>
+          <latest>now</latest>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="count">50</option>
+        <option name="drilldown">none</option>
+        <format type="color" field="cve_result">
+          <colorPalette type="map">{"CVE fixed":#53A051,"Not vulnerable":#53A051,"Rescanned":#53A051,"Still vulnerable":#DC4E41,"Newly found":#DC4E41,"Not verified":#F8BE34,"Rescanned, no login":#F8BE34,"No Rapid7 check yet":#708794}</colorPalette>
+        </format>
+      </table>
+      <html>
+        <p style="color:#a9b4bf"><b>Requested</b>: recorded, waiting for the executor (installed in 1.2.0). <b>Running</b>: Rapid7 is scanning. <b>Finished</b>: the before / after result for each server is shown above. Click the job ID for the full report on Scan jobs &amp; reports.</p>
+      </html>
     </panel>
   </row>
 
@@ -236,17 +283,20 @@ $sw_join$
 | search severity="$d_sev$"
 | where like(lower(coalesce(cve,"")), lower("%$d_cve$%")) AND like(lower(coalesce(component,"")), lower("%$d_sw$%")) AND coalesce(tonumber(cvss_v3),0)>=$d_cvss$
 | eval published=substr(published,1,10), added=substr(added,1,10)
-| table cve title component severity cvss_v3 published added vuln_ids
-| rename component as software vuln_ids as rapid7_check
-| sort - cvss_v3
+| eval software=component, cve_link=if(like(cve,"ROLLUP%"), "", mvindex(split(cves_str,"|"),0))
+| eval sw_link=if(match(coalesce(software,""), "^[A-Za-z]+-\d{4}[-:]\d+"), "", software)
+| table cve title software severity cvss_v3 published added vuln_ids cve_link sw_link
+| rename vuln_ids as rapid7_check
+| sort 0 - cvss_v3
 ]]></query>
           <earliest>-3d</earliest>
           <latest>now</latest>
         </search>
+        <fields>["cve","title","software","severity","cvss_v3","published","added","rapid7_check"]</fields>
         <option name="count">25</option>
-        <option name="drilldown">cell</option>
+        <option name="drilldown">row</option>
         <drilldown>
-          <link target="_blank">r7_cve_response?form.cve=$row.cve$&amp;form.software=$row.software$</link>
+          <link>r7_cve_response?form.cve=$row.cve_link$&amp;form.software=$row.sw_link$</link>
         </drilldown>
         <format type="color" field="severity">
           <colorPalette type="map">{"Critical":#DC4E41,"Severe":#F8BE34,"Moderate":#708794}</colorPalette>
@@ -263,7 +313,7 @@ $sw_join$
       <title>Fixed recently on $asset_name$ (verified by rescan)</title>
       <table>
         <search>
-          <query>`r7_index` sourcetype="rapid7:vm:scan_result" asset_id="$asset$" cve_result="CVE fixed" | table _time job_id cve software version_before version_after version_change | sort - _time</query>
+          <query>`r7_index` sourcetype="rapid7:vm:scan_result" asset_id="$asset$" cve_result="CVE fixed" | table _time job_id cve software version_before version_after version_change | sort 0 - _time</query>
           <earliest>-90d</earliest>
           <latest>now</latest>
         </search>

@@ -54,7 +54,7 @@
       <table>
         <title>Changes by type</title>
         <search base="changes">
-          <query>| stats dc(host) as servers by change | sort - servers</query>
+          <query>| stats dc(host) as servers by change | sort 0 - servers</query>
         </search>
         <option name="drilldown">row</option>
         <drilldown>
@@ -91,7 +91,7 @@
       <table>
         <title>Change list</title>
         <search base="changes">
-          <query>| search change="$change$" | where like(lower(host), lower("%$c_host$%")) AND ("$c_from$"="" OR substr(detected,1,10)&gt;="$c_from$") | join type=left host [search `r7_latest(rapid7:vm:asset_site)` earliest=-3d | dedup asset_id | eval host=upper(replace(hostname,"\..*$$","")) | stats first(os) as os by host] | where like(lower(coalesce(os,"")), lower("%$c_os$%")) | table detected host os change field from to status_now env_label category_now | sort - detected</query>
+          <query>| search change="$change$" | where like(lower(host), lower("%$c_host$%")) AND ("$c_from$"="" OR substr(detected,1,10)&gt;="$c_from$") | join type=left host [search `r7_latest(rapid7:vm:asset_site)` earliest=-3d | dedup asset_id | eval host=upper(replace(hostname,"\..*$$","")) | stats first(os) as os by host] | where like(lower(coalesce(os,"")), lower("%$c_os$%")) | table detected host os change field from to status_now env_label category_now | sort 0 - detected</query>
         </search>
         <option name="count">25</option>
         <option name="drilldown">none</option>

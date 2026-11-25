@@ -1,4 +1,4 @@
-# Rapid7 VM CVE Response (Splunk app 1.1.10)
+# Rapid7 VM CVE Response (Splunk app 1.1.11)
 
 CVE impact, software and OS inventory, rescans launched from Splunk with
 before/after results, saved CVEs and CMDB changes, for Rapid7 InsightVM.
@@ -6,6 +6,21 @@ before/after results, saved CVEs and CMDB changes, for Rapid7 InsightVM.
 It is a companion to your existing Rapid7 collector app (v1.0, sites / assets /
 scans). It does not change or replace it, and it reads the same `index=rapid7`
 and the CMDB lookups used by the "CMDB and Rapid7 Asset Mapping" dashboard.
+
+## What's new in 1.1.11
+
+- Clicking a CVE (CVE impact overview, Impacted assets) opens **CVE response in the same browser tab** with the CVE
+  filled in. The software box is filled only when the value is software (PHP, OpenSSH, kernel); advisory IDs such as
+  ELSA-2026-100744 or RHSA-2026:1234 are left out, so the search is not narrowed to nothing.
+- **Rescan progress on the same page**: after Run rescan / Rescan selected / Rescan group, a progress panel shows the
+  job status (Requested → Running → Finished), each Rapid7 scan while it runs and the before / after result per server
+  when it finishes. It refreshes every 30 seconds.
+- Preview and rescan buttons do nothing until a server is picked, and say "Pick at least one server first." instead
+  of showing an error.
+- Lists are no longer cut at 10,000 rows (`sort 0`): the CVE impact overview count, Impacted assets, Inventory and
+  Asset management.
+- Tested on Splunk 9.4 with production-sized data: every scheduled search, command and panel (98 ok) and every
+  panel with search boxes filled in (81 ok); pages clicked through in a browser.
 
 ## What's new in 1.1.10
 
@@ -110,7 +125,7 @@ re-runs a launch.
 
 ### 1. Heavy forwarder (SIEMFWDPR01): collectors
 
-1. Apps → Manage apps → Install app from file → `rapid7_vm_cve-1.1.10.tgz`.
+1. Apps → Manage apps → Install app from file → `rapid7_vm_cve-1.1.11.tgz`.
 2. Create `$SPLUNK_HOME/etc/apps/rapid7_vm_cve/local/rapid7_cve.conf`:
    ```
    [settings]
@@ -206,7 +221,7 @@ Environment labels come from the macro `r7_env_label`: Prod · DC = `cmdb_class`
 PROD, Prod · DR = DR, Non-prod · UAT / SIT / DEV = NONPROD split by `cmdb_env`.
 Edit the macro if your `cmdb_env` values differ.
 
-## Known limits in 1.1.10
+## Known limits in 1.1.11
 
 - Not yet run against your Rapid7 console or Splunk. Logic is covered by unit
   and end-to-end tests with simulated Rapid7 and splunkd.

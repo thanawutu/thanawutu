@@ -140,13 +140,14 @@ if __name__ == "__main__":
              "Rapid7 CVE - CMDB history backfill (run once)"]
     for name in order:
         r = run('| savedsearch "%s"' % name, "0", label=name)
+        r["warn"] = [w for w in r["warn"] if "Found no results to append" not in str(w)]  # nothing changed: expected
         summary[report(r, show=True)] += 1
 
     print("== commands")
     cmds = [
         '| makeresults count=3 | streamstats count | eval version=case(count=1,"8.1.27",count=2,"8.1.34",count=3,"2.4.6-99.el7") | r7vercheck ranges="8.1 < 8.1.34 ; < 2.4.63"',
         '| r7cve software="OpenSSH" ranges="< 9.8"',
-        '| r7cvewatch action=add cve=CVE-2026-150000 announced=2026-11-18 software="PHP" ranges="< 9.9"',
+        '| r7cvewatch action=update cve=CVE-2026-150000 announced=2026-11-18 software="PHP" ranges="< 9.9"',
         '| r7cvewatch action=list with_counts=true',
         '| r7cve cve=CVE-2026-150000',
         '| r7rescan cve=CVE-2026-150000 env="Prod" dryrun=true',
@@ -162,11 +163,11 @@ if __name__ == "__main__":
     print("== dashboards (every panel, default tokens)")
     extra = {
         "r7_cve_response.xml": {"cve": "CVE-2026-150000", "software": "PHP", "ranges": "< 9.9", "ready": "1",
-                                "only": "false", "hosts": "", "preview_nonce": "x", "launch_nonce": "E2E-L1"},
-        "r7_impacted_assets.xml": {"asset": "10000", "asset_name": "SRV0000", "r_hosts": "10000", "preview_nonce": "x"},
-        "r7_inventory.xml": {"product": "OpenSSH", "hosts": "", "preview_nonce": "x"},
-        "r7_scan_jobs.xml": {"job": "none"},
-        "r7_saved_cves.xml": {"cve": "CVE-2026-150000", "env": "Prod · DC", "preview_nonce": "x"},
+                                "only": "false", "hosts": "", "preview_nonce": "x", "launch_nonce": "E2E-L1", "job_id": "JOB-20261124172411-LZ0K"},
+        "r7_impacted_assets.xml": {"asset": "10000", "asset_name": "SRV0000", "r_hosts": "10000", "preview_nonce": "x", "job_id": "JOB-20261124172411-LZ0K"},
+        "r7_inventory.xml": {"product": "OpenSSH", "hosts": "10000", "preview_nonce": "x", "job_id": "JOB-20261124172411-LZ0K"},
+        "r7_scan_jobs.xml": {"job": "JOB-20261124172411-LZ0K"},
+        "r7_saved_cves.xml": {"cve": "CVE-2026-150000", "env": "Prod · DC", "preview_nonce": "x", "job_id": "JOB-20261124172411-LZ0K"},
         "r7_asset_management.xml": {"issue": "Environment differs", "req_issue": "Environment differs"},
     }
     views = os.path.join(APPDIR, "default", "data", "ui", "views")

@@ -115,7 +115,7 @@ index=rapid7 sourcetype=rapid7:vm:asset earliest=-5h
 | stats values(ip) as ip values(r7_hostname) as r7_hostname values(r7_os) as r7_os min(days_since) as days_since max(critical) as critical max(severe) as severe by priority host device_category
 | where (like(lower(host), lower("%$am_host$%")) OR like(mvjoin(ip," "), "%$am_host$%")) AND like(lower(coalesce(mvjoin(r7_os," "),"")), lower("%$am_os$%"))
 | eval suggested_action=case(like(priority,"P1%"),"Confirm shutdown with the owner (never deleted automatically)", like(priority,"P2%"),"Network / infra team: confirm device status or fix CMDB", true(),"Identify the device and update CMDB")
-| sort priority - critical
+| sort 0 priority - critical
 ]]></query>
     <earliest>-5h</earliest>
     <latest>now</latest>
@@ -272,7 +272,7 @@ index=rapid7 sourcetype=rapid7:vm:asset earliest=-5h
       <chart>
         <title>Mapping status by device category</title>
         <search base="map_base">
-          <query><![CDATA[| stats count(eval(mapping_status="1 Mapped - assessed 30d")) as "Assessed 30d" count(eval(mapping_status="2 Mapped - stale >30d")) as "Stale >30d" count(eval(mapping_status="3 Site only - never scanned")) as "Site only, never scanned" count(eval(mapping_status="4 Not in Rapid7")) as "Not in Rapid7" by device_category | eval total='Assessed 30d'+'Stale >30d'+'Site only, never scanned'+'Not in Rapid7' | sort - total | fields - total]]></query>
+          <query><![CDATA[| stats count(eval(mapping_status="1 Mapped - assessed 30d")) as "Assessed 30d" count(eval(mapping_status="2 Mapped - stale >30d")) as "Stale >30d" count(eval(mapping_status="3 Site only - never scanned")) as "Site only, never scanned" count(eval(mapping_status="4 Not in Rapid7")) as "Not in Rapid7" by device_category | eval total='Assessed 30d'+'Stale >30d'+'Site only, never scanned'+'Not in Rapid7' | sort 0 - total | fields - total]]></query>
         </search>
         <option name="charting.chart">bar</option>
         <option name="charting.chart.stackMode">stacked</option>
@@ -304,7 +304,7 @@ index=rapid7 sourcetype=rapid7:vm:asset earliest=-5h
       <table>
         <title>VA coverage KPI by group</title>
         <search base="map_base">
-          <query><![CDATA[| stats count as cmdb_assets count(eval(mapping_status!="4 Not in Rapid7")) as known_to_rapid7 count(eval(isnotnull(last_assessed))) as scanned count(eval(mapping_status="1 Mapped - assessed 30d")) as assessed_30d sum(critical) as critical_findings by kpi_group | eval coverage_pct=if(kpi_group="Out of scope", null(), round(assessed_30d/cmdb_assets*100,1)) | eval target=if(kpi_group="Server","98%","-") | eval vs_target=case(kpi_group="Server" AND coverage_pct>=98,"Met", kpi_group="Server","Below target", kpi_group="Out of scope","Not assessed (agent or none)", true(),"No target") | eval sort_order=case(kpi_group="Server",1, kpi_group="Network",2, kpi_group="Hypervisor",3, true(),4) | sort sort_order | table kpi_group cmdb_assets known_to_rapid7 scanned assessed_30d coverage_pct target vs_target critical_findings]]></query>
+          <query><![CDATA[| stats count as cmdb_assets count(eval(mapping_status!="4 Not in Rapid7")) as known_to_rapid7 count(eval(isnotnull(last_assessed))) as scanned count(eval(mapping_status="1 Mapped - assessed 30d")) as assessed_30d sum(critical) as critical_findings by kpi_group | eval coverage_pct=if(kpi_group="Out of scope", null(), round(assessed_30d/cmdb_assets*100,1)) | eval target=if(kpi_group="Server","98%","-") | eval vs_target=case(kpi_group="Server" AND coverage_pct>=98,"Met", kpi_group="Server","Below target", kpi_group="Out of scope","Not assessed (agent or none)", true(),"No target") | eval sort_order=case(kpi_group="Server",1, kpi_group="Network",2, kpi_group="Hypervisor",3, true(),4) | sort 0 sort_order | table kpi_group cmdb_assets known_to_rapid7 scanned assessed_30d coverage_pct target vs_target critical_findings]]></query>
         </search>
         <option name="drilldown">none</option>
         <format type="color" field="vs_target">
@@ -320,7 +320,7 @@ index=rapid7 sourcetype=rapid7:vm:asset earliest=-5h
       <table>
         <title>Coverage gaps: $gap_group$ assets not assessed in the last 30 days</title>
         <search base="map_base">
-          <query><![CDATA[| where kpi_group="$gap_group$" AND mapping_status!="1 Mapped - assessed 30d" | eval action=case(mapping_status="2 Mapped - stale >30d","Check scan schedule, credentials or reachability", mapping_status="3 Site only - never scanned","In a Rapid7 site but never scanned: check reachability and engine", true(),"Add to a Rapid7 site and scan schedule") | table mapping_status action host device_category cmdb_class app_id appname vendor ip r7_site_env last_assessed_date days_since | sort mapping_status host]]></query>
+          <query><![CDATA[| where kpi_group="$gap_group$" AND mapping_status!="1 Mapped - assessed 30d" | eval action=case(mapping_status="2 Mapped - stale >30d","Check scan schedule, credentials or reachability", mapping_status="3 Site only - never scanned","In a Rapid7 site but never scanned: check reachability and engine", true(),"Add to a Rapid7 site and scan schedule") | table mapping_status action host device_category cmdb_class app_id appname vendor ip r7_site_env last_assessed_date days_since | sort 0 mapping_status host]]></query>
         </search>
         <option name="count">15</option>
         <option name="drilldown">none</option>
@@ -337,7 +337,7 @@ index=rapid7 sourcetype=rapid7:vm:asset earliest=-5h
       <table>
         <title>CMDB vs Rapid7 mismatch issues (click a row for details; select assets under Fix requests)</title>
         <search base="mm_base">
-          <query>| stats count by issue | sort - count</query>
+          <query>| stats count by issue | sort 0 - count</query>
         </search>
         <option name="drilldown">row</option>
         <drilldown>
@@ -349,7 +349,7 @@ index=rapid7 sourcetype=rapid7:vm:asset earliest=-5h
       <table>
         <title>Details: $issue$</title>
         <search base="mm_base">
-          <query><![CDATA[| search issue="$issue$" | table action host device_category va_scannable cmdb_status cmdb_env r7_env r7c vendor app_id appname ip | sort host]]></query>
+          <query><![CDATA[| search issue="$issue$" | table action host device_category va_scannable cmdb_status cmdb_env r7_env r7c vendor app_id appname ip | sort 0 host]]></query>
         </search>
         <option name="count">10</option>
         <option name="drilldown">none</option>
@@ -363,7 +363,7 @@ index=rapid7 sourcetype=rapid7:vm:asset earliest=-5h
       <chart>
         <title>Decommissioned in CMDB, still answering Rapid7 (last 30 days)</title>
         <search base="zombie_base">
-          <query>| stats dc(host) as hosts by priority | sort priority</query>
+          <query>| stats dc(host) as hosts by priority | sort 0 priority</query>
         </search>
         <option name="charting.chart">pie</option>
         <option name="charting.fieldColors">{"P1 - server still running":"0xdc4e41","P2 - infra device, same name":"0xf1813f","P3 - no hostname, identify":"0x708794","P3 - replaced or IP reused, update CMDB":"0xf8be34"}</option>
@@ -392,7 +392,7 @@ index=rapid7 sourcetype=rapid7:vm:asset earliest=-5h
       <table>
         <title>Rapid7 assets not found in CMDB (by IP or hostname)</title>
         <search base="r7only_base">
-          <query>| sort - critical | table ip r7_hostname r7_os r7_site last_assessed days_since critical severe suggested_action</query>
+          <query>| sort 0 - critical | table ip r7_hostname r7_os r7_site last_assessed days_since critical severe suggested_action</query>
         </search>
         <option name="count">15</option>
         <option name="drilldown">none</option>
@@ -408,7 +408,7 @@ index=rapid7 sourcetype=rapid7:vm:asset earliest=-5h
         <fieldForLabel>issue</fieldForLabel>
         <fieldForValue>issue</fieldForValue>
         <search base="mm_base">
-          <query>| stats count by issue | sort - count</query>
+          <query>| stats count by issue | sort 0 - count</query>
         </search>
         <choice value="Rapid7 asset not in CMDB">Rapid7 asset not in CMDB</choice>
         <choice value="Decommissioned still answering">Decommissioned still answering</choice>

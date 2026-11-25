@@ -89,7 +89,7 @@
 | eval os_list=mvjoin(os_list, "; ")
 | where like(lower(coalesce(os_list,"")), lower("%$f_os$%"))
 | eval sortp=prod_dc+prod_dr
-| sort - sortp - your_servers - cvss_v3
+| sort 0 - sortp - your_servers - cvss_v3
 | fields - sortp
 ]]></query>
   </search>
@@ -191,14 +191,16 @@
         <search base="cves">
           <query><![CDATA[
 | eval check_platforms=mvjoin(check_platforms,", "), rapid7_checks=mvjoin(rapid7_checks,", ")
-| table cve title software platform check_platforms os_list severity cvss_v3 published added your_servers prod_dc prod_dr non_prod infra rapid7_checks
+| eval sw_link=if(match(coalesce(software,""), "^[A-Za-z]+-\d{4}[-:]\d+"), "", software)
+| table cve title software platform check_platforms os_list severity cvss_v3 published added your_servers prod_dc prod_dr non_prod infra rapid7_checks sw_link
 | rename platform as "vendor / platform" check_platforms as "Rapid7 check platforms" os_list as "your servers' OS" prod_dc as "Prod · DC" prod_dr as "Prod · DR" non_prod as "Non-prod" infra as "INFRA"
 ]]></query>
         </search>
+        <fields>["cve","title","software","vendor / platform","Rapid7 check platforms","your servers' OS","severity","cvss_v3","published","added","your_servers","Prod · DC","Prod · DR","Non-prod","INFRA","rapid7_checks"]</fields>
         <option name="count">25</option>
         <option name="drilldown">row</option>
         <drilldown>
-          <link target="_blank">r7_cve_response?form.cve=$row.cve$&amp;form.software=$row.software$</link>
+          <link>r7_cve_response?form.cve=$row.cve$&amp;form.software=$row.sw_link$</link>
         </drilldown>
         <format type="color" field="severity">
           <colorPalette type="map">{"Critical":#DC4E41,"Severe":#F8BE34,"Moderate":#708794}</colorPalette>
@@ -219,7 +221,7 @@
 | stats count as servers count(eval(credentialed="true")) as with_software_data by env_label
 | eval without=servers-with_software_data, coverage_pct=round(with_software_data/servers*100,1)
 | eval sort_order=case(env_label="Prod · DC",1, env_label="Prod · DR",2, like(env_label,"Non-prod%"),3, env_label="INFRA",4, true(),5)
-| sort sort_order env_label | fields - sort_order
+| sort 0 sort_order env_label | fields - sort_order
 ]]></query>
           <earliest>-3d</earliest>
           <latest>now</latest>

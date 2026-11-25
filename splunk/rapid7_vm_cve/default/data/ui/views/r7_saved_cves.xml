@@ -126,14 +126,14 @@
       <table>
         <title>Servers in this group</title>
         <search>
-          <query>| r7cve cve=$cve|s$ env=$env|s$ app=$app|s$ | stats count as servers by env_label verdict | sort env_label verdict</query>
+          <query>| r7cve cve=$cve|s$ env=$env|s$ app=$app|s$ | stats count as servers by env_label verdict | sort 0 env_label verdict</query>
         </search>
         <option name="drilldown">none</option>
       </table>
       <html>
         <p style="margin:8px 0">
           <button class="btn" data-r7-set="preview_nonce" data-r7-value="nonce">Preview (dry run)</button>
-          <button class="btn btn-primary" data-r7-set="launch_nonce" data-r7-value="nonce" data-r7-confirm="Launch the Rapid7 rescan for this group?">Rescan group</button>
+          <button class="btn btn-primary" data-r7-set="launch_nonce" data-r7-value="nonce" data-r7-unset="job_id" data-r7-confirm="Launch the Rapid7 rescan for this group?">Rescan group</button>
         </p>
       </html>
     </panel>
@@ -157,12 +157,59 @@
       <table>
         <search>
           <query>| r7rescan cve=$cve|s$ env=$env|s$ app=$app|s$ scope=$scope$ dryrun=false request_id=$launch_nonce|s$ launched_from="Saved CVEs"</query>
+          <done>
+            <condition match="$job.resultCount$ &gt; 0">
+              <set token="job_id">$result.job_id$</set>
+            </condition>
+            <condition>
+              <unset token="job_id"></unset>
+            </condition>
+          </done>
         </search>
         <option name="drilldown">cell</option>
         <drilldown>
-          <link target="_blank">r7_scan_jobs?form.job=$row.job_id$</link>
+          <link>r7_scan_jobs?form.job=$row.job_id$</link>
         </drilldown>
       </table>
+    </panel>
+  </row>
+  <row depends="$job_id$">
+    <panel>
+      <title>Rescan progress: $job_id$ (refreshes every 30 seconds)</title>
+      <table>
+        <search>
+          <query>| r7scanstatus | search job_id=$job_id|s$ | table job_id status rapid7_scans servers created finished result</query>
+          <earliest>-24h</earliest>
+          <latest>now</latest>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="drilldown">cell</option>
+        <drilldown>
+          <link>r7_scan_jobs?form.job=$row.job_id$</link>
+        </drilldown>
+        <format type="color" field="status">
+          <colorPalette type="map">{"Requested":#5A9BD5,"Running":#F8BE34,"Collecting":#F8BE34,"Finished":#53A051,"Failed":#DC4E41,"Cancelled":#708794}</colorPalette>
+        </format>
+      </table>
+      <table>
+        <title>Per Rapid7 scan while running; per server (before / after) once finished</title>
+        <search>
+          <query>| r7scanstatus job=$job_id|s$ view=auto</query>
+          <earliest>-24h</earliest>
+          <latest>now</latest>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="count">50</option>
+        <option name="drilldown">none</option>
+        <format type="color" field="cve_result">
+          <colorPalette type="map">{"CVE fixed":#53A051,"Not vulnerable":#53A051,"Rescanned":#53A051,"Still vulnerable":#DC4E41,"Newly found":#DC4E41,"Not verified":#F8BE34,"Rescanned, no login":#F8BE34,"No Rapid7 check yet":#708794}</colorPalette>
+        </format>
+      </table>
+      <html>
+        <p style="color:#a9b4bf"><b>Requested</b>: recorded, waiting for the executor (installed in 1.2.0). <b>Running</b>: Rapid7 is scanning. <b>Finished</b>: the before / after result for each server is shown above. Click the job ID for the full report on Scan jobs &amp; reports.</p>
+      </html>
     </panel>
   </row>
 
