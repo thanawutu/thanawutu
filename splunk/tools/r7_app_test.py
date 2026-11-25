@@ -42,7 +42,7 @@ import xml.etree.ElementTree as ET
 from urllib import error, parse, request
 
 APP = "rapid7_vm_cve"
-VERSION = "1.0 (for app 1.1.11)"
+VERSION = "1.1 (for app 1.1.11)"
 
 WRITE_PATTERNS = [
     r"dryrun\s*=\s*(false|f|0|no)\b",
@@ -67,7 +67,15 @@ class Splunk(object):
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
         self.opener = request.build_opener(request.HTTPSHandler(context=ctx), request.ProxyHandler({}))
-        self.auth = "Basic " + base64.b64encode(("%s:%s" % (user, password)).encode()).decode()
+        # log in once and reuse the session, as Splunk Web does (a password check per request is slow
+        # for LDAP / SSO accounts)
+        t0 = time.time()
+        body = parse.urlencode({"username": user, "password": password, "output_mode": "json"}).encode()
+        with self.opener.open(request.Request(self.url + "/services/auth/login", data=body, method="POST"),
+                              timeout=300) as r:
+            key = json.loads(r.read().decode())["sessionKey"]
+        self.auth = "Splunk " + key
+        self.login_secs = round(time.time() - t0, 1)
         self.user = user
 
     def call(self, method, path, data=None, timeout=1800):
@@ -276,11 +284,15 @@ def main():
     ap.add_argument("--slow", type=float, default=60)
     a = ap.parse_args()
     pw = getpass.getpass("Splunk password for %s: " % a.user)
-    sp = Splunk(a.url, a.user, pw)
+    try:
+        sp = Splunk(a.url, a.user, pw)
+    except Exception as e:
+        print("Login failed: %s" % e)
+        return 2
     rep = Report(a.out, a.slow)
     t_start = time.time()
     rep.line("Rapid7 VM CVE Response - read-only test pack %s" % VERSION)
-    rep.line("Started %s UTC against %s" % (dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M"), a.url))
+    rep.line("Started %s UTC against %s (login took %ss)" % (dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M"), a.url, sp.login_secs))
 
     # 1 ----------------------------------------------------------------- account and data
     rep.line("\n== 1. Account, app and data")
