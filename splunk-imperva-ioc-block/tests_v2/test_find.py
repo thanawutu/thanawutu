@@ -193,6 +193,13 @@ class TestViews(unittest.TestCase):
         macros = open(os.path.join(APP, "default", "macros.conf"), encoding="utf-8").read()
         self.assertIn("| where isnull(_dismissed_at) OR last_seen > tonumber(_dismissed_at)", macros)
 
+    def test_detection_tables_show_every_ip(self):
+        macros = open(os.path.join(APP, "default", "macros.conf"), encoding="utf-8").read()
+        base = macros[macros.index("[imperva_ioc_enrich_base]"):]
+        base = base[:base.index("iseval")]
+        self.assertIn("definition = sort 0 - _sev_rank - count \\", base)
+        self.assertNotIn("head", base)                                        # no 50-row limit any more
+
     def test_command_registered(self):
         self.assertIn("[impervafind]\nfilename = impervafind.py", open(os.path.join(APP, "default", "commands.conf")).read())
         self.assertIn("[commands/impervafind]", open(os.path.join(APP, "metadata", "default.meta")).read())
