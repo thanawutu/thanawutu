@@ -42,7 +42,7 @@ import xml.etree.ElementTree as ET
 from urllib import error, parse, request
 
 APP = "rapid7_vm_cve"
-VERSION = "1.1 (for app 1.1.11)"
+VERSION = "1.2 (for app 1.1.11)"
 
 WRITE_PATTERNS = [
     r"dryrun\s*=\s*(false|f|0|no)\b",
@@ -340,14 +340,23 @@ def main():
     except Exception as e:
         rep.line("FAIL cannot list saved searches: %s" % e)
     r = sp.search(
-        'index=_internal sourcetype=scheduler app="%s" | stats count as runs count(eval(status!="success")) as not_success '
-        'latest(status) as last_status max(run_time) as max_run_s latest(result_count) as last_rows by savedsearch_name' % APP, "-24h")
-    rep.result("scheduler log, last 24 h", r)
+        'index=_internal sourcetype=scheduler app="%s" '
+        '| stats count(eval(status="success" OR status="completed")) as success '
+        'count(eval(status="skipped")) as skipped count(eval(like(status,"delegated%%"))) as delegated '
+        'count(eval(NOT (status="success" OR status="completed" OR status="skipped" OR like(status,"delegated%%")))) as other '
+        'values(eval(if(status="skipped", reason, null()))) as skip_reason '
+        'max(run_time) as max_run_s latest(result_count) as last_rows by savedsearch_name' % APP, "-24h")
+    rep.result("scheduler log, last 24 h (delegated = search head cluster hand-over, normal)", r)
     for x in r["results"]:
-        flag = "  <-- check" if str(x.get("not_success", "0")) not in ("0", "") else ""
-        rep.line("        %-50s runs %4s  not success %3s  last %-10s max %6ss  rows %s%s" % (
-            x.get("savedsearch_name"), x.get("runs"), x.get("not_success"), x.get("last_status"),
-            round(float(x.get("max_run_s") or 0), 1), x.get("last_rows"), flag))
+        sk, ot = str(x.get("skipped") or "0"), str(x.get("other") or "0")
+        flag = "  <-- check" if sk != "0" or ot != "0" else ""
+        reason = x.get("skip_reason") or ""
+        if isinstance(reason, list):
+            reason = "; ".join(reason)
+        rep.line("        %-46s success %3s  skipped %3s  delegated %3s  other %3s  max %6ss  rows %s%s%s" % (
+            x.get("savedsearch_name"), x.get("success"), sk, x.get("delegated"), ot,
+            round(float(x.get("max_run_s") or 0), 1), x.get("last_rows"), flag,
+            ("  skip reason: " + str(reason)[:150]) if reason else ""))
 
     # samples from your data ------------------------------------------------
     rep.line("\n== Sample values picked from your data (used to fill the search boxes)")
@@ -427,7 +436,7 @@ def main():
                  "product": S["product"]})
     # tokens that panels need to be shown (clicks, buttons) - set on every page
     shown = {"ready": "1", "preview_nonce": "test", "launch_nonce": "", "asset": S["aid"], "asset_name": S["host"],
-             "r_hosts": S["aid"], "hosts": S["aid"], "only": "true", "job": S["job"] or "none", "job_id": S["job"],
+             "r_hosts": S["aid"], "hosts": S["aid"], "only": "true", "job": S["job"], "job_id": S["job"],
              "product": S["product"], "kind": "Software", "cve_view": S["saved"],
              "issue": "Environment differs", "req_issue": "Environment differs", "change": "*"}
     sec = ["sec_cov", "sec_mis", "sec_decom", "sec_r7", "sec_req", "sec_fresh"]
@@ -451,13 +460,14 @@ def main():
             base_tokens["cve"] = S["cve"]  # the page's panels appear once a CVE is entered
         if not S["job"]:
             base_tokens.pop("job_id", None)
+            base_tokens.pop("job", None)
         parsed.append((name, inputs, base_tokens, searches))
         rep.line("-- %s (%s)" % (name, v["content"].get("label") or root.findtext("label") or ""))
         for i, s in enumerate(searches):
             if s["id"] and any(x["base"] == s["id"] for x in searches):
                 continue  # base searches run through their panels
-            if "$job_id" in s["q"] and not S["job"]:
-                continue
+            if ("$job_id" in s["q"] or "$job$" in s["q"] or "$job|" in s["q"]) and not S["job"]:
+                continue  # no rescan jobs yet: the page hides these panels until a job is picked
             q, e, l = composed(s, base_tokens)
             label = "%s #%d %s" % (name, i, (s["title"] or q.strip().splitlines()[0])[:90])
             if would_write(q):
