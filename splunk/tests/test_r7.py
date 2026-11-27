@@ -76,6 +76,16 @@ class VerdictTests(unittest.TestCase):
         r = self.v(r7_vulnerable=False, version="8.1.34")
         self.assertEqual((r["r7_result"], r["verdict"]), ("Not vulnerable", "Not affected"))
 
+    def test_one_row_per_server(self):
+        import r7_query as Q
+        a = {"asset_id": "1", "verdict": "Not affected", "product": "Microsoft Windows Server", "version": "10.0.20348"}
+        b = {"asset_id": "1", "verdict": "Affected", "product": "Microsoft Windows Search", "version": "7.0"}
+        m = Q._merge(a, b)
+        self.assertEqual(m["verdict"], "Affected")
+        self.assertEqual(m["product"], "Microsoft Windows Server, Microsoft Windows Search")
+        self.assertEqual(m["version"], "10.0.20348; 7.0")
+        self.assertEqual(Q._merge(m, dict(b, verdict="Unknown"))["verdict"], "Affected")
+
     def test_plain_rescan_result(self):
         ok = L.compare_result({}, {"assessed": True, "credentialed": True}, False, software_selected=False, cve_selected=False)
         self.assertEqual((ok["installed"], ok["version_change"], ok["cve_result"]), ("—", "—", "Rescanned"))

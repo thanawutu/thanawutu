@@ -76,7 +76,11 @@ class R7Rescan(GeneratingCommand):
         wanted = set(x.lower() for x in L.split_csv(self.hosts))
         selected, skipped = [], []
         found = set()
+        done_ids = set()
         for r in rows:
+            if r.get("asset_id") in done_ids:
+                continue  # one target per server, whatever the number of matching rows
+            done_ids.add(r.get("asset_id"))
             keys = set(x.lower() for x in (r["asset_id"], r["hostname"], r["ip"], r["cmdb_host"]) if x)
             if wanted:
                 if not (keys & wanted):

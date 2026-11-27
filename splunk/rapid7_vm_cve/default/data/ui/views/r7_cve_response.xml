@@ -160,7 +160,7 @@
       <title>Verdict now</title>
       <table>
         <search base="servers">
-          <query>| stats count as servers count(eval(env_group="Prod")) as prod count(eval(env_group="Non-prod")) as non_prod by verdict | sort 0 verdict</query>
+          <query>| stats dc(asset_id) as servers dc(eval(if(env_group="Prod",asset_id,null()))) as prod dc(eval(if(env_group="Non-prod",asset_id,null()))) as non_prod by verdict | sort 0 verdict</query>
         </search>
         <option name="drilldown">none</option>
         <format type="color" field="verdict">
@@ -172,7 +172,7 @@
       <title>Version data freshness</title>
       <table>
         <search base="servers">
-          <query>| stats count as servers by freshness | eval meaning=case(freshness="Fresh","scanned after announcement", freshness="OK","scanned shortly before", freshness="Stale","too old: rescan", freshness="None","no software data: fix credentials")</query>
+          <query>| stats dc(asset_id) as servers by freshness | eval meaning=case(freshness="Fresh","scanned after announcement", freshness="OK","scanned shortly before", freshness="Stale","too old: rescan", freshness="None","no software data: fix credentials")</query>
         </search>
         <option name="drilldown">none</option>
       </table>
@@ -219,7 +219,7 @@
   <row depends="$ready$">
     <panel>
       <title>3 · Rescan</title>
-      <input type="radio" token="only">
+      <input type="radio" token="only" searchWhenChanged="true">
         <label>Which servers</label>
         <choice value="false">All that need a rescan (not yet confirmed "Not affected")</choice>
         <choice value="true">Only the servers picked below</choice>
@@ -228,14 +228,14 @@
           <unset token="preview_nonce"></unset>
         </change>
       </input>
-      <input type="multiselect" token="hosts">
+      <input type="multiselect" token="hosts" searchWhenChanged="true">
         <label>Servers (when "Only the servers picked below")</label>
         <choice value="">(none)</choice>
         <default></default>
         <fieldForLabel>label</fieldForLabel>
         <fieldForValue>asset_id</fieldForValue>
         <search base="servers">
-          <query>| where verdict!="Not affected" | eval label=hostname." · ".env_label." · ".verdict | table asset_id label</query>
+          <query>| where verdict!="Not affected" | dedup asset_id | eval label=hostname." · ".env_label." · ".verdict | table asset_id label</query>
         </search>
         <delimiter>,</delimiter>
       </input>
@@ -243,7 +243,7 @@
         <p style="margin:8px 0">
           <button class="btn" data-r7-set="preview_nonce" data-r7-value="nonce" data-r7-require="hosts" data-r7-require-when="only=true">Preview (dry run)</button>
           <button class="btn btn-primary" data-r7-set="launch_nonce" data-r7-value="nonce" data-r7-unset="job_id" data-r7-require="hosts" data-r7-require-when="only=true" data-r7-confirm="Launch the Rapid7 rescan now? Prod servers are scanned immediately.">Run rescan</button>
-          <span style="margin-left:12px;color:#a9b4bf">Needs the rapid7_cve_rescan role. Max 50 servers per job. Requests are recorded now; the scans start once the 1.2.0 executor on the forwarder is installed. Progress appears below after you launch.</span>
+          <span style="margin-left:12px;color:#a9b4bf">Needs the rapid7_cve_rescan role. Max 50 servers per job. The Rapid7 scan starts within about a minute. Progress appears below after you launch.</span>
         </p>
       </html>
     </panel>
@@ -326,7 +326,7 @@
         </format>
       </table>
       <html>
-        <p style="color:#a9b4bf"><b>Requested</b>: recorded, waiting for the executor (installed in 1.2.0). <b>Running</b>: Rapid7 is scanning. <b>Finished</b>: the before / after result for each server is shown above. Click the job ID for the full report on Scan jobs &amp; reports.</p>
+        <p style="color:#a9b4bf"><b>Requested</b>: recorded; the poller starts the Rapid7 scan within about a minute. <b>Running</b>: Rapid7 is scanning. <b>Finished</b>: the before / after result for each server is shown above. Click the job ID for the full report on Scan jobs &amp; reports.</p>
       </html>
     </panel>
   </row>

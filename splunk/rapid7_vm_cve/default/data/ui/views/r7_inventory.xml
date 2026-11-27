@@ -130,7 +130,7 @@
   <row>
     <panel>
       <title>Rescan devices to refresh their version</title>
-      <input type="multiselect" token="hosts">
+      <input type="multiselect" token="hosts" searchWhenChanged="true">
         <label>Devices</label>
         <choice value="">(none)</choice>
         <default></default>
@@ -224,7 +224,7 @@
         </format>
       </table>
       <html>
-        <p style="color:#a9b4bf"><b>Requested</b>: recorded, waiting for the executor (installed in 1.2.0). <b>Running</b>: Rapid7 is scanning. <b>Finished</b>: the before / after result for each server is shown above. Click the job ID for the full report on Scan jobs &amp; reports.</p>
+        <p style="color:#a9b4bf"><b>Requested</b>: recorded; the poller starts the Rapid7 scan within about a minute. <b>Running</b>: Rapid7 is scanning. <b>Finished</b>: the before / after result for each server is shown above. Click the job ID for the full report on Scan jobs &amp; reports.</p>
       </html>
     </panel>
   </row>

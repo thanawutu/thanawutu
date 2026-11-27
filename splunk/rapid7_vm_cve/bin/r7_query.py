@@ -112,13 +112,20 @@ def build_rows(service, settings, spec):
 
     rows = []
     seen = set()
+    by_asset = {}
     for h in hits:
         aid = h.get("asset_id")
         a = assets.get(aid)
         if not a:
             continue
-        seen.add(aid)
-        rows.append(_row(a, h, spec, info, vuln_assets, findings_ok, announced, stale))
+        r = _row(a, h, spec, info, vuln_assets, findings_ok, announced, stale)
+        if aid in by_asset:
+            by_asset[aid] = _merge(by_asset[aid], r)  # one row per server: several matching components
+        else:
+            by_asset[aid] = r
+            rows.append(r)
+            seen.add(aid)
+    rows = [by_asset.get(r["asset_id"], r) for r in rows]
     for aid in vuln_assets:
         if aid in seen or aid not in assets:
             continue
@@ -144,6 +151,24 @@ def build_rows(service, settings, spec):
     info.update({"announced": announced, "run_id": run_id or "", "findings_available": findings_ok,
                  "assets_in_snapshot": len(assets)})
     return out, info
+
+
+VERDICT_RANK = {"Affected": 5, "Likely affected": 4, "Unknown": 3, "Likely not affected": 2, "Not affected": 1}
+
+
+def _merge(old, new):
+    """Keep one row per server: the worst-case verdict, with every matching product and version listed."""
+    worst = new if VERDICT_RANK.get(new["verdict"], 0) > VERDICT_RANK.get(old["verdict"], 0) else old
+    out = dict(worst)
+    products = [x for x in (old.get("product", "").split(", ") + new.get("product", "").split(", ")) if x]
+    versions = [x for x in (old.get("versions") or [old.get("version")]) + [new.get("version")] if x]
+    out["product"] = ", ".join(sorted(set(products), key=products.index))
+    out["versions"] = sorted(set(versions), key=versions.index)
+    if len(out["versions"]) > 1:
+        shown = out["versions"][:5]
+        more = len(out["versions"]) - len(shown)
+        out["version"] = "; ".join(shown) + (" (+%d more)" % more if more else "")
+    return out
 
 
 def _row(a, hit, spec, info, vuln_assets, findings_ok, announced, stale):

@@ -57,7 +57,7 @@
       <choice value="severe&gt;0">Severe</choice>
       <choice value="cvss9&gt;0">CVSS 9.0+</choice>
       <choice value="cvss7&gt;0">CVSS 7.0+</choice>
-      <choice value="new_30d&gt;0">New CVE (last 30 d)</choice>
+      <choice value="new_30d&gt;0">New CVE (published in the last 30 d)</choice>
       <default>open&gt;0</default>
     </input>
   </fieldset>
@@ -151,7 +151,7 @@ $sw_join$
   <row>
     <panel>
       <title>Rescan servers to verify fixes</title>
-      <input type="multiselect" token="r_hosts">
+      <input type="multiselect" token="r_hosts" searchWhenChanged="true">
         <label>Servers</label>
         <choice value="">(none)</choice>
         <default></default>
@@ -166,7 +166,7 @@ $sw_join$
         <p style="margin:8px 0">
           <button class="btn" data-r7-set="preview_nonce" data-r7-value="nonce" data-r7-require="r_hosts">Preview (dry run)</button>
           <button class="btn btn-primary" data-r7-set="launch_nonce" data-r7-value="nonce" data-r7-unset="job_id" data-r7-require="r_hosts" data-r7-confirm="Request a rescan of the selected servers?">Rescan selected</button>
-          <span style="margin-left:12px;color:#a9b4bf">Requests are recorded now; scans start once the 1.2.0 executor on the forwarder is installed.</span>
+          <span style="margin-left:12px;color:#a9b4bf">The Rapid7 scans start within about a minute; progress appears below.</span>
         </p>
       </html>
     </panel>
@@ -241,7 +241,7 @@ $sw_join$
         </format>
       </table>
       <html>
-        <p style="color:#a9b4bf"><b>Requested</b>: recorded, waiting for the executor (installed in 1.2.0). <b>Running</b>: Rapid7 is scanning. <b>Finished</b>: the before / after result for each server is shown above. Click the job ID for the full report on Scan jobs &amp; reports.</p>
+        <p style="color:#a9b4bf"><b>Requested</b>: recorded; the poller starts the Rapid7 scan within about a minute. <b>Running</b>: Rapid7 is scanning. <b>Finished</b>: the before / after result for each server is shown above. Click the job ID for the full report on Scan jobs &amp; reports.</p>
       </html>
     </panel>
   </row>

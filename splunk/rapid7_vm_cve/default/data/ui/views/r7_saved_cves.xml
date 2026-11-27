@@ -91,7 +91,7 @@
   <row depends="$cve$">
     <panel>
       <title>Rescan by group: $cve$</title>
-      <input type="multiselect" token="env">
+      <input type="multiselect" token="env" searchWhenChanged="true">
         <label>Environment</label>
         <choice value="Prod · DC">Prod · DC</choice>
         <choice value="Prod · DR">Prod · DR</choice>
@@ -104,7 +104,7 @@
           <unset token="preview_nonce"></unset>
         </change>
       </input>
-      <input type="dropdown" token="app">
+      <input type="dropdown" token="app" searchWhenChanged="true">
         <label>Application (CMDB appname)</label>
         <choice value="">All applications</choice>
         <default></default>
@@ -117,7 +117,7 @@
           <unset token="preview_nonce"></unset>
         </change>
       </input>
-      <input type="dropdown" token="scope">
+      <input type="dropdown" token="scope" searchWhenChanged="true">
         <label>Which servers</label>
         <choice value="affected">Affected or unknown (skip "Not affected")</choice>
         <choice value="all">All servers with the software</choice>
@@ -208,7 +208,7 @@
         </format>
       </table>
       <html>
-        <p style="color:#a9b4bf"><b>Requested</b>: recorded, waiting for the executor (installed in 1.2.0). <b>Running</b>: Rapid7 is scanning. <b>Finished</b>: the before / after result for each server is shown above. Click the job ID for the full report on Scan jobs &amp; reports.</p>
+        <p style="color:#a9b4bf"><b>Requested</b>: recorded; the poller starts the Rapid7 scan within about a minute. <b>Running</b>: Rapid7 is scanning. <b>Finished</b>: the before / after result for each server is shown above. Click the job ID for the full report on Scan jobs &amp; reports.</p>
       </html>
     </panel>
   </row>

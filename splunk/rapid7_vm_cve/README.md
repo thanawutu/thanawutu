@@ -1,4 +1,4 @@
-# Rapid7 VM CVE Response (Splunk app 1.1.11)
+# Rapid7 VM CVE Response (Splunk app 1.1.12)
 
 CVE impact, software and OS inventory, rescans launched from Splunk with
 before/after results, saved CVEs and CMDB changes, for Rapid7 InsightVM.
@@ -6,6 +6,24 @@ before/after results, saved CVEs and CMDB changes, for Rapid7 InsightVM.
 It is a companion to your existing Rapid7 collector app (v1.0, sites / assets /
 scans). It does not change or replace it, and it reads the same `index=rapid7`
 and the CMDB lookups used by the "CMDB and Rapid7 Asset Mapping" dashboard.
+
+## What's new in 1.1.12
+
+Rescans now run directly from the search head (no forwarder executor): verified in production on
+2026-11-27 with two servers (Rapid7 scans 249943 and 249944, "Rescanned", login OK).
+
+- **Fixed (important):** on CVE response, "Which servers" and "Servers" took effect only after Submit, so
+  Preview / Run rescan used "All that need a rescan" even when one server was picked. They now apply at once;
+  every rescan input on every page does the same.
+- **One row per server** in `r7cve` (CVE response, Saved CVEs): a CVE whose software matches several
+  components on a server (e.g. Microsoft Windows) gave one row per component, so the server list showed
+  "Duplicate values causing conflict", counts were inflated and rescan targets repeated. The row keeps the
+  worst-case verdict and lists every matching product and version. `r7rescan` also never targets a server twice.
+- **New (30 d)** on Impacted assets counts CVEs **published** in the last 30 days, like the overview (the
+  date Rapid7 added the check was inflated by Rapid7's bulk re-add on 2026-11-12).
+- **Last scan** on Impacted assets includes rescans from this app as soon as they finish, not only the
+  daily collector.
+- Page text: scans start within about a minute (no "1.2.0 executor").
 
 ## What's new in 1.1.11
 
@@ -125,7 +143,7 @@ re-runs a launch.
 
 ### 1. Heavy forwarder (SIEMFWDPR01): collectors
 
-1. Apps → Manage apps → Install app from file → `rapid7_vm_cve-1.1.11.tgz`.
+1. Apps → Manage apps → Install app from file → `rapid7_vm_cve-1.1.12.tgz`.
 2. Create `$SPLUNK_HOME/etc/apps/rapid7_vm_cve/local/rapid7_cve.conf`:
    ```
    [settings]
@@ -168,8 +186,15 @@ re-runs a launch.
    index = rapid7
    # optional: scan_template_id = full-audit-without-web-spider
    ```
-3. Store the scan account password the same way as above (on the search head).
-   In a search head cluster, store it on one member; it replicates.
+3. Store the scan account password (on the search head; in a search head cluster on one member, it replicates):
+   ```
+   read -s -p "Rapid7 password: " R7P; echo; curl -k -s -u <splunk admin> \
+     https://localhost:8089/servicesNS/nobody/rapid7_vm_cve/storage/passwords \
+     -d name=<scan account> -d realm=rapid7_vm_cve --data-urlencode "password=$R7P" -w "HTTP %{http_code}\n"; unset R7P
+   ```
+   `HTTP 201` = stored. In a search head cluster all members must share `splunk.secret`
+   (`sha256sum $SPLUNK_HOME/etc/auth/splunk.secret` gives the same value on each), or the other members
+   cannot decrypt it. Every member must reach the console (tcp/3780) and trust its certificate (`ca_bundle`).
 4. Settings → Searches, reports, and alerts (app Rapid7 VM CVE Response):
    enable **Rapid7 CVE - scan job poller** and **Rapid7 CVE - saved CVE
    refresh**. The CMDB change tracker and snapshot are enabled by default.
@@ -221,10 +246,10 @@ Environment labels come from the macro `r7_env_label`: Prod · DC = `cmdb_class`
 PROD, Prod · DR = DR, Non-prod · UAT / SIT / DEV = NONPROD split by `cmdb_env`.
 Edit the macro if your `cmdb_env` values differ.
 
-## Known limits in 1.1.11
+## Known limits in 1.1.12
 
-- Not yet run against your Rapid7 console or Splunk. Logic is covered by unit
-  and end-to-end tests with simulated Rapid7 and splunkd.
+- Delete / tag in Rapid7 (with a second approver), Rapid7's fix per server, first-found dates and the full
+  check catalog come in 1.2.0.
 - Version history and software data start when the software collector is
   enabled (the Rapid7 API only returns current software).
 - The vulnerability content collector reads 30 days on its first run. Older
